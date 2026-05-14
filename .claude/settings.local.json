@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(mkdir -p src/components/ui src/components/forms src/components/layout src/components/tables src/modules/auth src/modules/dashboard src/modules/users src/lib src/hooks src/types src/data src/app/login src/app/dashboard src/app/users/new src/app/users/[id]/edit src/app/access-denied)",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(mkdir -p src/app/users/\\\\[id\\\\]/layout)",
+      "Bash(cp -r src/app/* app/)",
+      "Bash(cp -r src/components/* components/)",
+      "Bash(cp src/lib/* lib/)",
+      "Bash(cp src/types/* types/)",
+      "Bash(cp src/data/* data/)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\RAZONOVA\\Desktop\\erp\\src\\app\\users\\[id]"
+    ]
+  }
+}
