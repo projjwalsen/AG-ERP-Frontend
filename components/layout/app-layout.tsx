@@ -22,7 +22,7 @@ function AppLayout({ children }: AppLayoutProps) {
         className="p-6 transition-all duration-300"
         style={{ marginLeft: sidebarCollapsed ? "72px" : "260px" }}
       >
-        <div className="mx-auto max-w-[1600px]">{children}</div>
+        <div className="max-w-full">{children}</div>
       </main>
     </div>
   );

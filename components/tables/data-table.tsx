@@ -38,13 +38,13 @@ export function DataTable<TData, TValue>({ columns, data, searchKey, searchPlace
     <div className="space-y-4">
       {searchKey && (
         <div className="flex items-center justify-between gap-4 pb-3 border-b border-gray-100">
-          <div className="relative max-w-sm">
+          <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
               placeholder={searchPlaceholder}
               value={(table.getColumn(searchKey)?.getFilterValue() as string) ?? ""}
               onChange={(event) => table.getColumn(searchKey)?.setFilterValue(event.target.value)}
-              className="w-[260px] pl-9 bg-gray-50 border-gray-200"
+              className="w-full pl-9 bg-gray-50 border-gray-200"
             />
           </div>
           <Select value={table.getState().pagination.pageSize.toString()} onValueChange={(v) => table.setPagination({ ...table.getState().pagination, pageSize: Number(v) })}>

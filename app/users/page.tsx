@@ -132,7 +132,7 @@ export default function UsersListPage() {
       />
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-5">
           {isLoading && users.length === 0 ? (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="h-8 w-8 animate-spin text-green-600" />

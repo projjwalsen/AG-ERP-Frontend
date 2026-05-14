@@ -52,7 +52,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         className="p-6 transition-all duration-200 min-h-screen"
         style={{ marginLeft: sidebarCollapsed ? "64px" : "220px" }}
       >
-        <div className="mx-auto max-w-[1600px]">{children}</div>
+        <div className="max-w-full">{children}</div>
       </main>
     </div>
   );

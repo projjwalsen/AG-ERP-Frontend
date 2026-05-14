@@ -53,7 +53,7 @@ function Navbar({ sidebarCollapsed, onMenuClick }: NavbarProps) {
   return (
     <header
       className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-6"
-      style={{ marginLeft: sidebarCollapsed ? "64px" : "220px" }}
+      
     >
       {/* Left side */}
       <div className="flex items-center gap-4">

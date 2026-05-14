@@ -40,18 +40,13 @@ export default function UserDetailLayout({ children }: UserDetailLayoutProps) {
         <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
       </div>
 
-      <div
-        className="hidden lg:block sticky top-0 z-30 transition-all duration-200"
-        style={{ marginLeft: `${sidebarWidth}px` }}
-      >
-        <Navbar sidebarCollapsed={sidebarCollapsed} onMenuClick={() => setMobileOpen(true)} />
-      </div>
+     
 
       <main
         className="p-6 transition-all duration-200 min-h-screen"
-        style={{ marginLeft: sidebarCollapsed ? "64px" : "220px" }}
+        
       >
-        <div className="mx-auto max-w-[1600px]">{children}</div>
+        <div className="max-w-full">{children}</div>
       </main>
     </div>
   );
