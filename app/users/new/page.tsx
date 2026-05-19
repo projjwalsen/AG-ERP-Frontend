@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { User, Mail, Lock, Shield, Eye, EyeOff, Save } from "lucide-react";
+import { User, Mail, Lock, Building2, Eye, EyeOff, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { createUser, clearUsersError } from "@/app/store/usersSlice";
-import { cn } from "@/lib/utils";
+import { branchApi } from "@/app/services/branch.service";
+import { Branch } from "@/app/types/branch";
+import { useToast } from "@/components/ui/toast";
 
 const userSchema = z.object({
   name: z.string().min(2, "Min 2 characters"),
@@ -33,10 +35,13 @@ export default function CreateUserPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { isLoading, error } = useAppSelector((state) => state.users);
+  const { addToast } = useToast();
 
   const [showPassword, setShowPassword] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState(false);
+  const [branches, setBranches] = React.useState<Branch[]>([]);
+  const [loadingBranches, setLoadingBranches] = React.useState(true);
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<UserFormData>({
     resolver: zodResolver(userSchema),
@@ -51,11 +56,44 @@ export default function CreateUserPage() {
     },
   });
 
+  const branchAccessType = watch("branchAccessType");
+
   React.useEffect(() => {
+    fetchBranches();
     return () => {
       dispatch(clearUsersError());
     };
   }, [dispatch]);
+
+  // Refresh branches if they are changed elsewhere (e.g., new branch created)
+  React.useEffect(() => {
+    const handler = () => fetchBranches();
+    try {
+      window.addEventListener("branches:changed", handler as EventListener);
+    } catch (e) {
+      // ignore in SSR
+    }
+    return () => {
+      try {
+        window.removeEventListener("branches:changed", handler as EventListener);
+      } catch (e) {}
+    };
+  }, []);
+
+  const fetchBranches = async () => {
+    setLoadingBranches(true);
+    try {
+      const response = await branchApi.getAll();
+      const branchesData = Array.isArray(response.data)
+        ? response.data
+        : response.data?.branches ?? [];
+      setBranches(branchesData);
+    } catch {
+      addToast("Failed to load branches", "error");
+    } finally {
+      setLoadingBranches(false);
+    }
+  };
 
   const onSubmit = async (data: UserFormData) => {
     setFormError(null);
@@ -70,6 +108,7 @@ export default function CreateUserPage() {
         branchId: data.branchId || undefined,
       })).unwrap();
 
+      addToast("User created successfully", "success");
       setSuccess(true);
       setTimeout(() => {
         router.push("/users");
@@ -81,7 +120,7 @@ export default function CreateUserPage() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 p-6">
       <PageHeader
         title="Create User"
         description="Add a new user account"
@@ -101,7 +140,7 @@ export default function CreateUserPage() {
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 gap-5">
           <div className="lg:col-span-2 space-y-5">
             <Card>
               <CardHeader>
@@ -112,7 +151,7 @@ export default function CreateUserPage() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-xs">Full Name</Label>
+                    <Label className="text-xs">Full Name *</Label>
                     <Input
                       {...register("name")}
                       error={errors.name?.message}
@@ -122,7 +161,7 @@ export default function CreateUserPage() {
                     />
                   </div>
                   <div>
-                    <Label className="text-xs">Email</Label>
+                    <Label className="text-xs">Email *</Label>
                     <Input
                       {...register("email")}
                       type="email"
@@ -143,19 +182,41 @@ export default function CreateUserPage() {
                     disabled={isLoading}
                   />
                 </div>
-                <div>
-                  <Label className="text-xs">Branch Access Type</Label>
-                  <Select
-                    defaultValue="ALL"
-                    onValueChange={(v) => setValue("branchAccessType", v)}
-                    disabled={isLoading}
-                  >
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL">All Branches</SelectItem>
-                      <SelectItem value="SELECTED">Selected Branch</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs">Branch Access Type *</Label>
+                    <Select
+                      defaultValue="ALL"
+                      onValueChange={(v) => {
+                        setValue("branchAccessType", v);
+                        if (v === "ALL") setValue("branchId", "");
+                      }}
+                      disabled={isLoading}
+                    >
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL">All Branches</SelectItem>
+                        <SelectItem value="SELECTED">Selected Branch</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {branchAccessType === "SELECTED" && (
+                    <div>
+                      <Label className="text-xs">Select Branch *</Label>
+                      <select
+                        className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                        onChange={(e) => setValue("branchId", e.target.value)}
+                        disabled={isLoading || loadingBranches}
+                      >
+                        <option value="">Select a branch</option>
+                        {branches.map((branch) => (
+                          <option key={branch.id} value={branch.id}>
+                            {branch.name} ({branch.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -169,7 +230,7 @@ export default function CreateUserPage() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-xs">Password</Label>
+                    <Label className="text-xs">Password *</Label>
                     <div className="mt-1 relative">
                       <Input
                         type={showPassword ? "text" : "password"}
@@ -189,7 +250,7 @@ export default function CreateUserPage() {
                     </div>
                   </div>
                   <div>
-                    <Label className="text-xs">Confirm Password</Label>
+                    <Label className="text-xs">Confirm Password *</Label>
                     <Input
                       type={showPassword ? "text" : "password"}
                       {...register("confirmPassword")}
@@ -207,11 +268,11 @@ export default function CreateUserPage() {
           <div className="space-y-5">
             <Card>
               <CardContent className="pt-5">
-                <div className="space-y-2">
+                <div className="w-full flex gap-5">
                   <Button type="submit" className="w-full h-9" loading={isLoading}>
                     <Save className="h-4 w-4 mr-2" />Create User
                   </Button>
-                  <Link href="/users">
+                  <Link href="/users" className="w-full h-9">
                     <Button type="button" variant="outline" className="w-full h-9" disabled={isLoading}>Cancel</Button>
                   </Link>
                 </div>

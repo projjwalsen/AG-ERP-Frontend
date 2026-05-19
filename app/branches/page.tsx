@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Building, Plus, Search, Edit, Eye, MapPin } from "lucide-react";
+import { Building, Plus, Search, Edit, Eye, MapPin, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,9 +17,17 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { branchApi, CreateBranchPayload, UpdateBranchPayload } from "@/app/services/branch.service";
 import { Branch } from "@/app/types/branch";
+import { formatDate } from "@/lib/utils";
 
 export default function BranchesPage() {
   return (
@@ -57,11 +65,11 @@ function BranchesTab() {
     setLoading(true);
     try {
       const response = await branchApi.getAll();
-      if (response.success && response.data?.branches) {
-        setBranches(response.data.branches);
-      } else {
-        addToast(response.message || "Failed to load branches", "error");
-      }
+      // Handle both array response and object with branches property
+      const branchesData = Array.isArray(response.data)
+        ? response.data
+        : response.data?.branches ?? [];
+      setBranches(branchesData);
     } catch {
       addToast("Failed to load branches", "error");
     } finally {
@@ -96,13 +104,54 @@ function BranchesTab() {
   };
 
   const handleCreateSuccess = (branch: Branch) => {
-    setBranches((prev) => [...prev, branch]);
+    // Update local state with new branch
+    setBranches((prev) => {
+      const exists = prev.some(b => b.id === branch.id);
+      if (exists) {
+        return prev.map(b => b.id === branch.id ? branch : b);
+      }
+      return [...prev, branch];
+    });
+    // Show success toast
+    addToast("Branch created successfully", "success");
+    // Close modal
     setCreateModalOpen(false);
+    // Notify other pages to refresh branch data
+    try {
+      window.dispatchEvent(new CustomEvent("branches:changed", { detail: branch }));
+    } catch (e) {
+      // ignore for SSR environments
+    }
   };
 
   const handleEditSuccess = (branch: Branch) => {
-    setBranches((prev) => prev.map((b) => (b.id === branch.id ? branch : b)));
+    // Update local state with updated branch
+    setBranches((prev) => prev.map(b => b.id === branch.id ? branch : b));
+    // Show success toast
+    addToast("Branch updated successfully", "success");
+    // Close modal
     setEditModalOpen(false);
+    // Notify other pages to refresh branch data
+    try {
+      window.dispatchEvent(new CustomEvent("branches:changed", { detail: branch }));
+    } catch (e) {
+      // ignore for SSR environments
+    }
+  };
+
+  const handleToggleStatus = async (branch: Branch) => {
+    try {
+      const newStatus = branch.isActive ? false : true;
+      const response = await branchApi.updateStatus(branch.id, newStatus);
+      if (response.success) {
+        addToast(`Branch ${newStatus ? "activated" : "deactivated"} successfully`, "success");
+        fetchBranches();
+      } else {
+        addToast(response.message || "Failed to update status", "error");
+      }
+    } catch {
+      addToast("Failed to update status", "error");
+    }
   };
 
   return (
@@ -132,63 +181,97 @@ function BranchesTab() {
         </div>
       </div>
 
-      {/* Branches Grid */}
+      {/* Branches Table */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i}>
-              <CardContent className="p-4">
-                <Skeleton className="h-6 w-32 mb-2" />
-                <Skeleton className="h-4 w-24 mb-2" />
-                <Skeleton className="h-4 w-40" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <Card>
+          <CardContent className="p-0">
+            <div className="space-y-4 p-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       ) : filteredBranches.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredBranches.map((branch) => (
-            <Card key={branch.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <Building className="h-5 w-5 text-green-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-gray-900">{branch.name}</h3>
-                      <code className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{branch.code}</code>
-                    </div>
-                  </div>
-                  <Badge variant={branch.isActive ? "success" : "error"} className={branch.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}>
-                    {branch.isActive ? "Active" : "Inactive"}
-                  </Badge>
-                </div>
-
-                <div className="space-y-1.5 mb-4">
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <MapPin className="h-3.5 w-3.5 text-gray-400" />
-                    <span>{branch.city}, {branch.state}</span>
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    GSTIN: <span className="font-mono">{branch.gstin}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
-                  <Button variant="outline" size="sm" className="flex-1 gap-1" onClick={() => handleView(branch)}>
-                    <Eye className="h-3.5 w-3.5" />
-                    View
-                  </Button>
-                  <Button variant="outline" size="sm" className="flex-1 gap-1" onClick={() => handleEdit(branch)}>
-                    <Edit className="h-3.5 w-3.5" />
-                    Edit
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Branch</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Code</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Location</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">GSTIN</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Created</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredBranches.map((branch) => (
+                    <tr key={branch.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 bg-green-100 rounded-lg">
+                            <Building className="h-4 w-4 text-green-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{branch.name}</p>
+                            {branch.addressLine1 && (
+                              <p className="text-xs text-gray-500">{branch.addressLine1}</p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <code className="text-sm text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{branch.code}</code>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1 text-sm text-gray-600">
+                          <MapPin className="h-3.5 w-3.5 text-gray-400" />
+                          {branch.city}, {branch.state}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-sm text-gray-600">{branch.gstin}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant={branch.isActive ? "success" : "error"} className={branch.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}>
+                          {branch.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-sm text-gray-500">{branch.createdAt ? formatDate(branch.createdAt) : "-"}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-40">
+                            <DropdownMenuItem onClick={() => handleView(branch)}>
+                              <Eye className="mr-2 h-4 w-4" />View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleEdit(branch)}>
+                              <Edit className="mr-2 h-4 w-4" />Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleToggleStatus(branch)} className={branch.isActive ? "text-red-600" : "text-green-600"}>
+                              {branch.isActive ? "Deactivate" : "Activate"}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       ) : (
         <Card>
           <CardContent className="p-12 text-center">
@@ -289,14 +372,38 @@ function CreateBranchModal({
     setLoading(true);
     try {
       const response = await branchApi.create(form);
-      if (response.success && response.data?.branch) {
-        addToast("Branch created successfully", "success");
-        onSuccess(response.data.branch);
-        onClose();
+      // Support multiple possible API response shapes:
+      // - { success: true, data: { branch: {...} } }
+      // - { success: true, data: { ...branchFields } }
+      // - { success: true, data: {...}, branch: {...} }
+      if (response && response.success) {
+        // try common locations for the created branch
+        const possible = response.data ?? (response as any).branch ?? (response as any).data?.branch;
+        const newBranch = (possible && (possible.branch ?? possible)) || null;
+
+        if (newBranch && typeof newBranch === "object") {
+          // update parent and close modal
+          onSuccess(newBranch as Branch);
+          // ensure local form reset (optional)
+          setForm({
+            name: "",
+            code: "",
+            gstin: "",
+            stateCode: "",
+            addressLine1: "",
+            addressLine2: "",
+            city: "",
+            state: "",
+            pinCode: "",
+          });
+        } else {
+          addToast(response.message || "Branch created but response shape was unexpected", "error");
+        }
       } else {
-        addToast(response.message || "Failed to create branch", "error");
+        addToast(response?.message || "Failed to create branch", "error");
       }
-    } catch {
+    } catch (err) {
+      console.error("Create branch error:", err);
       addToast("Failed to create branch", "error");
     } finally {
       setLoading(false);
@@ -419,9 +526,7 @@ function EditBranchModal({
     try {
       const response = await branchApi.update(branch.id, form);
       if (response.success && response.data?.branch) {
-        addToast("Branch updated successfully", "success");
         onSuccess(response.data.branch);
-        onClose();
       } else {
         addToast(response.message || "Failed to update branch", "error");
       }
@@ -521,9 +626,10 @@ function ViewBranchModal({
   const handleToggleStatus = async () => {
     setLoading(true);
     try {
-      const response = await branchApi.updateStatus(branch.id, !branch.isActive);
+      const newStatus = branch.isActive ? false : true;
+      const response = await branchApi.updateStatus(branch.id, newStatus);
       if (response.success) {
-        addToast(`Branch ${!branch.isActive ? "activated" : "deactivated"} successfully`, "success");
+        addToast(`Branch ${newStatus ? "activated" : "deactivated"} successfully`, "success");
         onToggleStatus();
         onClose();
       } else {

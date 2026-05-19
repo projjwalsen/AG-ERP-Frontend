@@ -110,7 +110,7 @@ export default function UserDetailsPage({ params }: { params: Promise<{ id: stri
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 gap-5">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <Card>
             <CardContent className="pt-5">

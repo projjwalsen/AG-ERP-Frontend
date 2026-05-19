@@ -6,7 +6,7 @@ export interface Branch {
   code: string;
   gstin: string;
   stateCode: string;
-  addressLine1: string;
+  addressLine1?: string;
   addressLine2?: string | null;
   city: string;
   state: string;
@@ -14,6 +14,7 @@ export interface Branch {
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
+  _count?: { users: number };
 }
 
 export interface BranchesListResponse {
