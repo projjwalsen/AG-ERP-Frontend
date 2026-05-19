@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { UserService } from "../services/user.service";
+import { UserService, GetUsersParams } from "../services/user.service";
 import {
   User,
   UsersState,
@@ -19,11 +19,11 @@ const initialState: UsersState = {
 
 export const fetchAllUsers = createAsyncThunk<
   UsersListResponse,
-  void,
+  GetUsersParams | undefined,
   { rejectValue: string }
->("users/fetchAll", async (_, { rejectWithValue }) => {
+>("users/fetchAll", async (params, { rejectWithValue }) => {
   try {
-    const response = await UserService.getAllUsers();
+    const response = await UserService.getAllUsers(params);
     if (response.success && response.data?.users) {
       return response.data;
     }

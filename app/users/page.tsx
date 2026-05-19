@@ -4,19 +4,23 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ColumnDef } from "@tanstack/react-table";
-import { MoreHorizontal, Plus, Eye, Edit, Trash2, Mail, Building2, Loader2 } from "lucide-react";
+import { MoreHorizontal, Plus, Eye, Edit, Trash2, Mail, Building2, Loader2, Key, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PageHeader } from "@/components/layout";
 import { DataTable } from "@/components/tables";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { fetchAllUsers } from "@/app/store/usersSlice";
+import { UserService } from "@/app/services/user.service";
+import { branchApi } from "@/app/services/branch.service";
 import { User } from "@/app/types/api";
-import { formatDate, cn } from "@/lib/utils";
+import { Branch } from "@/app/types/branch";
+import { formatDate } from "@/lib/utils";
+import { useToast } from "@/components/ui/toast";
 
 const statusVariant: Record<string, { variant: "success" | "warning" | "error" | "default"; label: string }> = {
   ACTIVE: { variant: "success", label: "Active" },
@@ -27,17 +31,66 @@ export default function UsersListPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { users, isLoading, error } = useAppSelector((state) => state.users);
+  const { addToast } = useToast();
 
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const [selectedBranch, setSelectedBranch] = React.useState("");
+  const [branches, setBranches] = React.useState<Branch[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [resetPasswordOpen, setResetPasswordOpen] = React.useState(false);
   const [userToDelete, setUserToDelete] = React.useState<User | null>(null);
+  const [userToReset, setUserToReset] = React.useState<User | null>(null);
+  const [resetPassword, setResetPassword] = React.useState("");
+  const [resetLoading, setResetLoading] = React.useState(false);
 
+  // Fetch branches on mount
   React.useEffect(() => {
-    dispatch(fetchAllUsers());
-  }, [dispatch]);
+    fetchBranches();
+  }, []);
+
+  // Fetch users when filters change
+  React.useEffect(() => {
+    const params: { search?: string; branch?: string } = {};
+    if (searchTerm) params.search = searchTerm;
+    if (selectedBranch) params.branch = selectedBranch;
+    dispatch(fetchAllUsers(Object.keys(params).length > 0 ? params : undefined));
+  }, [dispatch, searchTerm, selectedBranch]);
+
+  const fetchBranches = async () => {
+    try {
+      const response = await branchApi.getAll();
+      const branchesData = Array.isArray(response.data)
+        ? response.data
+        : response.data?.branches ?? [];
+      setBranches(branchesData);
+    } catch (err) {
+      console.error("Failed to fetch branches", err);
+    }
+  };
 
   const handleDeleteConfirm = () => {
     setDeleteDialogOpen(false);
     setUserToDelete(null);
+  };
+
+  const handleResetPassword = async () => {
+    if (!userToReset || !resetPassword) return;
+    setResetLoading(true);
+    try {
+      const response = await UserService.resetPassword(userToReset.id, resetPassword);
+      if (response.success) {
+        addToast("Password reset successfully", "success");
+        setResetPasswordOpen(false);
+        setResetPassword("");
+        setUserToReset(null);
+      } else {
+        addToast(response.message || "Failed to reset password", "error");
+      }
+    } catch {
+      addToast("Failed to reset password", "error");
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   const columns: ColumnDef<User>[] = [
@@ -57,6 +110,11 @@ export default function UsersListPage() {
           </div>
         );
       },
+    },
+    {
+      accessorKey: "phone",
+      header: "Phone",
+      cell: ({ row }) => row.original.phone || <span className="text-gray-400">-</span>,
     },
     {
       accessorKey: "status",
@@ -93,9 +151,13 @@ export default function UsersListPage() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuContent align="end" className="w-44">
               <DropdownMenuItem onClick={() => router.push(`/users/${user.id}`)}><Eye className="mr-2 h-4 w-4" />View</DropdownMenuItem>
               <DropdownMenuItem onClick={() => router.push(`/users/${user.id}/edit`)}><Edit className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => { setUserToReset(user); setResetPasswordOpen(true); }}>
+                <Key className="mr-2 h-4 w-4" />Reset Password
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => { setUserToDelete(user); setDeleteDialogOpen(true); }} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
             </DropdownMenuContent>
@@ -107,12 +169,7 @@ export default function UsersListPage() {
 
   if (error) {
     return (
-      <div className="space-y-5">
-        <PageHeader
-          title="User Management"
-          description="Manage user accounts and permissions"
-          actions={<Link href="/users/new"><Button size="sm"><Plus className="h-4 w-4 mr-1.5" />Add User</Button></Link>}
-        />
+      <div className="space-y-5 p-6">
         <Card>
           <CardContent className="p-6 text-center">
             <p className="text-red-500 mb-4">{error}</p>
@@ -124,13 +181,65 @@ export default function UsersListPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        title="User Management"
-        description="Manage user accounts and permissions"
-        actions={<Link href="/users/new"><Button size="sm"><Plus className="h-4 w-4 mr-1.5" />Add User</Button></Link>}
-      />
+    <div className="space-y-5 p-6">
+      {/* Page Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
+          <p className="text-gray-500 mt-1">Manage user accounts and permissions</p>
+        </div>
+        <Link href="/users/new">
+          <Button size="sm" className="gap-2">
+            <Plus className="h-4 w-4" />Add User
+          </Button>
+        </Link>
+      </div>
 
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search users..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-gray-400" />
+              <select
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="">All Branches</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.name}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {(searchTerm || selectedBranch) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearchTerm("");
+                  setSelectedBranch("");
+                }}
+              >
+                Clear
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Users Table */}
       <Card>
         <CardContent className="p-5">
           {isLoading && users.length === 0 ? (
@@ -143,6 +252,7 @@ export default function UsersListPage() {
         </CardContent>
       </Card>
 
+      {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -152,6 +262,33 @@ export default function UsersListPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDeleteConfirm}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={resetPasswordOpen} onOpenChange={setResetPasswordOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Reset password for <span className="font-semibold text-gray-900">{userToReset?.name}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">New Password</label>
+              <Input
+                type="password"
+                placeholder="Enter new password"
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setResetPasswordOpen(false); setResetPassword(""); }}>Cancel</Button>
+            <Button onClick={handleResetPassword} loading={resetLoading}>Reset Password</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
