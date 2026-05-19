@@ -17,6 +17,11 @@ export interface AuthUser {
   email: string;
   phone?: string;
   status?: "ACTIVE" | "SUSPENDED";
+  branchAccessType?: "ALL" | "SELECTED";
+  branchId?: string | null;
+  isActive?: boolean;
+  lastLoginAt?: string;
+  createdAt?: string;
 }
 
 export interface LoginPayload {

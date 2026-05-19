@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./store/Providers";
+import { SidebarWrapper } from "@/components/layout/sidebar";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -16,7 +17,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "PetroChem ERP Suite",
+  title: "ASHTAVINAYAKA",
   description: "Enterprise Resource Planning for the Petrochemical Industry",
   icons: {
     icon: "/favicon.ico",
@@ -31,7 +32,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable}`}>
       <body className="min-h-full antialiased font-sans">
-        <Providers>{children}</Providers>
+        <Providers>
+          <SidebarWrapper>
+            {children}
+          </SidebarWrapper>
+        </Providers>
       </body>
     </html>
   );

@@ -37,7 +37,7 @@ export async function apiFetch<T = unknown>(
 
   // Clean endpoint - remove leading slash if present
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint.slice(1) : endpoint;
-  const url = `/${cleanEndpoint}`; // Relative URL - Next.js proxies to backend
+  const url = `http://localhost:5100/${cleanEndpoint}`;
 
   const response = await fetch(url, config);
 

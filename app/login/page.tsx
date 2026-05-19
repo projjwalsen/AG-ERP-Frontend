@@ -3,8 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Fuel } from "lucide-react";
-import Image from "next/image";
+import { Eye, EyeOff, ArrowRight, Fuel } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,25 +54,14 @@ function LoginPage() {
   const displayError = localError || error;
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
-      {/* Left Panel - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="w-full max-w-md"
-        >
-          {/* Logo */}
-          <div className="flex items-center gap-3 mb-10">
-            <div className="flex h-10 w-10 items-center justify-center bg-green-600">
-              <Fuel className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-gray-900">PetroChem</h1>
-              <p className="text-xs text-gray-500">ERP Suite</p>
-            </div>
-          </div>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="w-full max-w-md"
+      >
+          
 
           {/* Form Header */}
           <div className="mb-8">
@@ -155,71 +143,6 @@ function LoginPage() {
           </p>
         </motion.div>
       </div>
-
-      {/* Right Panel - Image */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
-        {/* Background Image */}
-        <Image
-          src="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&q=80"
-          alt="Team working together in modern office"
-          fill
-          sizes="50vw"
-          className="object-cover"
-          priority
-        />
-
-        {/* Dark Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-gray-900/80 to-gray-900/40" />
-
-        {/* Content Overlay */}
-        <div className="relative z-10 flex flex-col justify-between w-full p-12">
-          {/* Top Content */}
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center bg-green-600">
-              <Fuel className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-white">PetroChem</h1>
-              <p className="text-sm text-gray-300">ERP Suite</p>
-            </div>
-          </div>
-
-          {/* Center Content */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            className="max-w-md"
-          >
-            <h2 className="text-3xl font-bold text-white mb-4">
-              Empowering Teams to Achieve More
-            </h2>
-            <p className="text-gray-300 text-lg leading-relaxed">
-              Streamline your petrochemical operations with our comprehensive enterprise resource planning solution.
-            </p>
-          </motion.div>
-
-          {/* Bottom Stats */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.5 }}
-            className="grid grid-cols-3 gap-8"
-          >
-            {[
-              { value: "500+", label: "Active Users" },
-              { value: "$2.8M", label: "Daily Transactions" },
-              { value: "99.9%", label: "Uptime" },
-            ].map((stat, i) => (
-              <div key={i} className="text-center">
-                <div className="text-3xl font-bold text-white mb-1">{stat.value}</div>
-                <div className="text-sm text-gray-400">{stat.label}</div>
-              </div>
-            ))}
-          </motion.div>
-        </div>
-      </div>
-    </div>
   );
 }
 
