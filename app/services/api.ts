@@ -1,4 +1,5 @@
-// Using relative paths - Next.js will proxy to backend
+// API configuration using environment variable
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5100";
 
 interface ApiOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -37,7 +38,7 @@ export async function apiFetch<T = unknown>(
 
   // Clean endpoint - remove leading slash if present
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint.slice(1) : endpoint;
-  const url = `http://localhost:5100/${cleanEndpoint}`;
+  const url = `${API_BASE_URL}/${cleanEndpoint}`;
 
   const response = await fetch(url, config);
 
