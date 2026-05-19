@@ -6,11 +6,10 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { User, Mail, Lock, Building2, Eye, EyeOff, Save } from "lucide-react";
+import { User, Mail, Lock, Eye, EyeOff, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
@@ -55,8 +54,6 @@ export default function CreateUserPage() {
       branchId: "",
     },
   });
-
-  const branchAccessType = watch("branchAccessType");
 
   React.useEffect(() => {
     fetchBranches();
@@ -182,41 +179,29 @@ export default function CreateUserPage() {
                     disabled={isLoading}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-xs">Branch Access Type *</Label>
-                    <Select
-                      defaultValue="ALL"
-                      onValueChange={(v) => {
-                        setValue("branchAccessType", v);
-                        if (v === "ALL") setValue("branchId", "");
-                      }}
-                      disabled={isLoading}
-                    >
-                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ALL">All Branches</SelectItem>
-                        <SelectItem value="SELECTED">Selected Branch</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {branchAccessType === "SELECTED" && (
-                    <div>
-                      <Label className="text-xs">Select Branch *</Label>
-                      <select
-                        className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                        onChange={(e) => setValue("branchId", e.target.value)}
-                        disabled={isLoading || loadingBranches}
-                      >
-                        <option value="">Select a branch</option>
-                        {branches.map((branch) => (
-                          <option key={branch.id} value={branch.id}>
-                            {branch.name} ({branch.code})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+                <div className="space-y-2">
+                  <Label className="text-xs">Branch Access *</Label>
+                  <select
+                    className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                    value={watch("branchId") || ""}
+                    onChange={(e) => {
+                      if (e.target.value === "") {
+                        setValue("branchId", "");
+                        setValue("branchAccessType", "ALL");
+                      } else {
+                        setValue("branchId", e.target.value);
+                        setValue("branchAccessType", "SELECTED");
+                      }
+                    }}
+                    disabled={isLoading || loadingBranches}
+                  >
+                    <option value="">All Branches</option>
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name} ({branch.code})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </CardContent>
             </Card>
