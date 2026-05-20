@@ -17,6 +17,7 @@ import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { fetchAllUsers } from "@/app/store/usersSlice";
 import { UserService } from "@/app/services/user.service";
 import { branchApi } from "@/app/services/branch.service";
+import { hasModulePermission } from "@/lib/usePermissions";
 import { User } from "@/app/types/api";
 import { Branch } from "@/app/types/branch";
 import { formatDate } from "@/lib/utils";
@@ -31,7 +32,11 @@ export default function UsersListPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { users, isLoading, error } = useAppSelector((state) => state.users);
+  const { permissions } = useAppSelector((state) => state.auth);
   const { addToast } = useToast();
+
+  const canView = hasModulePermission(permissions, "USER", "VIEW");
+  const canWrite = hasModulePermission(permissions, "USER", "WRITE");
 
   const [searchTerm, setSearchTerm] = React.useState("");
   const [selectedBranch, setSelectedBranch] = React.useState("");
@@ -58,7 +63,7 @@ export default function UsersListPage() {
 
   const fetchBranches = async () => {
     try {
-      const response = await branchApi.getAll();
+      const response = await branchApi.getActive();
       const branchesData = Array.isArray(response.data)
         ? response.data
         : response.data?.branches ?? [];
@@ -128,14 +133,40 @@ export default function UsersListPage() {
     },
     {
       accessorKey: "branchAccessType",
-      header: "Branch Access",
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <Building2 className="h-3.5 w-3.5" />
-          {row.original.branchAccessType || "ALL"}
-          {row.original.branchId && row.original.branchAccessType === "SELECTED" && ` (${row.original.branchId.slice(0, 8)}...)`}
-        </div>
-      ),
+      header: "Branch",
+      cell: ({ row }) => {
+        const { branchAccessType, branch } = row.original;
+        return (
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <Building2 className="h-3.5 w-3.5" />
+            {branchAccessType === "ALL" ? (
+              <span className="text-gray-500">All Branches</span>
+            ) : branch?.name ? (
+              <span className="font-medium">{branch.name}</span>
+            ) : (
+              <span className="text-gray-400">-</span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "roles",
+      header: "Roles",
+      cell: ({ row }) => {
+        const roles = row.original.roles || [];
+        return roles.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {roles.map((role) => (
+              <Badge key={role.id} variant="secondary" className="text-xs">
+                {role.name}
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <span className="text-gray-400 text-sm">-</span>
+        );
+      },
     },
     {
       accessorKey: "createdAt",
@@ -152,14 +183,20 @@ export default function UsersListPage() {
               <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onClick={() => router.push(`/users/${user.id}`)}><Eye className="mr-2 h-4 w-4" />View</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push(`/users/${user.id}/edit`)}><Edit className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => { setUserToReset(user); setResetPasswordOpen(true); }}>
-                <Key className="mr-2 h-4 w-4" />Reset Password
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => { setUserToDelete(user); setDeleteDialogOpen(true); }} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
+              {canView && (
+                <DropdownMenuItem onClick={() => router.push(`/users/${user.id}`)}><Eye className="mr-2 h-4 w-4" />View</DropdownMenuItem>
+              )}
+              {canWrite && (
+                <>
+                  <DropdownMenuItem onClick={() => router.push(`/users/${user.id}/edit`)}><Edit className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => { setUserToReset(user); setResetPasswordOpen(true); }}>
+                    <Key className="mr-2 h-4 w-4" />Reset Password
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => { setUserToDelete(user); setDeleteDialogOpen(true); }} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         );
@@ -188,11 +225,13 @@ export default function UsersListPage() {
           <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
           <p className="text-gray-500 mt-1">Manage user accounts and permissions</p>
         </div>
-        <Link href="/users/new">
-          <Button size="sm" className="gap-2">
-            <Plus className="h-4 w-4" />Add User
-          </Button>
-        </Link>
+        {canWrite && (
+          <Link href="/users/new">
+            <Button size="sm" className="gap-2">
+              <Plus className="h-4 w-4" />Add User
+            </Button>
+          </Link>
+        )}
       </div>
 
       {/* Filters */}
@@ -247,7 +286,7 @@ export default function UsersListPage() {
               <Loader2 className="h-8 w-8 animate-spin text-green-600" />
             </div>
           ) : (
-            <DataTable columns={columns} data={users} searchKey="name" searchPlaceholder="Search users..." />
+            <DataTable columns={columns} data={users} />
           )}
         </CardContent>
       </Card>

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import {
-  Shield, Key, Users, Plus, Search, Settings, Edit,
+  Shield, Key, Users, Plus, Search, Edit,
   AlertTriangle, UserCog, Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,9 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast, ToastContainer } from "@/components/ui/toast";
+import { useAppSelector } from "@/app/store/hooks";
 import { rbacApi } from "@/app/services/rbac.service";
+import { hasModulePermission } from "@/lib/usePermissions";
 import { Role, Permission } from "@/app/types/rbac";
 
 // User type for assignment
@@ -31,6 +33,7 @@ interface UserBasic {
   id: string;
   name: string;
   email: string;
+  roles?: { id: string; name: string; code: string }[];
 }
 
 export default function AccessControlPage() {
@@ -79,16 +82,21 @@ function RolesAndPermissionsTab() {
   const [roles, setRoles] = React.useState<Role[]>([]);
   const [permissions, setPermissions] = React.useState<Permission[]>([]);
   const [rawRolesResponse, setRawRolesResponse] = React.useState<any>(null);
-  const [rawPermsResponse, setRawPermsResponse] = React.useState<any>(null);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [upsertModalOpen, setUpsertModalOpen] = React.useState(false);
   const [selectedRole, setSelectedRole] = React.useState<Role | null>(null);
   const [assignPermissionsOpen, setAssignPermissionsOpen] = React.useState(false);
   const [viewRoleModalOpen, setViewRoleModalOpen] = React.useState(false);
+  const { permissions: userPermissions } = useAppSelector((state) => state.auth);
+
+  const canView = hasModulePermission(userPermissions, "ROLE", "VIEW");
+  const canWrite = hasModulePermission(userPermissions, "ROLE", "WRITE");
 
   React.useEffect(() => {
-    fetchData();
-  }, []);
+    if (canView) {
+      fetchData();
+    }
+  }, [canView]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -108,7 +116,6 @@ function RolesAndPermissionsTab() {
 
     try {
       const permissionsResponse = await rbacApi.getPermissions();
-      setRawPermsResponse(permissionsResponse);
       const permsResp = permissionsResponse as any;
       permsData = permsResp?.data?.permissions ?? [];
     } catch (e) {
@@ -170,10 +177,12 @@ function RolesAndPermissionsTab() {
           <h2 className="text-lg font-semibold text-gray-900">Roles</h2>
           <p className="text-sm text-gray-500">Create roles and assign permissions</p>
         </div>
-        <Button onClick={handleCreateRole} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Role
-        </Button>
+        {canWrite && (
+          <Button onClick={handleCreateRole} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Role
+          </Button>
+        )}
       </div>
 
       {/* Search */}
@@ -246,26 +255,28 @@ function RolesAndPermissionsTab() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditRole(role)}
-                            className="h-8 px-2"
-                            title="Edit Role"
-                            disabled={role.isDefault}
-                          >
-                            <Edit className={`h-4 w-4 ${role.isDefault ? "text-gray-300" : ""}`} />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleManagePermissions(role)}
-                            className="h-8 px-2"
-                            title="Manage Permissions"
-                            disabled={role.isDefault}
-                          >
-                            <Key className={`h-4 w-4 ${role.isDefault ? "text-gray-300" : ""}`} />
-                          </Button>
+                          {canWrite && !role.isDefault && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditRole(role)}
+                                className="h-8 px-2"
+                                title="Edit Role"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleManagePermissions(role)}
+                                className="h-8 px-2"
+                                title="Manage Permissions"
+                              >
+                                <Key className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </td>
                       </tr>
@@ -592,7 +603,7 @@ function AssignPermissionsModal({
                     <tr key={module} className="hover:bg-gray-50">
                       <td className="px-4 py-3 border border-gray-200 sticky left-0 bg-white z-10">
                         <div className="flex items-center justify-between">
-                          <span className="font-medium text-gray-900">{module}</span>
+                          <span className="font-medium text-gray-900">{module} Management</span>
                           <div className="flex gap-1">
                             <Button
                               type="button"
@@ -704,7 +715,7 @@ function ViewRoleModal({
               <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3">
                 {role.permissions.map((p) => (
                   <Badge key={p.id} variant="secondary" className="px-2 py-1 text-sm">
-                    {p.key || `${p.module}:${p.action}`}
+                    {p.key || `${p.module} Management - ${p.action}`}
                   </Badge>
                 ))}
               </div>
@@ -761,23 +772,11 @@ function UserRolesTab() {
     }
   };
 
-  const fetchUserAccess = async (userId: string) => {
-    try {
-      const response = await rbacApi.getUserAccess(userId);
-      if (response.success && response.data) {
-        setUserRoles(response.data.roles.map((r) => r.id));
-      } else {
-        setUserRoles([]);
-      }
-    } catch {
-      setUserRoles([]);
-    }
-  };
-
   const handleUserSelect = (user: UserBasic) => {
     setSelectedUser(user.id);
     setSelectedUserName(user.name);
-    fetchUserAccess(user.id);
+    // Use roles from the initial user data
+    setUserRoles((user.roles || []).map(r => r.id));
   };
 
   const handleAssignRoles = () => {
@@ -785,7 +784,8 @@ function UserRolesTab() {
   };
 
   const handleAssignSuccess = () => {
-    fetchUserAccess(selectedUser);
+    // Refresh the users data to get updated roles
+    fetchData();
     setAssignModalOpen(false);
   };
 
@@ -795,6 +795,14 @@ function UserRolesTab() {
               (u.email || "").toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [users, searchTerm]);
+
+  const getUserRolesList = (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (user?.roles && user.roles.length > 0) {
+      return user.roles.map(r => roles.find(role => role.id === r.id)).filter(Boolean) as Role[];
+    }
+    return [];
+  };
 
   return (
     <div className="space-y-6">
@@ -817,45 +825,103 @@ function UserRolesTab() {
         </div>
       </div>
 
-      {/* User Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {loading ? (
-          <>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-20 w-full" />
-            ))}
-          </>
-        ) : filteredUsers.length > 0 ? (
-          <>
-            {filteredUsers.map((user) => (
-              <button
-                key={user.id}
-                onClick={() => handleUserSelect(user)}
-                className={`flex items-center gap-3 p-4 rounded-lg border transition-colors text-left ${
-                  selectedUser === user.id
-                    ? "border-green-500 bg-green-50 ring-2 ring-green-200"
-                    : "border-gray-200 hover:bg-gray-50"
-                }`}
-              >
-                <div className="flex h-12 w-12 items-center justify-center bg-gray-100 rounded-full">
-                  <Users className="h-6 w-6 text-gray-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-900 truncate">{user.name}</p>
-                  <p className="text-sm text-gray-500 truncate">{user.email}</p>
-                </div>
-                {selectedUser === user.id && (
-                  <div className="flex h-6 w-6 items-center justify-center bg-green-500 rounded-full">
-                    <Check className="h-4 w-4 text-white" />
-                  </div>
+      {/* Users Table */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50">
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">User</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Email</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Roles</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i}>
+                      <td className="px-4 py-3"><Skeleton className="h-5 w-32" /></td>
+                      <td className="px-4 py-3"><Skeleton className="h-5 w-40" /></td>
+                      <td className="px-4 py-3"><Skeleton className="h-5 w-24" /></td>
+                      <td className="px-4 py-3"><Skeleton className="h-5 w-20" /></td>
+                    </tr>
+                  ))
+                ) : filteredUsers.length > 0 ? (
+                  filteredUsers.map((user) => {
+                    const isSelected = selectedUser === user.id;
+                    const assignedRoles = getUserRolesList(user.id);
+                    return (
+                      <tr
+                        key={user.id}
+                        className={`hover:bg-gray-50 cursor-pointer ${isSelected ? "bg-green-50" : ""}`}
+                        onClick={() => handleUserSelect(user)}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center bg-gray-100 rounded-full">
+                              <Users className="h-5 w-5 text-gray-500" />
+                            </div>
+                            <span className="font-medium text-gray-900">{user.name}</span>
+                            {isSelected && (
+                              <div className="flex h-5 w-5 items-center justify-center bg-green-500 rounded-full">
+                                <Check className="h-3 w-3 text-white" />
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-gray-600">{user.email}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            {assignedRoles.length > 0 ? (
+                              assignedRoles.map((role) => (
+                                <Badge key={role.id} variant="secondary" className="text-xs">
+                                  {role.name}
+                                </Badge>
+                              ))
+                            ) : isSelected ? (
+                              <span className="text-sm text-amber-600 flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3" />
+                                No roles
+                              </span>
+                            ) : (
+                              <span className="text-sm text-gray-400">-</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleUserSelect(user);
+                              handleAssignRoles();
+                            }}
+                            className="h-7 gap-1"
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                            Assign
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-12 text-center text-gray-500">
+                      No users found
+                    </td>
+                  </tr>
                 )}
-              </button>
-            ))}
-          </>
-        ) : (
-          <div className="col-span-full text-center py-12 text-gray-500">No users found</div>
-        )}
-      </div>
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* User Role Display */}
       {selectedUser && (

@@ -2,9 +2,8 @@
 
 import * as React from "react";
 import { ColumnDef, flexRender, useReactTable, getCoreRowModel, getPaginationRowModel, getSortedRowModel, getFilteredRowModel, SortingState, ColumnFiltersState, PaginationState } from "@tanstack/react-table";
-import { ArrowUpDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
@@ -12,11 +11,10 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   searchKey?: string;
-  searchPlaceholder?: string;
   onRowClick?: (row: TData) => void;
 }
 
-export function DataTable<TData, TValue>({ columns, data, searchKey, searchPlaceholder = "Search...", onRowClick }: DataTableProps<TData, TValue>) {
+export function DataTable<TData, TValue>({ columns, data, searchKey, onRowClick }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 });
@@ -37,16 +35,7 @@ export function DataTable<TData, TValue>({ columns, data, searchKey, searchPlace
   return (
     <div className="space-y-4">
       {searchKey && (
-        <div className="flex items-center justify-between gap-4 pb-3 border-b border-gray-100">
-          <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder={searchPlaceholder}
-              value={(table.getColumn(searchKey)?.getFilterValue() as string) ?? ""}
-              onChange={(event) => table.getColumn(searchKey)?.setFilterValue(event.target.value)}
-              className="w-full pl-9 bg-gray-50 border-gray-200"
-            />
-          </div>
+        <div className="flex items-center justify-end gap-4 pb-3 border-b border-gray-100">
           <Select value={table.getState().pagination.pageSize.toString()} onValueChange={(v) => table.setPagination({ ...table.getState().pagination, pageSize: Number(v) })}>
             <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
             <SelectContent>

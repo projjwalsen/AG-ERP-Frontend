@@ -25,9 +25,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast, ToastContainer } from "@/components/ui/toast";
+import { useAppSelector } from "@/app/store/hooks";
 import { branchApi, CreateBranchPayload, UpdateBranchPayload } from "@/app/services/branch.service";
+import { hasModulePermission } from "@/lib/usePermissions";
 import { Branch } from "@/app/types/branch";
 import { formatDate } from "@/lib/utils";
+import { AlertTriangle } from "lucide-react";
+import { validateIndianPincode } from "@/lib/pincode";
 
 export default function BranchesPage() {
   return (
@@ -56,10 +60,16 @@ function BranchesTab() {
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [viewModalOpen, setViewModalOpen] = React.useState(false);
   const [selectedBranch, setSelectedBranch] = React.useState<Branch | null>(null);
+  const { permissions } = useAppSelector((state) => state.auth);
+
+  const canView = hasModulePermission(permissions, "BRANCH", "VIEW");
+  const canWrite = hasModulePermission(permissions, "BRANCH", "WRITE");
 
   React.useEffect(() => {
-    fetchBranches();
-  }, []);
+    if (canView) {
+      fetchBranches();
+    }
+  }, [canView]);
 
   const fetchBranches = async () => {
     setLoading(true);
@@ -162,10 +172,12 @@ function BranchesTab() {
           <h2 className="text-lg font-semibold text-gray-900">All Branches</h2>
           <p className="text-sm text-gray-500">Manage branch information and status</p>
         </div>
-        <Button onClick={handleCreate} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Branch
-        </Button>
+        {canWrite && (
+          <Button onClick={handleCreate} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Branch
+          </Button>
+        )}
       </div>
 
       {/* Search */}
@@ -252,16 +264,22 @@ function BranchesTab() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-40">
-                            <DropdownMenuItem onClick={() => handleView(branch)}>
-                              <Eye className="mr-2 h-4 w-4" />View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleEdit(branch)}>
-                              <Edit className="mr-2 h-4 w-4" />Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleToggleStatus(branch)} className={branch.isActive ? "text-red-600" : "text-green-600"}>
-                              {branch.isActive ? "Deactivate" : "Activate"}
-                            </DropdownMenuItem>
+                            {canView && (
+                              <DropdownMenuItem onClick={() => handleView(branch)}>
+                                <Eye className="mr-2 h-4 w-4" />View
+                              </DropdownMenuItem>
+                            )}
+                            {canWrite && (
+                              <>
+                                <DropdownMenuItem onClick={() => handleEdit(branch)}>
+                                  <Edit className="mr-2 h-4 w-4" />Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleToggleStatus(branch)} className={branch.isActive ? "text-red-600" : "text-green-600"}>
+                                  {branch.isActive ? "Deactivate" : "Activate"}
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>
@@ -327,6 +345,11 @@ function CreateBranchModal({
 }) {
   const { addToast } = useToast();
   const [loading, setLoading] = React.useState(false);
+  const [showConfirm, setShowConfirm] = React.useState(false);
+  const [pincodeError, setPincodeError] = React.useState<string | null>(null);
+  const [isValidatingPincode, setIsValidatingPincode] = React.useState(false);
+  const [states, setStates] = React.useState<{ name: string; isoCode: string; stateCode: string }[]>([]);
+  const [cities, setCities] = React.useState<{ name: string }[]>([]);
   const [form, setForm] = React.useState<CreateBranchPayload>({
     name: "",
     code: "",
@@ -338,6 +361,10 @@ function CreateBranchModal({
     state: "",
     pinCode: "",
   });
+
+  React.useEffect(() => {
+    fetchStates();
+  }, []);
 
   React.useEffect(() => {
     if (open) {
@@ -352,8 +379,42 @@ function CreateBranchModal({
         state: "",
         pinCode: "",
       });
+      setCities([]);
+      setPincodeError(null);
     }
   }, [open]);
+
+  const fetchStates = async () => {
+    try {
+      const response = await fetch("/api/meta/states", { credentials: "include" });
+      const data = await response.json();
+      if (data.success && data.data?.states) {
+        setStates(data.data.states);
+      }
+    } catch (err) {
+      console.error("Failed to fetch states", err);
+    }
+  };
+
+  const fetchCities = async (isoCode: string) => {
+    try {
+      const response = await fetch(`/api/meta/cities/${isoCode}`, { credentials: "include" });
+      const data = await response.json();
+      if (data.success && data.data?.cities) {
+        setCities(data.data.cities);
+      }
+    } catch (err) {
+      console.error("Failed to fetch cities", err);
+    }
+  };
+
+  const handleStateChange = (stateName: string) => {
+    const selectedState = states.find((s) => s.name === stateName);
+    if (selectedState) {
+      setForm({ ...form, state: stateName, stateCode: selectedState.stateCode });
+      fetchCities(selectedState.isoCode);
+    }
+  };
 
   const normalizeCode = (value: string) =>
     value.toUpperCase().replace(/[^A-Z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
@@ -363,28 +424,62 @@ function CreateBranchModal({
     setForm({ ...form, name, code: normalizeCode(name) });
   };
 
+  const handlePincodeChange = async (value: string) => {
+    setForm({ ...form, pinCode: value });
+    setPincodeError(null);
+
+    if (value.length === 6) {
+      setIsValidatingPincode(true);
+      const result = await validateIndianPincode(value);
+      setIsValidatingPincode(false);
+
+      if (!result.valid) {
+        setPincodeError(result.message || "Invalid PIN code");
+      } else if (result.data) {
+        // Auto-fill state from pincode if not already set
+        if (!form.state) {
+          const matchingState = states.find(
+            (s) => s.name.toLowerCase() === result.data!.state.toLowerCase()
+          );
+          if (matchingState) {
+            setForm((prev) => ({
+              ...prev,
+              pinCode: value,
+              state: result.data!.state,
+              stateCode: matchingState.stateCode,
+            }));
+            fetchCities(matchingState.isoCode);
+          } else {
+            setForm((prev) => ({ ...prev, pinCode: value }));
+          }
+        }
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.code || !form.gstin || !form.stateCode || !form.addressLine1 || !form.city || !form.state || !form.pinCode) {
       addToast("Please fill all required fields", "error");
       return;
     }
+    if (pincodeError) {
+      addToast("Please enter a valid PIN code", "error");
+      return;
+    }
+    setShowConfirm(true);
+  };
+
+  const handleConfirmCreate = async () => {
+    setShowConfirm(false);
     setLoading(true);
     try {
       const response = await branchApi.create(form);
-      // Support multiple possible API response shapes:
-      // - { success: true, data: { branch: {...} } }
-      // - { success: true, data: { ...branchFields } }
-      // - { success: true, data: {...}, branch: {...} }
       if (response && response.success) {
-        // try common locations for the created branch
         const possible = response.data ?? (response as any).branch ?? (response as any).data?.branch;
         const newBranch = (possible && (possible.branch ?? possible)) || null;
-
         if (newBranch && typeof newBranch === "object") {
-          // update parent and close modal
           onSuccess(newBranch as Branch);
-          // ensure local form reset (optional)
           setForm({
             name: "",
             code: "",
@@ -427,53 +522,110 @@ function CreateBranchModal({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="name">Branch Name *</Label>
-              <Input id="name" placeholder="Kolkata Depot" value={form.name} onChange={handleNameChange} required />
+              <Input id="name" value={form.name} onChange={handleNameChange} required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="code">Branch Code *</Label>
-              <Input id="code" placeholder="KOL_DEPOT" value={form.code} onChange={(e) => setForm({ ...form, code: normalizeCode(e.target.value) })} className="font-mono uppercase" required />
+              <Input id="code" value={form.code} onChange={(e) => setForm({ ...form, code: normalizeCode(e.target.value) })} className="font-mono uppercase" required />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="gstin">GSTIN *</Label>
-              <Input id="gstin" placeholder="19ABCDE1234F1Z5" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })} className="font-mono uppercase" required />
+              <Input id="gstin" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })} className="font-mono uppercase" required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="stateCode">State Code *</Label>
-              <Input id="stateCode" placeholder="19" value={form.stateCode} onChange={(e) => setForm({ ...form, stateCode: e.target.value })} required />
+              <Label htmlFor="stateCode">State Code</Label>
+              <Input id="stateCode" value={form.stateCode} readOnly className="bg-gray-50" />
             </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="addressLine1">Address Line 1 *</Label>
-            <Input id="addressLine1" placeholder="Main Road" value={form.addressLine1} onChange={(e) => setForm({ ...form, addressLine1: e.target.value })} required />
+            <Input id="addressLine1" value={form.addressLine1} onChange={(e) => setForm({ ...form, addressLine1: e.target.value })} required />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="addressLine2">Address Line 2</Label>
-            <Input id="addressLine2" placeholder="Near Industrial Area" value={form.addressLine2 || ""} onChange={(e) => setForm({ ...form, addressLine2: e.target.value })} />
+            <Input id="addressLine2" value={form.addressLine2 || ""} onChange={(e) => setForm({ ...form, addressLine2: e.target.value })} />
           </div>
 
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="city">City *</Label>
-              <Input id="city" placeholder="Kolkata" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} required />
+              <select
+                id="city"
+                value={form.city || ""}
+                onChange={(e) => setForm({ ...form, city: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                disabled={!form.state}
+                required
+              >
+                <option value="">{form.state ? "Select city" : "Select state first"}</option>
+                {cities.map((city) => (
+                  <option key={city.name} value={city.name}>{city.name}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="state">State *</Label>
-              <Input id="state" placeholder="West Bengal" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} required />
+              <select
+                id="state"
+                value={form.state || ""}
+                onChange={(e) => handleStateChange(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                required
+              >
+                <option value="">Select state</option>
+                {states.map((state) => (
+                  <option key={state.isoCode} value={state.name}>{state.name}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="pinCode">Pin Code *</Label>
-              <Input id="pinCode" placeholder="700001" value={form.pinCode} onChange={(e) => setForm({ ...form, pinCode: e.target.value })} required />
+              <Input
+                id="pinCode"
+                value={form.pinCode}
+                onChange={(e) => handlePincodeChange(e.target.value)}
+                className={pincodeError ? "border-red-500" : ""}
+              />
+              {isValidatingPincode && (
+                <p className="text-xs text-gray-500">Validating...</p>
+              )}
+              {pincodeError && (
+                <p className="text-xs text-red-500">{pincodeError}</p>
+              )}
             </div>
           </div>
 
+          {/* Confirmation Dialog */}
+          {showConfirm && (
+            <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-amber-600">
+                    <AlertTriangle className="h-5 w-5" />
+                    Confirm Create Branch
+                  </DialogTitle>
+                  <DialogDescription>
+                    Are you sure you want to create branch <span className="font-semibold text-gray-900">{form.name}</span>?
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter className="gap-2">
+                  <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
+                  <Button type="button" onClick={handleConfirmCreate} loading={loading}>
+                    Yes, Create
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" loading={loading}>Create Branch</Button>
+            <Button type="button" onClick={() => setShowConfirm(true)}>Create Branch</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -495,7 +647,22 @@ function EditBranchModal({
 }) {
   const { addToast } = useToast();
   const [loading, setLoading] = React.useState(false);
+  const [showConfirm, setShowConfirm] = React.useState(false);
+  const [pincodeError, setPincodeError] = React.useState<string | null>(null);
+  const [isValidatingPincode, setIsValidatingPincode] = React.useState(false);
+  const [states, setStates] = React.useState<{ name: string; isoCode: string; stateCode: string }[]>([]);
+  const [cities, setCities] = React.useState<{ name: string }[]>([]);
   const [form, setForm] = React.useState<UpdateBranchPayload>({});
+
+  React.useEffect(() => {
+    fetchStates();
+  }, []);
+
+  React.useEffect(() => {
+    if (open) {
+      setPincodeError(null);
+    }
+  }, [open]);
 
   React.useEffect(() => {
     if (branch) {
@@ -510,11 +677,92 @@ function EditBranchModal({
         state: branch.state,
         pinCode: branch.pinCode,
       });
+      if (branch.state) {
+        const stateData = states.find((s) => s.name === branch.state);
+        if (stateData) {
+          fetchCities(stateData.isoCode);
+        } else {
+          fetchCitiesByStateName(branch.state);
+        }
+      }
     }
   }, [branch, open]);
 
+  const fetchStates = async () => {
+    try {
+      const response = await fetch("/api/meta/states", { credentials: "include" });
+      const data = await response.json();
+      if (data.success && data.data?.states) {
+        setStates(data.data.states);
+        if (branch?.state) {
+          const stateData = data.data.states.find((s: any) => s.name === branch.state);
+          if (stateData) {
+            fetchCities(stateData.isoCode);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch states", err);
+    }
+  };
+
+  const fetchCities = async (isoCode: string) => {
+    try {
+      const response = await fetch(`/api/meta/cities/${isoCode}`, { credentials: "include" });
+      const data = await response.json();
+      if (data.success && data.data?.cities) {
+        setCities(data.data.cities);
+      }
+    } catch (err) {
+      console.error("Failed to fetch cities", err);
+    }
+  };
+
+  const fetchCitiesByStateName = async (stateName: string) => {
+    const stateData = states.find((s) => s.name === stateName);
+    if (stateData) {
+      fetchCities(stateData.isoCode);
+    }
+  };
+
+  const handleStateChange = (stateName: string) => {
+    const selectedState = states.find((s) => s.name === stateName);
+    if (selectedState) {
+      setForm({ ...form, state: stateName, stateCode: selectedState.stateCode });
+      fetchCities(selectedState.isoCode);
+    }
+  };
+
   const normalizeCode = (value: string) =>
     value.toUpperCase().replace(/[^A-Z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
+
+  const handlePincodeChange = async (value: string) => {
+    setForm({ ...form, pinCode: value });
+    setPincodeError(null);
+
+    if (value.length === 6) {
+      setIsValidatingPincode(true);
+      const result = await validateIndianPincode(value);
+      setIsValidatingPincode(false);
+
+      if (!result.valid) {
+        setPincodeError(result.message || "Invalid PIN code");
+      } else if (result.data && !form.state) {
+        const matchingState = states.find(
+          (s) => s.name.toLowerCase() === result.data!.state.toLowerCase()
+        );
+        if (matchingState) {
+          setForm((prev) => ({
+            ...prev,
+            pinCode: value,
+            state: result.data!.state,
+            stateCode: matchingState.stateCode,
+          }));
+          fetchCities(matchingState.isoCode);
+        }
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -522,10 +770,20 @@ function EditBranchModal({
       addToast("Name and code are required", "error");
       return;
     }
+    if (pincodeError) {
+      addToast("Please enter a valid PIN code", "error");
+      return;
+    }
+    setShowConfirm(true);
+  };
+
+  const handleConfirmUpdate = async () => {
+    setShowConfirm(false);
     setLoading(true);
     try {
       const response = await branchApi.update(branch.id, form);
       if (response.success && response.data?.branch) {
+        addToast("Branch updated successfully", "success");
         onSuccess(response.data.branch);
       } else {
         addToast(response.message || "Failed to update branch", "error");
@@ -568,8 +826,8 @@ function EditBranchModal({
               <Input id="edit-gstin" value={form.gstin || ""} onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })} className="font-mono uppercase" required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-stateCode">State Code *</Label>
-              <Input id="edit-stateCode" value={form.stateCode || ""} onChange={(e) => setForm({ ...form, stateCode: e.target.value })} required />
+              <Label htmlFor="edit-stateCode">State Code</Label>
+              <Input id="edit-stateCode" value={form.stateCode || ""} readOnly className="bg-gray-50" />
             </div>
           </div>
 
@@ -586,21 +844,78 @@ function EditBranchModal({
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="edit-city">City *</Label>
-              <Input id="edit-city" value={form.city || ""} onChange={(e) => setForm({ ...form, city: e.target.value })} required />
+              <select
+                id="edit-city"
+                value={form.city || ""}
+                onChange={(e) => setForm({ ...form, city: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                disabled={!form.state}
+                required
+              >
+                <option value="">{form.state ? "Select city" : "Select state first"}</option>
+                {cities.map((city) => (
+                  <option key={city.name} value={city.name}>{city.name}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-state">State *</Label>
-              <Input id="edit-state" value={form.state || ""} onChange={(e) => setForm({ ...form, state: e.target.value })} required />
+              <select
+                id="edit-state"
+                value={form.state || ""}
+                onChange={(e) => handleStateChange(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                required
+              >
+                <option value="">Select state</option>
+                {states.map((state) => (
+                  <option key={state.isoCode} value={state.name}>{state.name}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-pinCode">Pin Code *</Label>
-              <Input id="edit-pinCode" value={form.pinCode || ""} onChange={(e) => setForm({ ...form, pinCode: e.target.value })} required />
+              <Input
+                id="edit-pinCode"
+                value={form.pinCode || ""}
+                onChange={(e) => handlePincodeChange(e.target.value)}
+                className={pincodeError ? "border-red-500" : ""}
+              />
+              {isValidatingPincode && (
+                <p className="text-xs text-gray-500">Validating...</p>
+              )}
+              {pincodeError && (
+                <p className="text-xs text-red-500">{pincodeError}</p>
+              )}
             </div>
           </div>
 
+          {/* Confirmation Dialog */}
+          {showConfirm && (
+            <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-amber-600">
+                    <AlertTriangle className="h-5 w-5" />
+                    Confirm Update Branch
+                  </DialogTitle>
+                  <DialogDescription>
+                    Are you sure you want to update branch <span className="font-semibold text-gray-900">{form.name}</span>?
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter className="gap-2">
+                  <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
+                  <Button type="button" onClick={handleConfirmUpdate} loading={loading}>
+                    Yes, Update
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" loading={loading}>Update Branch</Button>
+            <Button type="submit">Update Branch</Button>
           </DialogFooter>
         </form>
       </DialogContent>

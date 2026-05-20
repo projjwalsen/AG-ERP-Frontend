@@ -5,7 +5,22 @@ export interface User {
   phone?: string;
   branchAccessType?: "ALL" | "SELECTED";
   branchId?: string;
+  branch?: {
+    id: string;
+    name: string;
+    code: string;
+    gstin?: string;
+    stateCode?: string;
+    isActive?: boolean;
+  };
+  roles?: Array<{
+    id: string;
+    name: string;
+    code: string;
+  }>;
   status?: "ACTIVE" | "SUSPENDED";
+  isActive?: boolean;
+  lastLoginAt?: string;
   role?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -68,6 +83,33 @@ export interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  permissions: UserPermission[];
+  roles: UserRole[];
+}
+
+export interface UserPermission {
+  id: string;
+  module: string;
+  action: string;
+  key: string;
+  isActive: boolean;
+}
+
+export interface UserRole {
+  id: string;
+  name: string;
+  code: string;
+}
+
+export interface UserAccessResponse {
+  result: {
+    id: string;
+    name: string;
+    email: string;
+    lastLoginAt: string;
+    roles: UserRole[];
+    permissions: UserPermission[];
+  };
 }
 
 export interface UsersState {
