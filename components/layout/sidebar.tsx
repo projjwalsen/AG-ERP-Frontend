@@ -25,7 +25,19 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { mockNotifications } from "@/data/mockData";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
-import { getProfile, logout } from "@/app/store/authSlice";
+import { getProfile, logout, fetchUserAccess } from "@/app/store/authSlice";
+
+// Permission check helper
+const hasPermission = (permissions: any[], module: string, action: string): boolean => {
+  return permissions.some(
+    (p) => p.module?.toUpperCase() === module.toUpperCase() && p.action?.toUpperCase() === action.toUpperCase()
+  );
+};
+
+// Check if user has any permission for a module (for sidebar visibility)
+const hasModuleAccess = (permissions: any[], module: string): boolean => {
+  return permissions.some((p) => p.module?.toUpperCase() === module.toUpperCase());
+};
 
 interface SidebarProps {
   collapsed: boolean;
@@ -42,14 +54,20 @@ export function SidebarWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const dispatch = useAppDispatch();
-  const { user } = useAppSelector((state) => state.auth);
+  const { user, permissions } = useAppSelector((state) => state.auth);
 
-  // Fetch profile on mount
+  // Fetch profile and user access on mount
   React.useEffect(() => {
     if (!user) {
-      dispatch(getProfile());
+      dispatch(getProfile()).then((action) => {
+        if (getProfile.fulfilled.match(action) && action.payload.profile?.id) {
+          dispatch(fetchUserAccess(action.payload.profile.id));
+        }
+      });
+    } else if (permissions.length === 0 && user.id) {
+      dispatch(fetchUserAccess(user.id));
     }
-  }, [dispatch, user]);
+  }, [dispatch, user, permissions.length]);
 
   // Don't show sidebar on login and home pages
   if (noSidebarPaths.includes(pathname)) {
@@ -80,13 +98,7 @@ export function SidebarWrapper({ children }: { children: React.ReactNode }) {
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-6">
           {/* Left side */}
           <div className="flex items-center gap-4">
-            <div className="relative max-w-md hidden md:block">
-              <Input
-                placeholder="Search..."
-                className="w-70 bg-gray-50 border-gray-200 pl-9"
-              />
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            </div>
+            
           </div>
 
           {/* Right Actions */}
@@ -171,23 +183,24 @@ export function SidebarWrapper({ children }: { children: React.ReactNode }) {
 }
 
 const sidebarItems = [
-  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { title: "Branch Management", href: "/branches", icon: Building2 },
-  { title: "User Management", href: "/users", icon: Users },
-  { title: "Agency Management", href: "/agencies", icon: Briefcase },
-  { title: "Product Management", href: "/products", icon: Package },
-  { title: "Inventory", href: "/inventory", icon: Warehouse },
-  { title: "Purchases", href: "/purchases", icon: ShoppingCart },
-  { title: "Sales", href: "/sales", icon: DollarSign },
-  { title: "Payments", href: "/payments", icon: DollarSign },
-  { title: "Reports", href: "/reports", icon: FileText },
-  { title: "Audit Logs", href: "/audit-logs", icon: History },
-  { title: "Access Control", href: "/access-control", icon: Shield },
-  { title: "Settings", href: "/settings", icon: Settings },
+  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard, module: null },
+  { title: "Branch Management", href: "/branches", icon: Building2, module: "BRANCH" },
+  { title: "User Management", href: "/users", icon: Users, module: "USER" },
+  { title: "Access Control", href: "/access-control", icon: Shield, module: "ROLE" },
+  { title: "Agency Management", href: "/agencies", icon: Briefcase, module: "AGENCY" },
+  { title: "Product Management", href: "/products", icon: Package, module: "PRODUCT" },
+  { title: "Inventory", href: "/inventory", icon: Warehouse, module: "INVENTORY" },
+  { title: "Purchases", href: "/purchases", icon: ShoppingCart, module: "PURCHASE" },
+  { title: "Sales", href: "/sales", icon: DollarSign, module: "SALE" },
+  { title: "Payments", href: "/payments", icon: DollarSign, module: "PAYMENT" },
+  { title: "Reports", href: "/reports", icon: FileText, module: "REPORT" },
+  { title: "Audit Logs", href: "/audit-logs", icon: History, module: "AUDIT" },
+  { title: "Settings", href: "/settings", icon: Settings, module: null },
 ];
 
 function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
+  const { permissions } = useAppSelector((state) => state.auth);
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -215,6 +228,11 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <ScrollArea className="flex-1 px-3 py-3">
             <nav className="space-y-0.5">
               {sidebarItems.map((item) => {
+                // Skip items that require module permission and user doesn't have access
+                if (item.module && !hasModuleAccess(permissions, item.module)) {
+                  return null;
+                }
+
                 const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
                 const Icon = item.icon;
 

@@ -7,6 +7,10 @@ export const branchApi = {
     return apiFetch<BranchesListResponse>("api/branches/all");
   },
 
+  async getActive(): Promise<{ success: boolean; message: string; data?: BranchesListResponse }> {
+    return apiFetch<BranchesListResponse>("api/branches/selection");
+  },
+
   async getById(branchId: string): Promise<{ success: boolean; message: string; data?: BranchResponse }> {
     return apiFetch<BranchResponse>(`api/branches/${branchId}`);
   },

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
-import { login, clearError } from "@/app/store/authSlice";
+import { login, clearError, fetchUserAccess } from "@/app/store/authSlice";
 
 function LoginPage() {
   const router = useRouter();
@@ -25,12 +25,23 @@ function LoginPage() {
 
   React.useEffect(() => {
     if (error) {
-      setLocalError(error);
-      const timer = setTimeout(() => {
+      // Filter out technical/authentication errors from UI
+      const filteredError = error
+        .replace(/authentication token missing.*/gi, "")
+        .replace(/cookie.*expired.*/gi, "")
+        .replace(/unauthorized.*/gi, "")
+        .trim();
+
+      if (filteredError) {
+        setLocalError(filteredError);
+        const timer = setTimeout(() => {
+          dispatch(clearError());
+          setLocalError(null);
+        }, 5000);
+        return () => clearTimeout(timer);
+      } else {
         dispatch(clearError());
-        setLocalError(null);
-      }, 5000);
-      return () => clearTimeout(timer);
+      }
     }
   }, [error, dispatch]);
 
@@ -44,7 +55,9 @@ function LoginPage() {
     }
 
     try {
-      await dispatch(login({ email, password })).unwrap();
+      const result = await dispatch(login({ email, password })).unwrap();
+      // Fetch user access permissions after successful login
+      dispatch(fetchUserAccess(result.user.id));
       router.push("/dashboard");
     } catch (err) {
       // Error is handled by the slice

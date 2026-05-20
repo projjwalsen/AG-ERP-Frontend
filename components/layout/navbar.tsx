@@ -60,13 +60,7 @@ function Navbar({ sidebarCollapsed, onMenuClick }: NavbarProps) {
         <Button variant="ghost" size="icon" className="lg:hidden" onClick={onMenuClick}>
           <Menu className="h-5 w-5" />
         </Button>
-        <div className="relative max-w-md hidden md:block">
-          <Input
-            placeholder="Search..."
-            className="w-[280px] bg-gray-50 border-gray-200 pl-9"
-            icon={<Search className="h-4 w-4" />}
-          />
-        </div>
+       
       </div>
 
       {/* Right Actions */}

@@ -4,16 +4,20 @@ import * as React from "react";
 import { motion } from "framer-motion";
 import {
   DollarSign, ShoppingCart, CreditCard, Package, Users, AlertCircle,
-  ArrowUpRight, ArrowDownRight, Building2, Plus, Eye, FileText, Settings,
+  ArrowUpRight, ArrowDownRight, Building2, Plus, FileText, Settings,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PageHeader } from "@/components/layout";
 import { mockDashboardStats, mockTransactions, mockActivities, mockBranches, mockInventoryItems } from "@/data/mockData";
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
+import { branchApi } from "@/app/services/branch.service";
+import { Branch } from "@/app/types/branch";
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
+
+const COLORS = ["#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#3B82F6"];
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -80,7 +84,9 @@ function ActivityItem({ activity }: { activity: (typeof mockActivities)[0] }) {
   const initials = activity.user.split(" ").map((n: string) => n[0]).join("");
   return (
     <div className="flex gap-3 py-3 border-b border-gray-100 last:border-0">
-      <Avatar className="h-7 w-7"><AvatarFallback className="text-xs">{initials}</AvatarFallback></Avatar>
+      <div className="flex items-center justify-center h-7 w-7 bg-gray-200 rounded-full">
+        <span className="text-xs font-medium text-gray-600">{initials}</span>
+      </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm text-gray-900"><span className="font-medium">{activity.user}</span> {activity.action} <span className="text-gray-600">{activity.target}</span></p>
         <p className="text-xs text-gray-400">{formatDateTime(activity.timestamp)}</p>
@@ -89,8 +95,25 @@ function ActivityItem({ activity }: { activity: (typeof mockActivities)[0] }) {
   );
 }
 
+// Mock data for charts
+const stockDensityData = [
+  { name: "Healthy", value: 65, color: "#10B981" },
+  { name: "Low Stock", value: 25, color: "#F59E0B" },
+  { name: "Critical", value: 10, color: "#EF4444" },
+];
+
+const branchEarningsData = [
+  { name: "Kolkata", earnings: 450000 },
+  { name: "Mumbai", earnings: 380000 },
+  { name: "Delhi", earnings: 320000 },
+  { name: "Chennai", earnings: 280000 },
+  { name: "Bangalore", earnings: 250000 },
+];
+
 export default function DashboardPage() {
   const stats = mockDashboardStats;
+  const [selectedBranch, setSelectedBranch] = React.useState<string>("");
+  const [branches, setBranches] = React.useState<Branch[]>([]);
 
   const quickActions = [
     { label: "Add User", icon: Plus, href: "/users/new" },
@@ -98,10 +121,32 @@ export default function DashboardPage() {
     { label: "Settings", icon: Settings, href: "/settings" },
   ];
 
+  // Fetch branches for dropdown
+  React.useEffect(() => {
+    fetchBranches();
+  }, []);
+
+  const fetchBranches = async () => {
+    try {
+      const response = await branchApi.getAll();
+      const branchesData = Array.isArray(response.data)
+        ? response.data
+        : response.data?.branches ?? [];
+      setBranches(branchesData);
+    } catch (err) {
+      console.error("Failed to fetch branches");
+    }
+  };
+
+  // Filter earnings data based on selected branch
+  const filteredEarnings = selectedBranch
+    ? branchEarningsData.filter(d => d.name.toLowerCase().includes(selectedBranch.toLowerCase()))
+    : branchEarningsData;
+
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-5">
       <motion.div variants={itemVariants}>
-        <PageHeader title="Dashboard" description="Welcome back, Sarah. Here&apos;s your overview." />
+        <PageHeader title="Dashboard" description="Welcome back. Here&apos;s your overview." />
       </motion.div>
 
       {/* Stats Grid */}
@@ -112,6 +157,84 @@ export default function DashboardPage() {
         <StatsCard title="Inventory" value={formatCurrency(stats.inventory.value)} change={Math.abs(stats.inventory.change)} trend={stats.inventory.trend} icon={Package} color="amber" />
         <StatsCard title="Outstanding" value={formatCurrency(stats.outstandingPayments.value)} change={Math.abs(stats.outstandingPayments.change)} trend={stats.outstandingPayments.trend} icon={AlertCircle} color="red" />
         <StatsCard title="Users" value={stats.activeUsers.value.toString()} change={stats.activeUsers.change} trend={stats.activeUsers.trend} icon={Users} color="blue" />
+      </div>
+
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Stock Density Pie Chart */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-sm font-semibold">Stock Density</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-center">
+              <div className="w-64 h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={stockDensityData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {stockDensityData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className="flex justify-center gap-6 mt-4">
+              {stockDensityData.map((item, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                  <span className="text-sm text-gray-600">{item.name}</span>
+                  <span className="text-sm font-semibold text-gray-900">{item.value}%</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Branch Earnings Bar Chart */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-sm font-semibold">Branch Earnings</CardTitle>
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-gray-400" />
+              <select
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="">All Branches</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.name}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={filteredEarnings} layout="vertical">
+                  <XAxis type="number" tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
+                  <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, "Earnings"]} />
+                  <Bar dataKey="earnings" fill="#10B981" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Main Content */}
@@ -142,55 +265,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </motion.div>
-      </div>
-
-      {/* Secondary Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-sm font-semibold">Branches</CardTitle>
-            <Button variant="ghost" size="sm" className="text-green-600 text-xs h-7">Manage</Button>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {mockBranches.slice(0, 5).map((branch) => (
-              <div key={branch.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                <div className="flex items-center gap-3">
-                  <div className="p-1.5 bg-gray-100"><Building2 className="h-4 w-4 text-gray-600" /></div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{branch.name}</p>
-                    <p className="text-xs text-gray-500">{branch.code}</p>
-                  </div>
-                </div>
-                <Badge variant={branch.status === "active" ? "success" : "error"} dot>{branch.userCount} users</Badge>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-sm font-semibold">Inventory Status</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {mockInventoryItems.map((item) => (
-              <div key={item.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                <div className="flex items-center gap-3">
-                  <div className={cn("p-1.5", item.status === "healthy" && "bg-green-50", item.status === "low" && "bg-amber-50", item.status === "critical" && "bg-red-50")}>
-                    <Package className={cn("h-4 w-4", item.status === "healthy" && "text-green-600", item.status === "low" && "text-amber-600", item.status === "critical" && "text-red-600")} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 truncate max-w-[150px]">{item.productName}</p>
-                    <p className="text-xs text-gray-500">{item.category}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-gray-900">{item.currentStock.toLocaleString()}</p>
-                  <Badge variant={item.status === "healthy" ? "success" : item.status === "low" ? "warning" : "error"} dot>{item.status}</Badge>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
       </div>
 
       {/* Quick Actions */}

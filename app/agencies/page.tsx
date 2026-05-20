@@ -25,11 +25,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast, ToastContainer } from "@/components/ui/toast";
+import { useAppSelector } from "@/app/store/hooks";
 import { agencyApi, CreateAgencyPayload, UpdateAgencyPayload } from "@/app/services/agency.service";
 import { branchApi } from "@/app/services/branch.service";
+import { hasModulePermission } from "@/lib/usePermissions";
 import { Agency } from "@/app/types/agency";
 import { Branch } from "@/app/types/branch";
 import { formatDate } from "@/lib/utils";
+import { AlertTriangle } from "lucide-react";
+import { validateIndianPincode } from "@/lib/pincode";
 
 const agencyTypeLabels: Record<string, string> = {
   VENDOR: "Vendor",
@@ -66,11 +70,17 @@ function AgenciesTab() {
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [viewModalOpen, setViewModalOpen] = React.useState(false);
   const [selectedAgency, setSelectedAgency] = React.useState<Agency | null>(null);
+  const { permissions } = useAppSelector((state) => state.auth);
+
+  const canView = hasModulePermission(permissions, "AGENCY", "VIEW");
+  const canWrite = hasModulePermission(permissions, "AGENCY", "WRITE");
 
   React.useEffect(() => {
-    fetchAgencies();
-    fetchBranches();
-  }, []);
+    if (canView) {
+      fetchAgencies();
+      fetchBranches();
+    }
+  }, [canView]);
 
   // Listen for branch changes from other pages and refresh local branch list
   React.useEffect(() => {
@@ -180,10 +190,12 @@ function AgenciesTab() {
           <h2 className="text-lg font-semibold text-gray-900">All Agencies</h2>
           <p className="text-sm text-gray-500">Manage agency information and status</p>
         </div>
-        <Button onClick={handleCreate} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Agency
-        </Button>
+        {canWrite && (
+          <Button onClick={handleCreate} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Agency
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
@@ -314,16 +326,22 @@ function AgenciesTab() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-40">
-                            <DropdownMenuItem onClick={() => handleView(agency)}>
-                              <Eye className="mr-2 h-4 w-4" />View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleEdit(agency)}>
-                              <Edit className="mr-2 h-4 w-4" />Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleToggleStatus(agency)} className={agency.isActive ? "text-red-600" : "text-green-600"}>
-                              {agency.isActive ? "Deactivate" : "Activate"}
-                            </DropdownMenuItem>
+                            {canView && (
+                              <DropdownMenuItem onClick={() => handleView(agency)}>
+                                <Eye className="mr-2 h-4 w-4" />View
+                              </DropdownMenuItem>
+                            )}
+                            {canWrite && (
+                              <>
+                                <DropdownMenuItem onClick={() => handleEdit(agency)}>
+                                  <Edit className="mr-2 h-4 w-4" />Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleToggleStatus(agency)} className={agency.isActive ? "text-red-600" : "text-green-600"}>
+                                  {agency.isActive ? "Deactivate" : "Activate"}
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>
@@ -352,7 +370,6 @@ function AgenciesTab() {
         open={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
         onSuccess={handleCreateSuccess}
-        branches={branches}
       />
 
       {/* Edit Agency Modal */}
@@ -362,7 +379,6 @@ function AgenciesTab() {
           onClose={() => setEditModalOpen(false)}
           onSuccess={handleEditSuccess}
           agency={selectedAgency}
-          branches={branches}
         />
       )}
 
@@ -383,15 +399,18 @@ function CreateAgencyModal({
   open,
   onClose,
   onSuccess,
-  branches,
 }: {
   open: boolean;
   onClose: () => void;
   onSuccess: (agency: Agency) => void;
-  branches: Branch[];
 }) {
   const { addToast } = useToast();
   const [loading, setLoading] = React.useState(false);
+  const [showConfirm, setShowConfirm] = React.useState(false);
+  const [pincodeError, setPincodeError] = React.useState<string | null>(null);
+  const [isValidatingPincode, setIsValidatingPincode] = React.useState(false);
+  const [states, setStates] = React.useState<{ name: string; isoCode: string; stateCode: string }[]>([]);
+  const [cities, setCities] = React.useState<{ name: string }[]>([]);
   const [form, setForm] = React.useState<CreateAgencyPayload>({
     name: "",
     type: "VENDOR",
@@ -407,7 +426,10 @@ function CreateAgencyModal({
     pinCode: "",
     branches: [],
   });
-  const [selectedBranches, setSelectedBranches] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    fetchStates();
+  }, []);
 
   React.useEffect(() => {
     if (open) {
@@ -426,9 +448,70 @@ function CreateAgencyModal({
         pinCode: "",
         branches: [],
       });
-      setSelectedBranches([]);
+      setCities([]);
+      setPincodeError(null);
     }
   }, [open]);
+
+  const fetchStates = async () => {
+    try {
+      const response = await fetch("/api/meta/states", { credentials: "include" });
+      const data = await response.json();
+      if (data.success && data.data?.states) {
+        setStates(data.data.states);
+      }
+    } catch (err) {
+      console.error("Failed to fetch states", err);
+    }
+  };
+
+  const fetchCities = async (isoCode: string) => {
+    try {
+      const response = await fetch(`/api/meta/cities/${isoCode}`, { credentials: "include" });
+      const data = await response.json();
+      if (data.success && data.data?.cities) {
+        setCities(data.data.cities);
+      }
+    } catch (err) {
+      console.error("Failed to fetch cities", err);
+    }
+  };
+
+  const handleStateChange = (stateName: string) => {
+    const selectedState = states.find((s) => s.name === stateName);
+    if (selectedState) {
+      setForm({ ...form, state: stateName, stateCode: selectedState.stateCode });
+      fetchCities(selectedState.isoCode);
+    }
+  };
+
+  const handlePincodeChange = async (value: string) => {
+    setForm({ ...form, pinCode: value });
+    setPincodeError(null);
+
+    if (value.length === 6) {
+      setIsValidatingPincode(true);
+      const result = await validateIndianPincode(value);
+      setIsValidatingPincode(false);
+
+      if (!result.valid) {
+        setPincodeError(result.message || "Invalid PIN code");
+      } else if (result.data && !form.state) {
+        const matchingState = states.find(
+          (s) => s.name.toLowerCase() === result.data!.state.toLowerCase()
+        );
+        if (matchingState) {
+          setForm((prev) => ({
+            ...prev,
+            pinCode: value,
+            state: result.data!.state,
+            stateCode: matchingState.stateCode,
+          }));
+          fetchCities(matchingState.isoCode);
+        }
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -436,14 +519,18 @@ function CreateAgencyModal({
       addToast("Name and type are required", "error");
       return;
     }
+    if (pincodeError) {
+      addToast("Please enter a valid PIN code", "error");
+      return;
+    }
+    setShowConfirm(true);
+  };
 
+  const handleConfirmCreate = async () => {
+    setShowConfirm(false);
     setLoading(true);
     try {
-      const payload: CreateAgencyPayload = {
-        ...form,
-        branches: selectedBranches.map((branchId) => ({ branchId })),
-      };
-      const response = await agencyApi.create(payload);
+      const response = await agencyApi.create(form);
       if (response && response.success) {
         const possible = response.data ?? (response as any).agency ?? (response as any).data?.agency;
         const newAgency = (possible && (possible.agency ?? possible)) || null;
@@ -462,14 +549,6 @@ function CreateAgencyModal({
     } finally {
       setLoading(false);
     }
-  };
-
-  const toggleBranch = (branchId: string) => {
-    setSelectedBranches((prev) =>
-      prev.includes(branchId)
-        ? prev.filter((id) => id !== branchId)
-        : [...prev, branchId]
-    );
   };
 
   return (
@@ -491,7 +570,6 @@ function CreateAgencyModal({
               <Label htmlFor="name">Agency Name *</Label>
               <Input
                 id="name"
-                placeholder="ABC Petrochem"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 required
@@ -518,7 +596,6 @@ function CreateAgencyModal({
               <Label htmlFor="gstin">GSTIN</Label>
               <Input
                 id="gstin"
-                placeholder="19ABCDE1234F1Z5"
                 value={form.gstin || ""}
                 onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })}
                 className="font-mono uppercase"
@@ -528,9 +605,9 @@ function CreateAgencyModal({
               <Label htmlFor="stateCode">State Code</Label>
               <Input
                 id="stateCode"
-                placeholder="19"
                 value={form.stateCode || ""}
-                onChange={(e) => setForm({ ...form, stateCode: e.target.value })}
+                readOnly
+                className="bg-gray-50"
               />
             </div>
           </div>
@@ -540,7 +617,6 @@ function CreateAgencyModal({
               <Label htmlFor="contactPerson">Contact Person</Label>
               <Input
                 id="contactPerson"
-                placeholder="Raj Sharma"
                 value={form.contactPerson || ""}
                 onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
               />
@@ -549,7 +625,6 @@ function CreateAgencyModal({
               <Label htmlFor="mobileNumber">Mobile Number</Label>
               <Input
                 id="mobileNumber"
-                placeholder="9876543210"
                 value={form.mobileNumber || ""}
                 onChange={(e) => setForm({ ...form, mobileNumber: e.target.value })}
               />
@@ -561,7 +636,6 @@ function CreateAgencyModal({
             <Input
               id="email"
               type="email"
-              placeholder="agency@example.com"
               value={form.email || ""}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
@@ -571,7 +645,6 @@ function CreateAgencyModal({
             <Label htmlFor="addressLine1">Address Line 1</Label>
             <Input
               id="addressLine1"
-              placeholder="Park Street"
               value={form.addressLine1 || ""}
               onChange={(e) => setForm({ ...form, addressLine1: e.target.value })}
             />
@@ -581,7 +654,6 @@ function CreateAgencyModal({
             <Label htmlFor="addressLine2">Address Line 2</Label>
             <Input
               id="addressLine2"
-              placeholder="Near Petrol Pump"
               value={form.addressLine2 || ""}
               onChange={(e) => setForm({ ...form, addressLine2: e.target.value })}
             />
@@ -590,58 +662,76 @@ function CreateAgencyModal({
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="city">City</Label>
-              <Input
+              <select
                 id="city"
-                placeholder="Kolkata"
                 value={form.city || ""}
                 onChange={(e) => setForm({ ...form, city: e.target.value })}
-              />
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                disabled={!form.state}
+              >
+                <option value="">{form.state ? "Select city" : "Select state first"}</option>
+                {cities.map((city) => (
+                  <option key={city.name} value={city.name}>{city.name}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="state">State</Label>
-              <Input
+              <select
                 id="state"
-                placeholder="West Bengal"
                 value={form.state || ""}
-                onChange={(e) => setForm({ ...form, state: e.target.value })}
-              />
+                onChange={(e) => handleStateChange(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="">Select state</option>
+                {states.map((state) => (
+                  <option key={state.isoCode} value={state.name}>{state.name}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="pinCode">Pin Code</Label>
               <Input
                 id="pinCode"
-                placeholder="700001"
                 value={form.pinCode || ""}
-                onChange={(e) => setForm({ ...form, pinCode: e.target.value })}
+                onChange={(e) => handlePincodeChange(e.target.value)}
+                className={pincodeError ? "border-red-500" : ""}
               />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Assign Branches ({selectedBranches.length} selected)</Label>
-            <div className="border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
-              {branches.length === 0 ? (
-                <p className="text-sm text-gray-500">No branches available</p>
-              ) : (
-                branches.map((branch) => (
-                  <label key={branch.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1">
-                    <input
-                      type="checkbox"
-                      checked={selectedBranches.includes(branch.id)}
-                      onChange={() => toggleBranch(branch.id)}
-                      className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                    />
-                    <span className="text-sm text-gray-700">{branch.name}</span>
-                    <span className="text-xs text-gray-400">({branch.code})</span>
-                  </label>
-                ))
+              {isValidatingPincode && (
+                <p className="text-xs text-gray-500">Validating...</p>
+              )}
+              {pincodeError && (
+                <p className="text-xs text-red-500">{pincodeError}</p>
               )}
             </div>
           </div>
 
+          {/* Confirmation Dialog */}
+          {showConfirm && (
+            <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-amber-600">
+                    <AlertTriangle className="h-5 w-5" />
+                    Confirm Create Agency
+                  </DialogTitle>
+                  <DialogDescription>
+                    Are you sure you want to create agency <span className="font-semibold text-gray-900">{form.name}</span>?
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter className="gap-2">
+                  <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
+                  <Button type="button" onClick={handleConfirmCreate} loading={loading}>
+                    Yes, Create
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" loading={loading}>Create Agency</Button>
+            <Button type="submit">Create Agency</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -655,18 +745,30 @@ function EditAgencyModal({
   onClose,
   onSuccess,
   agency,
-  branches,
 }: {
   open: boolean;
   onClose: () => void;
   onSuccess: (agency: Agency) => void;
   agency: Agency;
-  branches: Branch[];
 }) {
   const { addToast } = useToast();
   const [loading, setLoading] = React.useState(false);
+  const [showConfirm, setShowConfirm] = React.useState(false);
+  const [pincodeError, setPincodeError] = React.useState<string | null>(null);
+  const [isValidatingPincode, setIsValidatingPincode] = React.useState(false);
+  const [states, setStates] = React.useState<{ name: string; isoCode: string; stateCode: string }[]>([]);
+  const [cities, setCities] = React.useState<{ name: string }[]>([]);
   const [form, setForm] = React.useState<UpdateAgencyPayload>({});
-  const [selectedBranches, setSelectedBranches] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    fetchStates();
+  }, []);
+
+  React.useEffect(() => {
+    if (open) {
+      setPincodeError(null);
+    }
+  }, [open]);
 
   React.useEffect(() => {
     if (agency) {
@@ -684,9 +786,89 @@ function EditAgencyModal({
         stateCode: agency.stateCode || "",
         pinCode: agency.pinCode || "",
       });
-      setSelectedBranches(agency.branches?.map((b) => b.branchId) || []);
+      if (agency.state) {
+        const stateData = states.find((s) => s.name === agency.state);
+        if (stateData) {
+          fetchCities(stateData.isoCode);
+        } else {
+          fetchCitiesByStateName(agency.state);
+        }
+      }
     }
   }, [agency, open]);
+
+  const fetchStates = async () => {
+    try {
+      const response = await fetch("/api/meta/states", { credentials: "include" });
+      const data = await response.json();
+      if (data.success && data.data?.states) {
+        setStates(data.data.states);
+        if (agency?.state) {
+          const stateData = data.data.states.find((s: any) => s.name === agency.state);
+          if (stateData) {
+            fetchCities(stateData.isoCode);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch states", err);
+    }
+  };
+
+  const fetchCities = async (isoCode: string) => {
+    try {
+      const response = await fetch(`/api/meta/cities/${isoCode}`, { credentials: "include" });
+      const data = await response.json();
+      if (data.success && data.data?.cities) {
+        setCities(data.data.cities);
+      }
+    } catch (err) {
+      console.error("Failed to fetch cities", err);
+    }
+  };
+
+  const fetchCitiesByStateName = async (stateName: string) => {
+    const stateData = states.find((s) => s.name === stateName);
+    if (stateData) {
+      fetchCities(stateData.isoCode);
+    }
+  };
+
+  const handleStateChange = (stateName: string) => {
+    const selectedState = states.find((s) => s.name === stateName);
+    if (selectedState) {
+      setForm({ ...form, state: stateName, stateCode: selectedState.stateCode });
+      fetchCities(selectedState.isoCode);
+    }
+  };
+
+  const handlePincodeChange = async (value: string) => {
+    setForm({ ...form, pinCode: value });
+    setPincodeError(null);
+
+    if (value.length === 6) {
+      setIsValidatingPincode(true);
+      const result = await validateIndianPincode(value);
+      setIsValidatingPincode(false);
+
+      if (!result.valid) {
+        setPincodeError(result.message || "Invalid PIN code");
+      } else if (result.data && !form.state) {
+        const matchingState = states.find(
+          (s) => s.name.toLowerCase() === result.data!.state.toLowerCase()
+        );
+        if (matchingState) {
+          setForm((prev) => ({
+            ...prev,
+            pinCode: value,
+            state: result.data!.state,
+            stateCode: matchingState.stateCode,
+          }));
+          fetchCities(matchingState.isoCode);
+        }
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -694,14 +876,18 @@ function EditAgencyModal({
       addToast("Name and type are required", "error");
       return;
     }
+    if (pincodeError) {
+      addToast("Please enter a valid PIN code", "error");
+      return;
+    }
+    setShowConfirm(true);
+  };
 
+  const handleConfirmUpdate = async () => {
+    setShowConfirm(false);
     setLoading(true);
     try {
-      const payload: UpdateAgencyPayload = {
-        ...form,
-        branches: selectedBranches.map((branchId) => ({ branchId })),
-      };
-      const response = await agencyApi.update(agency.id, payload);
+      const response = await agencyApi.update(agency.id, form);
       if (response && response.success) {
         const possible = response.data ?? (response as any).agency ?? (response as any).data?.agency;
         const updatedAgency = (possible && (possible.agency ?? possible)) || null;
@@ -720,14 +906,6 @@ function EditAgencyModal({
     } finally {
       setLoading(false);
     }
-  };
-
-  const toggleBranch = (branchId: string) => {
-    setSelectedBranches((prev) =>
-      prev.includes(branchId)
-        ? prev.filter((id) => id !== branchId)
-        : [...prev, branchId]
-    );
   };
 
   return (
@@ -785,7 +963,8 @@ function EditAgencyModal({
               <Input
                 id="edit-stateCode"
                 value={form.stateCode || ""}
-                onChange={(e) => setForm({ ...form, stateCode: e.target.value })}
+                readOnly
+                className="bg-gray-50"
               />
             </div>
           </div>
@@ -840,55 +1019,76 @@ function EditAgencyModal({
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="edit-city">City</Label>
-              <Input
+              <select
                 id="edit-city"
                 value={form.city || ""}
                 onChange={(e) => setForm({ ...form, city: e.target.value })}
-              />
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                disabled={!form.state}
+              >
+                <option value="">{form.state ? "Select city" : "Select state first"}</option>
+                {cities.map((city) => (
+                  <option key={city.name} value={city.name}>{city.name}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-state">State</Label>
-              <Input
+              <select
                 id="edit-state"
                 value={form.state || ""}
-                onChange={(e) => setForm({ ...form, state: e.target.value })}
-              />
+                onChange={(e) => handleStateChange(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="">Select state</option>
+                {states.map((state) => (
+                  <option key={state.isoCode} value={state.name}>{state.name}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-pinCode">Pin Code</Label>
               <Input
                 id="edit-pinCode"
                 value={form.pinCode || ""}
-                onChange={(e) => setForm({ ...form, pinCode: e.target.value })}
+                onChange={(e) => handlePincodeChange(e.target.value)}
+                className={pincodeError ? "border-red-500" : ""}
               />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Assign Branches ({selectedBranches.length} selected)</Label>
-            <div className="border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
-              {branches.length === 0 ? (
-                <p className="text-sm text-gray-500">No branches available</p>
-              ) : (
-                branches.map((branch) => (
-                  <label key={branch.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1">
-                    <input
-                      type="checkbox"
-                      checked={selectedBranches.includes(branch.id)}
-                      onChange={() => toggleBranch(branch.id)}
-                      className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                    />
-                    <span className="text-sm text-gray-700">{branch.name}</span>
-                    <span className="text-xs text-gray-400">({branch.code})</span>
-                  </label>
-                ))
+              {isValidatingPincode && (
+                <p className="text-xs text-gray-500">Validating...</p>
+              )}
+              {pincodeError && (
+                <p className="text-xs text-red-500">{pincodeError}</p>
               )}
             </div>
           </div>
 
+          {/* Confirmation Dialog */}
+          {showConfirm && (
+            <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-amber-600">
+                    <AlertTriangle className="h-5 w-5" />
+                    Confirm Update Agency
+                  </DialogTitle>
+                  <DialogDescription>
+                    Are you sure you want to update agency <span className="font-semibold text-gray-900">{form.name}</span>?
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter className="gap-2">
+                  <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
+                  <Button type="button" onClick={handleConfirmUpdate} loading={loading}>
+                    Yes, Update
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" loading={loading}>Update Agency</Button>
+            <Button type="submit">Update Agency</Button>
           </DialogFooter>
         </form>
       </DialogContent>
