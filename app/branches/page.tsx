@@ -33,8 +33,6 @@ import { formatDate } from "@/lib/utils";
 import { AlertTriangle } from "lucide-react";
 import { validateIndianPincode } from "@/lib/pincode";
 
-const getApiUrl = () => process.env.NEXT_PUBLIC_API_URL || "http://localhost:5100";
-
 export default function BranchesPage() {
   return (
     <div className=" min-h-screen bg-gray-50">
@@ -386,7 +384,7 @@ function CreateBranchModal({
 
   const fetchStates = async () => {
     try {
-      const response = await fetch(`${getApiUrl()}/api/meta/states`, { credentials: "include" });
+      const response = await fetch("/api/meta/states", { credentials: "include" });
       const data = await response.json();
       if (data.success && data.data?.states) {
         setStates(data.data.states);
