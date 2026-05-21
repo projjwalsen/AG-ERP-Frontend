@@ -3,7 +3,7 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 import {
-  DollarSign, ShoppingCart, CreditCard, Package, Users, AlertCircle,
+  IndianRupee, ShoppingCart, CreditCard, Package, Users, AlertCircle,
   ArrowUpRight, ArrowDownRight, Building2, Plus, FileText, Settings,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,7 +59,7 @@ function StatsCard({ title, value, change, trend, icon: Icon, color }: {
 function TransactionRow({ transaction }: { transaction: (typeof mockTransactions)[0] }) {
   const statusColors = { completed: "success", pending: "warning", failed: "error" } as const;
   const typeColors = { sale: "bg-green-50 text-green-600", purchase: "bg-blue-50 text-blue-600", payment: "bg-purple-50 text-purple-600", return: "bg-amber-50 text-amber-600" };
-  const icons = { sale: DollarSign, purchase: ShoppingCart, payment: CreditCard, return: Package };
+  const icons = { sale: IndianRupee, purchase: ShoppingCart, payment: CreditCard, return: Package };
 
   return (
     <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
@@ -151,7 +151,7 @@ export default function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <StatsCard title="Revenue" value={formatCurrency(stats.revenue.value)} change={stats.revenue.change} trend={stats.revenue.trend} icon={DollarSign} color="green" />
+        <StatsCard title="Revenue" value={formatCurrency(stats.revenue.value)} change={stats.revenue.change} trend={stats.revenue.trend} icon={IndianRupee} color="green" />
         <StatsCard title="Purchases" value={formatCurrency(stats.purchases.value)} change={stats.purchases.change} trend={stats.purchases.trend} icon={ShoppingCart} color="blue" />
         <StatsCard title="Sales" value={formatCurrency(stats.sales.value)} change={stats.sales.change} trend={stats.sales.trend} icon={CreditCard} color="purple" />
         <StatsCard title="Inventory" value={formatCurrency(stats.inventory.value)} change={Math.abs(stats.inventory.change)} trend={stats.inventory.trend} icon={Package} color="amber" />
@@ -226,9 +226,9 @@ export default function DashboardPage() {
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={filteredEarnings} layout="vertical">
-                  <XAxis type="number" tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
+                  <XAxis type="number" tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}K`} />
                   <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, "Earnings"]} />
+                  <Tooltip formatter={(value) => [`₹${Number(value).toLocaleString()}`, "Earnings"]} />
                   <Bar dataKey="earnings" fill="#10B981" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>

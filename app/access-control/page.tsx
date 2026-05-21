@@ -28,6 +28,8 @@ import { rbacApi } from "@/app/services/rbac.service";
 import { hasModulePermission } from "@/lib/usePermissions";
 import { Role, Permission } from "@/app/types/rbac";
 
+const getApiUrl = () => process.env.NEXT_PUBLIC_API_URL || "http://localhost:5100";
+
 // User type for assignment
 interface UserBasic {
   id: string;
@@ -755,7 +757,7 @@ function UserRolesTab() {
     setLoading(true);
     try {
       const [usersResponse, rolesResponse] = await Promise.all([
-        fetch("/api/users/all", { credentials: "include" }).then(r => r.json()),
+        fetch(`${getApiUrl()}/api/users/all`, { credentials: "include" }).then(r => r.json()),
         rbacApi.getRoles(),
       ]);
 

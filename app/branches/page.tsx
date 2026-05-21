@@ -33,6 +33,8 @@ import { formatDate } from "@/lib/utils";
 import { AlertTriangle } from "lucide-react";
 import { validateIndianPincode } from "@/lib/pincode";
 
+const getApiUrl = () => process.env.NEXT_PUBLIC_API_URL || "http://localhost:5100";
+
 export default function BranchesPage() {
   return (
     <div className=" min-h-screen bg-gray-50">
@@ -349,7 +351,6 @@ function CreateBranchModal({
   const [pincodeError, setPincodeError] = React.useState<string | null>(null);
   const [isValidatingPincode, setIsValidatingPincode] = React.useState(false);
   const [states, setStates] = React.useState<{ name: string; isoCode: string; stateCode: string }[]>([]);
-  const [cities, setCities] = React.useState<{ name: string }[]>([]);
   const [form, setForm] = React.useState<CreateBranchPayload>({
     name: "",
     code: "",
@@ -379,14 +380,13 @@ function CreateBranchModal({
         state: "",
         pinCode: "",
       });
-      setCities([]);
       setPincodeError(null);
     }
   }, [open]);
 
   const fetchStates = async () => {
     try {
-      const response = await fetch("/api/meta/states", { credentials: "include" });
+      const response = await fetch(`${getApiUrl()}/api/meta/states`, { credentials: "include" });
       const data = await response.json();
       if (data.success && data.data?.states) {
         setStates(data.data.states);
@@ -396,23 +396,10 @@ function CreateBranchModal({
     }
   };
 
-  const fetchCities = async (isoCode: string) => {
-    try {
-      const response = await fetch(`/api/meta/cities/${isoCode}`, { credentials: "include" });
-      const data = await response.json();
-      if (data.success && data.data?.cities) {
-        setCities(data.data.cities);
-      }
-    } catch (err) {
-      console.error("Failed to fetch cities", err);
-    }
-  };
-
   const handleStateChange = (stateName: string) => {
     const selectedState = states.find((s) => s.name === stateName);
     if (selectedState) {
       setForm({ ...form, state: stateName, stateCode: selectedState.stateCode });
-      fetchCities(selectedState.isoCode);
     }
   };
 
@@ -448,7 +435,6 @@ function CreateBranchModal({
               state: result.data!.state,
               stateCode: matchingState.stateCode,
             }));
-            fetchCities(matchingState.isoCode);
           } else {
             setForm((prev) => ({ ...prev, pinCode: value }));
           }
@@ -554,19 +540,13 @@ function CreateBranchModal({
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="city">City *</Label>
-              <select
+              <Input
                 id="city"
                 value={form.city || ""}
                 onChange={(e) => setForm({ ...form, city: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                disabled={!form.state}
+                placeholder="Enter city name"
                 required
-              >
-                <option value="">{form.state ? "Select city" : "Select state first"}</option>
-                {cities.map((city) => (
-                  <option key={city.name} value={city.name}>{city.name}</option>
-                ))}
-              </select>
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="state">State *</Label>

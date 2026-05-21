@@ -5,9 +5,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Users, Building2, Briefcase, Package, Warehouse,
-  ShoppingCart, DollarSign, FileText, History, Settings, ChevronLeft, Shield,
-  Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu
+  LayoutDashboard, Users, Building2, Briefcase, Package,
+  ShoppingCart, FileText, History, Settings, ChevronLeft, Shield,
+  Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu, CreditCard, Receipt
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -188,11 +188,10 @@ const sidebarItems = [
   { title: "User Management", href: "/users", icon: Users, module: "USER" },
   { title: "Access Control", href: "/access-control", icon: Shield, module: "ROLE" },
   { title: "Agency Management", href: "/agencies", icon: Briefcase, module: "AGENCY" },
-  { title: "Product Management", href: "/products", icon: Package, module: "PRODUCT" },
-  { title: "Inventory", href: "/inventory", icon: Warehouse, module: "INVENTORY" },
+  { title: "Product Management", href: "/inventory", icon: Package, module: "PRODUCT" },
   { title: "Purchases", href: "/purchases", icon: ShoppingCart, module: "PURCHASE" },
-  { title: "Sales", href: "/sales", icon: DollarSign, module: "SALE" },
-  { title: "Payments", href: "/payments", icon: DollarSign, module: "PAYMENT" },
+  { title: "Sales", href: "/sales", icon: Receipt, module: "SALE" },
+  { title: "Payments", href: "/payments", icon: CreditCard, module: "PAYMENT" },
   { title: "Reports", href: "/reports", icon: FileText, module: "REPORT" },
   { title: "Audit Logs", href: "/audit-logs", icon: History, module: "AUDIT" },
   { title: "Settings", href: "/settings", icon: Settings, module: null },
