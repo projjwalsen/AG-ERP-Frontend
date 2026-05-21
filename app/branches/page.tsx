@@ -27,6 +27,7 @@ import {
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { useAppSelector } from "@/app/store/hooks";
 import { branchApi, CreateBranchPayload, UpdateBranchPayload } from "@/app/services/branch.service";
+import { metaApi } from "@/app/services/meta.service";
 import { hasModulePermission } from "@/lib/usePermissions";
 import { Branch } from "@/app/types/branch";
 import { formatDate } from "@/lib/utils";
@@ -384,10 +385,9 @@ function CreateBranchModal({
 
   const fetchStates = async () => {
     try {
-      const response = await fetch("/api/meta/states", { credentials: "include" });
-      const data = await response.json();
-      if (data.success && data.data?.states) {
-        setStates(data.data.states);
+      const response = await metaApi.getStates();
+      if (response.success && response.data?.states) {
+        setStates(response.data.states);
       }
     } catch (err) {
       console.error("Failed to fetch states", err);
@@ -668,12 +668,11 @@ function EditBranchModal({
 
   const fetchStates = async () => {
     try {
-      const response = await fetch("/api/meta/states", { credentials: "include" });
-      const data = await response.json();
-      if (data.success && data.data?.states) {
-        setStates(data.data.states);
+      const response = await metaApi.getStates();
+      if (response.success && response.data?.states) {
+        setStates(response.data.states);
         if (branch?.state) {
-          const stateData = data.data.states.find((s: any) => s.name === branch.state);
+          const stateData = response.data.states.find((s: any) => s.name === branch.state);
           if (stateData) {
             fetchCities(stateData.isoCode);
           }
@@ -686,10 +685,9 @@ function EditBranchModal({
 
   const fetchCities = async (isoCode: string) => {
     try {
-      const response = await fetch(`/api/meta/cities/${isoCode}`, { credentials: "include" });
-      const data = await response.json();
-      if (data.success && data.data?.cities) {
-        setCities(data.data.cities);
+      const response = await metaApi.getCities(isoCode);
+      if (response.success && response.data?.cities) {
+        setCities(response.data.cities);
       }
     } catch (err) {
       console.error("Failed to fetch cities", err);
