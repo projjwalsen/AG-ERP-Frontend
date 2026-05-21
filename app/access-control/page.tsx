@@ -25,6 +25,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { useAppSelector } from "@/app/store/hooks";
 import { rbacApi } from "@/app/services/rbac.service";
+import { UserService } from "@/app/services/user.service";
 import { hasModulePermission } from "@/lib/usePermissions";
 import { Role, Permission } from "@/app/types/rbac";
 
@@ -755,7 +756,7 @@ function UserRolesTab() {
     setLoading(true);
     try {
       const [usersResponse, rolesResponse] = await Promise.all([
-        fetch("/api/users/all", { credentials: "include" }).then(r => r.json()),
+        UserService.getAllUsers(),
         rbacApi.getRoles(),
       ]);
 
