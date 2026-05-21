@@ -27,11 +27,9 @@ import {
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { useAppSelector } from "@/app/store/hooks";
 import { agencyApi, CreateAgencyPayload, UpdateAgencyPayload } from "@/app/services/agency.service";
-import { branchApi } from "@/app/services/branch.service";
 import { metaApi } from "@/app/services/meta.service";
 import { hasModulePermission } from "@/lib/usePermissions";
 import { Agency } from "@/app/types/agency";
-import { Branch } from "@/app/types/branch";
 import { formatDate } from "@/lib/utils";
 import { AlertTriangle } from "lucide-react";
 import { validateIndianPincode } from "@/lib/pincode";
@@ -64,7 +62,6 @@ function AgenciesTab() {
   const { addToast } = useToast();
   const [loading, setLoading] = React.useState(true);
   const [agencies, setAgencies] = React.useState<Agency[]>([]);
-  const [branches, setBranches] = React.useState<Branch[]>([]);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [selectedType, setSelectedType] = React.useState("");
   const [createModalOpen, setCreateModalOpen] = React.useState(false);
@@ -79,36 +76,8 @@ function AgenciesTab() {
   React.useEffect(() => {
     if (canView) {
       fetchAgencies();
-      fetchBranches();
     }
   }, [canView]);
-
-  // Listen for branch changes from other pages and refresh local branch list
-  React.useEffect(() => {
-    const handler = () => fetchBranches();
-    try {
-      window.addEventListener("branches:changed", handler as EventListener);
-    } catch (e) {
-      // noop for non-window environments
-    }
-    return () => {
-      try {
-        window.removeEventListener("branches:changed", handler as EventListener);
-      } catch (e) {}
-    };
-  }, []);
-
-  const fetchBranches = async () => {
-    try {
-      const response = await branchApi.getAll();
-      const branchesData = Array.isArray(response.data)
-        ? response.data
-        : response.data?.branches ?? [];
-      setBranches(branchesData);
-    } catch {
-      console.error("Failed to fetch branches");
-    }
-  };
 
   const fetchAgencies = async () => {
     setLoading(true);
@@ -259,7 +228,6 @@ function AgenciesTab() {
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Contact</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Location</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Branches</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
@@ -313,11 +281,6 @@ function AgenciesTab() {
                         <Badge variant={agency.isActive ? "success" : "error"} className={agency.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}>
                           {agency.isActive ? "Active" : "Inactive"}
                         </Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-gray-500">
-                          {agency.branches?.length || 0} branches
-                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <DropdownMenu>
@@ -411,7 +374,6 @@ function CreateAgencyModal({
   const [pincodeError, setPincodeError] = React.useState<string | null>(null);
   const [isValidatingPincode, setIsValidatingPincode] = React.useState(false);
   const [states, setStates] = React.useState<{ name: string; isoCode: string; stateCode: string }[]>([]);
-  const [cities, setCities] = React.useState<{ name: string }[]>([]);
   const [form, setForm] = React.useState<CreateAgencyPayload>({
     name: "",
     type: "VENDOR",
@@ -449,7 +411,6 @@ function CreateAgencyModal({
         pinCode: "",
         branches: [],
       });
-      setCities([]);
       setPincodeError(null);
     }
   }, [open]);
@@ -465,22 +426,10 @@ function CreateAgencyModal({
     }
   };
 
-  const fetchCities = async (isoCode: string) => {
-    try {
-      const response = await metaApi.getCities(isoCode);
-      if (response.success && response.data?.cities) {
-        setCities(response.data.cities);
-      }
-    } catch (err) {
-      console.error("Failed to fetch cities", err);
-    }
-  };
-
   const handleStateChange = (stateName: string) => {
     const selectedState = states.find((s) => s.name === stateName);
     if (selectedState) {
       setForm({ ...form, state: stateName, stateCode: selectedState.stateCode });
-      fetchCities(selectedState.isoCode);
     }
   };
 
@@ -506,7 +455,8 @@ function CreateAgencyModal({
             state: result.data!.state,
             stateCode: matchingState.stateCode,
           }));
-          fetchCities(matchingState.isoCode);
+        } else {
+          setForm((prev) => ({ ...prev, pinCode: value }));
         }
       }
     }
@@ -661,18 +611,12 @@ function CreateAgencyModal({
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="city">City</Label>
-              <select
+              <Input
                 id="city"
                 value={form.city || ""}
                 onChange={(e) => setForm({ ...form, city: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                disabled={!form.state}
-              >
-                <option value="">{form.state ? "Select city" : "Select state first"}</option>
-                {cities.map((city) => (
-                  <option key={city.name} value={city.name}>{city.name}</option>
-                ))}
-              </select>
+                placeholder="Enter city name"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="state">State</Label>
@@ -756,7 +700,6 @@ function EditAgencyModal({
   const [pincodeError, setPincodeError] = React.useState<string | null>(null);
   const [isValidatingPincode, setIsValidatingPincode] = React.useState(false);
   const [states, setStates] = React.useState<{ name: string; isoCode: string; stateCode: string }[]>([]);
-  const [cities, setCities] = React.useState<{ name: string }[]>([]);
   const [form, setForm] = React.useState<UpdateAgencyPayload>({});
 
   React.useEffect(() => {
@@ -785,14 +728,6 @@ function EditAgencyModal({
         stateCode: agency.stateCode || "",
         pinCode: agency.pinCode || "",
       });
-      if (agency.state) {
-        const stateData = states.find((s) => s.name === agency.state);
-        if (stateData) {
-          fetchCities(stateData.isoCode);
-        } else {
-          fetchCitiesByStateName(agency.state);
-        }
-      }
     }
   }, [agency, open]);
 
@@ -801,33 +736,9 @@ function EditAgencyModal({
       const response = await metaApi.getStates();
       if (response.success && response.data?.states) {
         setStates(response.data.states);
-        if (agency?.state) {
-          const stateData = response.data.states.find((s: any) => s.name === agency.state);
-          if (stateData) {
-            fetchCities(stateData.isoCode);
-          }
-        }
       }
     } catch (err) {
       console.error("Failed to fetch states", err);
-    }
-  };
-
-  const fetchCities = async (isoCode: string) => {
-    try {
-      const response = await metaApi.getCities(isoCode);
-      if (response.success && response.data?.cities) {
-        setCities(response.data.cities);
-      }
-    } catch (err) {
-      console.error("Failed to fetch cities", err);
-    }
-  };
-
-  const fetchCitiesByStateName = async (stateName: string) => {
-    const stateData = states.find((s) => s.name === stateName);
-    if (stateData) {
-      fetchCities(stateData.isoCode);
     }
   };
 
@@ -835,7 +746,6 @@ function EditAgencyModal({
     const selectedState = states.find((s) => s.name === stateName);
     if (selectedState) {
       setForm({ ...form, state: stateName, stateCode: selectedState.stateCode });
-      fetchCities(selectedState.isoCode);
     }
   };
 
@@ -861,7 +771,8 @@ function EditAgencyModal({
             state: result.data!.state,
             stateCode: matchingState.stateCode,
           }));
-          fetchCities(matchingState.isoCode);
+        } else {
+          setForm((prev) => ({ ...prev, pinCode: value }));
         }
       }
     }
@@ -1016,18 +927,12 @@ function EditAgencyModal({
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="edit-city">City</Label>
-              <select
+              <Input
                 id="edit-city"
                 value={form.city || ""}
                 onChange={(e) => setForm({ ...form, city: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                disabled={!form.state}
-              >
-                <option value="">{form.state ? "Select city" : "Select state first"}</option>
-                {cities.map((city) => (
-                  <option key={city.name} value={city.name}>{city.name}</option>
-                ))}
-              </select>
+                placeholder="Enter city name"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-state">State</Label>

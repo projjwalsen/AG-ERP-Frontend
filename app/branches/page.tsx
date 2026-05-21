@@ -402,7 +402,7 @@ function CreateBranchModal({
   };
 
   const normalizeCode = (value: string) =>
-    value.toUpperCase().replace(/[^A-Z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
+    value.toUpperCase().replace(/\s+/g, "_").replace(/^[\s_]+|[\s_]+$/g, "");
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const name = e.target.value;
@@ -629,7 +629,6 @@ function EditBranchModal({
   const [pincodeError, setPincodeError] = React.useState<string | null>(null);
   const [isValidatingPincode, setIsValidatingPincode] = React.useState(false);
   const [states, setStates] = React.useState<{ name: string; isoCode: string; stateCode: string }[]>([]);
-  const [cities, setCities] = React.useState<{ name: string }[]>([]);
   const [form, setForm] = React.useState<UpdateBranchPayload>({});
 
   React.useEffect(() => {
@@ -655,14 +654,6 @@ function EditBranchModal({
         state: branch.state,
         pinCode: branch.pinCode,
       });
-      if (branch.state) {
-        const stateData = states.find((s) => s.name === branch.state);
-        if (stateData) {
-          fetchCities(stateData.isoCode);
-        } else {
-          fetchCitiesByStateName(branch.state);
-        }
-      }
     }
   }, [branch, open]);
 
@@ -671,33 +662,9 @@ function EditBranchModal({
       const response = await metaApi.getStates();
       if (response.success && response.data?.states) {
         setStates(response.data.states);
-        if (branch?.state) {
-          const stateData = response.data.states.find((s: any) => s.name === branch.state);
-          if (stateData) {
-            fetchCities(stateData.isoCode);
-          }
-        }
       }
     } catch (err) {
       console.error("Failed to fetch states", err);
-    }
-  };
-
-  const fetchCities = async (isoCode: string) => {
-    try {
-      const response = await metaApi.getCities(isoCode);
-      if (response.success && response.data?.cities) {
-        setCities(response.data.cities);
-      }
-    } catch (err) {
-      console.error("Failed to fetch cities", err);
-    }
-  };
-
-  const fetchCitiesByStateName = async (stateName: string) => {
-    const stateData = states.find((s) => s.name === stateName);
-    if (stateData) {
-      fetchCities(stateData.isoCode);
     }
   };
 
@@ -705,12 +672,11 @@ function EditBranchModal({
     const selectedState = states.find((s) => s.name === stateName);
     if (selectedState) {
       setForm({ ...form, state: stateName, stateCode: selectedState.stateCode });
-      fetchCities(selectedState.isoCode);
     }
   };
 
   const normalizeCode = (value: string) =>
-    value.toUpperCase().replace(/[^A-Z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
+    value.toUpperCase().replace(/\s+/g, "_").replace(/^[\s_]+|[\s_]+$/g, "");
 
   const handlePincodeChange = async (value: string) => {
     setForm({ ...form, pinCode: value });
@@ -734,7 +700,8 @@ function EditBranchModal({
             state: result.data!.state,
             stateCode: matchingState.stateCode,
           }));
-          fetchCities(matchingState.isoCode);
+        } else {
+          setForm((prev) => ({ ...prev, pinCode: value }));
         }
       }
     }
@@ -820,19 +787,13 @@ function EditBranchModal({
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="edit-city">City *</Label>
-              <select
+              <Input
                 id="edit-city"
                 value={form.city || ""}
                 onChange={(e) => setForm({ ...form, city: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                disabled={!form.state}
+                placeholder="Enter city name"
                 required
-              >
-                <option value="">{form.state ? "Select city" : "Select state first"}</option>
-                {cities.map((city) => (
-                  <option key={city.name} value={city.name}>{city.name}</option>
-                ))}
-              </select>
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-state">State *</Label>
