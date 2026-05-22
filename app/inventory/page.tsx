@@ -150,13 +150,11 @@ function ProductsTab() {
   };
 
   const handleCreateSuccess = (product: Product) => {
-    addToast("Product created successfully", "success");
     setCreateModalOpen(false);
     fetchProducts(currentPage, searchTerm, selectedCategory);
   };
 
   const handleEditSuccess = (product: Product) => {
-    addToast("Product updated successfully", "success");
     setEditModalOpen(false);
     fetchProducts(currentPage, searchTerm, selectedCategory);
   };
@@ -454,12 +452,7 @@ function CreateProductModal({
         const possible = response.data ?? (response as any).product ?? (response as any).data?.product;
         const newProduct = (possible && (possible.product ?? possible)) || null;
         if (newProduct && typeof newProduct === "object") {
-          // Show success toast and close modal after a short delay so user sees the toast
-          addToast("Product created successfully", "success");
-          setTimeout(() => {
-            onSuccess(newProduct as Product);
-            onClose();
-          }, 1500);
+          onSuccess(newProduct as Product);
         } else {
           addToast(response.message || "Product created but response shape was unexpected", "error");
           setLoading(false);
@@ -476,7 +469,6 @@ function CreateProductModal({
       setLoading(false);
       return;
     }
-    setLoading(false);
   };
 
   return (
@@ -605,7 +597,7 @@ function CreateProductModal({
             </div>
           </div>
 
-          {form.baseUnit === "KG" && form.operationalUnit === "LTR" && (
+          
             <div className="space-y-2">
               <Label htmlFor="density">Density* (kg/L)</Label>
               <Input
@@ -616,12 +608,12 @@ function CreateProductModal({
                 onChange={(e) => setForm({ ...form, density: e.target.value ? Number(e.target.value) : undefined })}
                 placeholder="0.85"
               />
-              <p className="text-xs text-gray-500">Required for KG to LTR conversion</p>
+              <p className="text-xs text-gray-500">Required for unit conversion</p>
             </div>
-          )}
+          
 
           <div className="space-y-2">
-            <Label htmlFor="minimumStockKG">Minimum Stock (KG)</Label>
+            <Label htmlFor="minimumStockKG">Stock Threshold (KG)</Label>
             <Input
               id="minimumStockKG"
               type="number"
@@ -716,12 +708,7 @@ function EditProductModal({
         const possible = response.data ?? (response as any).product ?? (response as any).data?.product;
         const updatedProduct = (possible && (possible.product ?? possible)) || null;
         if (updatedProduct && typeof updatedProduct === "object") {
-          // Show success toast and close modal after a short delay so user sees the toast
-          addToast("Product updated successfully", "success");
-          setTimeout(() => {
-            onSuccess(updatedProduct as Product);
-            onClose();
-          }, 1500);
+          onSuccess(updatedProduct as Product);
         } else {
           addToast(response.message || "Product updated but response shape was unexpected", "error");
           setLoading(false);
@@ -738,7 +725,6 @@ function EditProductModal({
       setLoading(false);
       return;
     }
-    setLoading(false);
   };
 
   return (
@@ -866,7 +852,7 @@ function EditProductModal({
             </div>
           </div>
 
-          {form.baseUnit === "KG" && form.operationalUnit === "LTR" && (
+          {form.operationalUnit === "KG" && (
             <div className="space-y-2">
               <Label htmlFor="edit-density">Density (kg/L)</Label>
               <Input
@@ -993,12 +979,12 @@ function ViewProductModal({
                 <span className="text-sm text-gray-600">Operational Unit:</span>
                 <span className="text-sm font-medium">{product.operationalUnit}</span>
               </div>
-              {product.density && (
+              
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Density:</span>
                   <span className="text-sm font-medium">{product.density} kg/L</span>
                 </div>
-              )}
+              
               <div className="flex justify-between border-t pt-2">
                 <span className="text-sm text-gray-600">Sell Price:</span>
                 <span className="text-sm font-medium text-green-600">

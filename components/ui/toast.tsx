@@ -85,14 +85,16 @@ export function ToastContainer() {
         >
           {icons[toast.type]}
           <p className="flex-1 text-sm text-gray-700">{toast.message}</p>
-          <button
-            onClick={() => context.removeToast(toast.id)}
-            className="text-gray-400 hover:text-gray-600 p-1"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          {toast.type === "error" && (
+            <button
+              onClick={() => context.removeToast(toast.id)}
+              className="text-gray-400 hover:text-gray-600 p-1"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
       ))}
     </div>

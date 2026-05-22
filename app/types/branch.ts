@@ -11,8 +11,8 @@ export interface Branch {
   city: string;
   state: string;
   pinCode: string;
-  phone?: string;
-  email?: string;
+  phnNumber?: string | null;
+  email?: string | null;
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -32,5 +32,6 @@ export interface BranchesListResponse {
 }
 
 export interface BranchResponse {
-  branch: Branch;
+  branch?: Branch;
+  [key: string]: Branch | undefined;
 }

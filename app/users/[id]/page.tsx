@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Edit, Trash2, Mail, Building2, Shield, Clock, CheckCircle, Loader2, ArrowLeft } from "lucide-react";
+import { Edit, Trash2, Mail, Building2, Shield, Clock, CheckCircle, Loader2, ArrowLeft, Phone, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { PageHeader } from "@/components/layout";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { fetchUserById, updateUserStatus, clearCurrentUser } from "@/app/store/usersSlice";
-import { formatDate, cn } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
+import { ToastContainer } from "@/components/ui/toast";
 
 const statusVariant: Record<string, "success" | "warning" | "error" | "default"> = {
   ACTIVE: "success",
@@ -110,7 +111,8 @@ export default function UserDetailsPage({ params }: { params: Promise<{ id: stri
         }
       />
 
-      <div className="grid grid-cols-1 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Left Column - User Profile Card */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <Card>
             <CardContent className="pt-5">
@@ -129,25 +131,67 @@ export default function UserDetailsPage({ params }: { params: Promise<{ id: stri
               <div className="mt-5 space-y-2">
                 {user.phone && (
                   <div className="flex items-center gap-3 p-2.5 bg-gray-50">
-                    <Shield className="h-4 w-4 text-gray-400" />
+                    <Phone className="h-4 w-4 text-gray-400" />
                     <div>
                       <p className="text-xs text-gray-500">Phone</p>
                       <p className="text-sm font-medium">{user.phone}</p>
                     </div>
                   </div>
                 )}
-                <div className="flex items-center gap-3 p-2.5 bg-gray-50">
-                  <Building2 className="h-4 w-4 text-gray-400" />
-                  <div>
-                    <p className="text-xs text-gray-500">Branch Access</p>
-                    <p className="text-sm font-medium">{user.branchAccessType || "ALL"}</p>
+                {user.branchAccessType === "ALL" && (
+                  <div className="flex items-center gap-3 p-2.5 bg-gray-50">
+                    <Building2 className="h-4 w-4 text-gray-400" />
+                    <div>
+                      <p className="text-xs text-gray-500">Branch Access</p>
+                      <p className="text-sm font-medium">All Branches</p>
+                    </div>
                   </div>
-                </div>
+                )}
+                {user.branch && (
+                  <div className="flex items-center gap-3 p-2.5 bg-green-50">
+                    <Building2 className="h-4 w-4 text-green-600" />
+                    <div>
+                      <p className="text-xs text-gray-500">Assigned Branch</p>
+                      <p className="text-sm font-medium">{user.branch.name}</p>
+                      <p className="text-xs text-gray-400">{user.branch.code}</p>
+                    </div>
+                  </div>
+                )}
+                {user.lastLoginAt && (
+                  <div className="flex items-center gap-3 p-2.5 bg-gray-50">
+                    <LogIn className="h-4 w-4 text-gray-400" />
+                    <div>
+                      <p className="text-xs text-gray-500">Last Login</p>
+                      <p className="text-sm font-medium">{formatDate(user.lastLoginAt)}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
+
+          {/* Roles Section */}
+          {user.roles && user.roles.length > 0 && (
+            <Card className="mt-5">
+              <CardHeader>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-green-600" />Assigned Roles
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {user.roles.map((role) => (
+                    <Badge key={role.id} variant="secondary" className="px-2 py-1">
+                      {role.name}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </motion.div>
 
+        {/* Right Column - Account Information */}
         <div className="lg:col-span-2 space-y-5">
           <Card>
             <CardHeader>
@@ -174,11 +218,60 @@ export default function UserDetailsPage({ params }: { params: Promise<{ id: stri
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase">User ID</p>
-                  <p className="text-sm font-medium mt-0.5 truncate">{user.id}</p>
+                  <p className="text-sm font-medium mt-0.5 truncate font-mono text-xs">{user.id}</p>
                 </div>
+                {user.branch && (
+                  <>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">Branch Name</p>
+                      <p className="text-sm font-medium mt-0.5">{user.branch.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">Branch Code</p>
+                      <p className="text-sm font-medium mt-0.5 font-mono">{user.branch.code}</p>
+                    </div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
+
+          {/* Branch Details */}
+          {user.branch && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-green-600" />Branch Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-5">
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Branch Name</p>
+                    <p className="text-sm font-medium mt-0.5">{user.branch.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Branch Code</p>
+                    <p className="text-sm font-medium mt-0.5 font-mono">{user.branch.code}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">GSTIN</p>
+                    <p className="text-sm font-medium mt-0.5 font-mono">{user.branch.gstin || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">State Code</p>
+                    <p className="text-sm font-medium mt-0.5">{user.branch.stateCode || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Branch Status</p>
+                    <Badge variant={user.branch.isActive ? "success" : "secondary"} className="mt-1">
+                      {user.branch.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 
@@ -220,6 +313,7 @@ export default function UserDetailsPage({ params }: { params: Promise<{ id: stri
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ToastContainer />
     </div>
   );
 }

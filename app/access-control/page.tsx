@@ -797,6 +797,8 @@ function UserRolesTab() {
     // Refresh the users data to get updated roles
     fetchData();
     setAssignModalOpen(false);
+    // Force refresh the whole page to update user permissions
+    window.location.reload();
   };
 
   const filteredUsers = React.useMemo(() => {
