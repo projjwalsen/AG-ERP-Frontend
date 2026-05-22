@@ -146,13 +146,15 @@ function AgenciesTab() {
   };
 
   const handleCreateSuccess = (agency: Agency) => {
-    setAgencies((prev) => [...prev, agency]);
+    addToast("Agency created successfully", "success");
     setCreateModalOpen(false);
+    fetchAgencies(currentPage, searchTerm, selectedType);
   };
 
   const handleEditSuccess = (agency: Agency) => {
-    setAgencies((prev) => prev.map((a) => (a.id === agency.id ? agency : a)));
+    addToast("Agency updated successfully", "success");
     setEditModalOpen(false);
+    fetchAgencies(currentPage, searchTerm, selectedType);
   };
 
   return (
@@ -480,9 +482,12 @@ function CreateAgencyModal({
         const possible = response.data ?? (response as any).agency ?? (response as any).data?.agency;
         const newAgency = (possible && (possible.agency ?? possible)) || null;
         if (newAgency && typeof newAgency === "object") {
+          // Show success toast and close modal after a short delay so user sees the toast
           addToast("Agency created successfully", "success");
-          onSuccess(newAgency as Agency);
-          onClose();
+          setTimeout(() => {
+            onSuccess(newAgency as Agency);
+            onClose();
+          }, 1500);
         } else {
           addToast(response.message || "Agency created but response shape was unexpected", "error");
           setLoading(false);
@@ -754,9 +759,12 @@ function EditAgencyModal({
         const possible = response.data ?? (response as any).agency ?? (response as any).data?.agency;
         const updatedAgency = (possible && (possible.agency ?? possible)) || null;
         if (updatedAgency && typeof updatedAgency === "object") {
+          // Show success toast and close modal after a short delay so user sees the toast
           addToast("Agency updated successfully", "success");
-          onSuccess(updatedAgency as Agency);
-          onClose();
+          setTimeout(() => {
+            onSuccess(updatedAgency as Agency);
+            onClose();
+          }, 1500);
         } else {
           addToast(response.message || "Agency updated but response shape was unexpected", "error");
           setLoading(false);

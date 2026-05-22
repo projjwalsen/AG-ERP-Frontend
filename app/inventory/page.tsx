@@ -150,13 +150,15 @@ function ProductsTab() {
   };
 
   const handleCreateSuccess = (product: Product) => {
-    setProducts((prev) => [...prev, product]);
+    addToast("Product created successfully", "success");
     setCreateModalOpen(false);
+    fetchProducts(currentPage, searchTerm, selectedCategory);
   };
 
   const handleEditSuccess = (product: Product) => {
-    setProducts((prev) => prev.map((p) => (p.id === product.id ? product : p)));
+    addToast("Product updated successfully", "success");
     setEditModalOpen(false);
+    fetchProducts(currentPage, searchTerm, selectedCategory);
   };
 
   return (
@@ -452,9 +454,12 @@ function CreateProductModal({
         const possible = response.data ?? (response as any).product ?? (response as any).data?.product;
         const newProduct = (possible && (possible.product ?? possible)) || null;
         if (newProduct && typeof newProduct === "object") {
+          // Show success toast and close modal after a short delay so user sees the toast
           addToast("Product created successfully", "success");
-          onSuccess(newProduct as Product);
-          onClose();
+          setTimeout(() => {
+            onSuccess(newProduct as Product);
+            onClose();
+          }, 1500);
         } else {
           addToast(response.message || "Product created but response shape was unexpected", "error");
           setLoading(false);
@@ -602,7 +607,7 @@ function CreateProductModal({
 
           {form.baseUnit === "KG" && form.operationalUnit === "LTR" && (
             <div className="space-y-2">
-              <Label htmlFor="density">Density (kg/L)</Label>
+              <Label htmlFor="density">Density* (kg/L)</Label>
               <Input
                 id="density"
                 type="number"
@@ -711,9 +716,12 @@ function EditProductModal({
         const possible = response.data ?? (response as any).product ?? (response as any).data?.product;
         const updatedProduct = (possible && (possible.product ?? possible)) || null;
         if (updatedProduct && typeof updatedProduct === "object") {
+          // Show success toast and close modal after a short delay so user sees the toast
           addToast("Product updated successfully", "success");
-          onSuccess(updatedProduct as Product);
-          onClose();
+          setTimeout(() => {
+            onSuccess(updatedProduct as Product);
+            onClose();
+          }, 1500);
         } else {
           addToast(response.message || "Product updated but response shape was unexpected", "error");
           setLoading(false);
