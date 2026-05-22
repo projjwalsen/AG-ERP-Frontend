@@ -38,7 +38,6 @@ export default function CreateUserPage() {
 
   const [showPassword, setShowPassword] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
-  const [success, setSuccess] = React.useState(false);
   const [branches, setBranches] = React.useState<Branch[]>([]);
   const [loadingBranches, setLoadingBranches] = React.useState(true);
 
@@ -107,13 +106,13 @@ export default function CreateUserPage() {
       })).unwrap();
 
       addToast("User created successfully", "success");
-      setSuccess(true);
       setTimeout(() => {
         router.push("/users");
-      }, 1000);
+      }, 1500);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to create user";
       setFormError(message);
+      addToast(message, "error");
     }
   };
 
@@ -128,12 +127,6 @@ export default function CreateUserPage() {
       {formError && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-sm text-red-600">{formError}</p>
-        </div>
-      )}
-
-      {success && (
-        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-          <p className="text-sm text-green-600">User created successfully!</p>
         </div>
       )}
 

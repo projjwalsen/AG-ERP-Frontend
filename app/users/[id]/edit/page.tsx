@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/layout";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { fetchUserById, updateUser, clearCurrentUser } from "@/app/store/usersSlice";
 import { cn } from "@/lib/utils";
+import { useToast, ToastContainer } from "@/components/ui/toast";
 
 interface EditUserPageProps {
   params: Promise<{ id: string }>;
@@ -36,11 +37,11 @@ export default function EditUserPage({ params }: EditUserPageProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { currentUser: user, isLoading, error } = useAppSelector((state) => state.users);
+  const { addToast } = useToast();
 
   const [userId, setUserId] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
-  const [submitSuccess, setSubmitSuccess] = React.useState(false);
 
   const { register, handleSubmit, setValue, reset, formState: { errors, isDirty } } = useForm<UserFormData>({
     resolver: zodResolver(userSchema),
@@ -96,13 +97,14 @@ export default function EditUserPage({ params }: EditUserPageProps) {
         },
       })).unwrap();
 
-      setSubmitSuccess(true);
+      addToast("User updated successfully", "success");
       setTimeout(() => {
         router.push(`/users/${userId}`);
-      }, 1000);
+      }, 1500);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to update user";
       setSubmitError(message);
+      addToast(message, "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -155,12 +157,6 @@ export default function EditUserPage({ params }: EditUserPageProps) {
       {submitError && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-sm text-red-600">{submitError}</p>
-        </div>
-      )}
-
-      {submitSuccess && (
-        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-          <p className="text-sm text-green-600">User updated successfully!</p>
         </div>
       )}
 
@@ -244,6 +240,7 @@ export default function EditUserPage({ params }: EditUserPageProps) {
           </div>
         </div>
       </form>
+      <ToastContainer />
     </div>
   );
 }

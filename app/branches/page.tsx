@@ -85,9 +85,12 @@ function BranchesTab() {
     try {
       const response = await branchApi.getAll({ page, limit: 10, search });
       // Handle both array response and object with branches property
-      const branchesData = Array.isArray(response.data)
-        ? response.data
-        : response.data?.branches ?? [];
+      let branchesData: Branch[] = [];
+      if (Array.isArray(response.data)) {
+        branchesData = response.data;
+      } else if (response.data?.branches) {
+        branchesData = response.data.branches;
+      }
       setBranches(branchesData);
       if (response.data && typeof response.data === "object" && "pagination" in response.data) {
         setPagination((response.data as any).pagination);
@@ -130,18 +133,10 @@ function BranchesTab() {
   };
 
   const handleCreateSuccess = (branch: Branch) => {
-    // Update local state with new branch
-    setBranches((prev) => {
-      const exists = prev.some(b => b.id === branch.id);
-      if (exists) {
-        return prev.map(b => b.id === branch.id ? branch : b);
-      }
-      return [...prev, branch];
-    });
-    // Show success toast
-    addToast("Branch created successfully", "success");
     // Close modal
     setCreateModalOpen(false);
+    // Force refresh the list
+    fetchBranches(currentPage, searchTerm);
     // Notify other pages to refresh branch data
     try {
       window.dispatchEvent(new CustomEvent("branches:changed", { detail: branch }));
@@ -151,12 +146,10 @@ function BranchesTab() {
   };
 
   const handleEditSuccess = (branch: Branch) => {
-    // Update local state with updated branch
-    setBranches((prev) => prev.map(b => b.id === branch.id ? branch : b));
-    // Show success toast
-    addToast("Branch updated successfully", "success");
     // Close modal
     setEditModalOpen(false);
+    // Force refresh the list
+    fetchBranches(currentPage, searchTerm);
     // Notify other pages to refresh branch data
     try {
       window.dispatchEvent(new CustomEvent("branches:changed", { detail: branch }));
@@ -247,8 +240,8 @@ function BranchesTab() {
                           </div>
                           <div>
                             <p className="font-medium text-gray-900">{branch.name}</p>
-                            {branch.addressLine1 && (
-                              <p className="text-xs text-gray-500">{branch.addressLine1}</p>
+                            {(branch.addressLine1 || branch.city) && (
+                              <p className="text-xs text-gray-500">{branch.addressLine1 || branch.city}</p>
                             )}
                           </div>
                         </div>
@@ -473,7 +466,8 @@ function CreateBranchModal({
         const possible = response.data ?? (response as any).branch ?? (response as any).data?.branch;
         const newBranch = (possible && (possible.branch ?? possible)) || null;
         if (newBranch && typeof newBranch === "object") {
-          onSuccess(newBranch as Branch);
+          // Show success toast
+          addToast("Branch created successfully", "success");
           setForm({
             name: "",
             code: "",
@@ -485,20 +479,26 @@ function CreateBranchModal({
             state: "",
             pinCode: "",
           });
+          // Wait a moment for user to see the toast, then close modal and refresh
+          setTimeout(() => {
+            setLoading(false);
+            onClose();
+            onSuccess(newBranch as Branch);
+          }, 800);
         } else {
           addToast(response.message || "Branch created but response shape was unexpected", "error");
+          setLoading(false);
         }
       } else {
         addToast(response?.message || "Failed to create branch", "error");
+        setLoading(false);
       }
     } catch (err: any) {
       console.error("Create branch error:", err);
       const errorMsg = err?.response?.data?.message || err?.message || "Failed to create branch";
       addToast(errorMsg, "error");
       setLoading(false);
-      return;
     }
-    setLoading(false);
   };
 
   return (
@@ -664,15 +664,15 @@ function EditBranchModal({
   React.useEffect(() => {
     if (branch) {
       setForm({
-        name: branch.name,
-        code: branch.code,
-        gstin: branch.gstin,
-        stateCode: branch.stateCode,
-        addressLine1: branch.addressLine1,
+        name: branch.name || "",
+        code: branch.code || "",
+        gstin: branch.gstin || "",
+        stateCode: branch.stateCode || "",
+        addressLine1: branch.addressLine1 || "",
         addressLine2: branch.addressLine2 || "",
-        city: branch.city,
-        state: branch.state,
-        pinCode: branch.pinCode,
+        city: branch.city || "",
+        state: branch.state || "",
+        pinCode: branch.pinCode || "",
         phone: branch.phone || "",
         email: branch.email || "",
       });
@@ -715,20 +715,23 @@ function EditBranchModal({
     try {
       const response = await branchApi.update(branch.id, form);
       if (response.success && response.data?.branch) {
+        // Show success toast in the modal
         addToast("Branch updated successfully", "success");
-        onSuccess(response.data.branch);
+        // Wait a moment for user to see the toast, then close modal and refresh
+        setTimeout(() => {
+          setLoading(false);
+          onClose();
+          onSuccess(response.data!.branch);
+        }, 800);
       } else {
         addToast(response.message || "Failed to update branch", "error");
         setLoading(false);
-        return;
       }
     } catch (err: any) {
       const errorMsg = err?.response?.data?.message || err?.message || "Failed to update branch";
       addToast(errorMsg, "error");
       setLoading(false);
-      return;
     }
-    setLoading(false);
   };
 
   return (
