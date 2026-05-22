@@ -2,9 +2,22 @@
 import { apiFetch } from "./api";
 import { Branch, BranchesListResponse, BranchResponse } from "../types/branch";
 
+export interface GetBranchesParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+}
+
 export const branchApi = {
-  async getAll(): Promise<{ success: boolean; message: string; data?: BranchesListResponse }> {
-    return apiFetch<BranchesListResponse>("api/branches/all");
+  async getAll(params?: GetBranchesParams): Promise<{ success: boolean; message: string; data?: BranchesListResponse }> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append("page", String(params.page));
+    if (params?.limit) queryParams.append("limit", String(params.limit));
+    if (params?.search) queryParams.append("search", params.search);
+
+    const query = queryParams.toString();
+    const url = query ? `api/branches/all?${query}` : "api/branches/all";
+    return apiFetch<BranchesListResponse>(url);
   },
 
   async getActive(): Promise<{ success: boolean; message: string; data?: BranchesListResponse }> {
@@ -47,6 +60,8 @@ export interface CreateBranchPayload {
   city: string;
   state: string;
   pinCode: string;
+  phone?: string;
+  email?: string;
 }
 
 export interface UpdateBranchPayload {
@@ -59,4 +74,6 @@ export interface UpdateBranchPayload {
   city?: string;
   state?: string;
   pinCode?: string;
+  phone?: string;
+  email?: string;
 }

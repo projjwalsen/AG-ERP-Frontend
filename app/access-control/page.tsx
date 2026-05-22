@@ -397,12 +397,16 @@ function RoleUpsertModal({
         onClose();
       } else {
         addToast(response.message || "Failed to save role", "error");
+        setLoading(false);
+        return;
       }
-    } catch {
-      addToast("Failed to save role", "error");
-    } finally {
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to save role";
+      addToast(errorMsg, "error");
       setLoading(false);
+      return;
     }
+    setLoading(false);
   };
 
   return (
@@ -550,12 +554,16 @@ function AssignPermissionsModal({
         onClose();
       } else {
         addToast(response.message || "Failed to assign permissions", "error");
+        setLoading(false);
+        return;
       }
-    } catch {
-      addToast("Failed to assign permissions", "error");
-    } finally {
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to assign permissions";
+      addToast(errorMsg, "error");
       setLoading(false);
+      return;
     }
+    setLoading(false);
   };
 
   return (
@@ -766,8 +774,9 @@ function UserRolesTab() {
       if (rolesResponse.success && rolesResponse.data?.roles) {
         setRoles(rolesResponse.data.roles);
       }
-    } catch {
-      addToast("Failed to load data", "error");
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to load data";
+      addToast(errorMsg, "error");
     } finally {
       setLoading(false);
     }
@@ -1018,12 +1027,16 @@ function AssignUserRolesModal({
         onSuccess();
       } else {
         addToast(response.message || "Failed to assign roles", "error");
+        setLoading(false);
+        return;
       }
-    } catch {
-      addToast("Failed to assign roles", "error");
-    } finally {
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to assign roles";
+      addToast(errorMsg, "error");
       setLoading(false);
+      return;
     }
+    setLoading(false);
   };
 
   const hasChanges = Array.from(selectedIds).sort().join(",") !== currentRoleIds.sort().join(",");

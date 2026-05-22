@@ -67,6 +67,8 @@ function ProductsTab() {
   const [products, setProducts] = React.useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [selectedCategory, setSelectedCategory] = React.useState("");
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pagination, setPagination] = React.useState<{ total: number; totalPages: number; page: number; limit: number } | null>(null);
   const [createModalOpen, setCreateModalOpen] = React.useState(false);
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [viewModalOpen, setViewModalOpen] = React.useState(false);
@@ -78,33 +80,34 @@ function ProductsTab() {
 
   React.useEffect(() => {
     if (canView) {
-      fetchProducts();
+      fetchProducts(currentPage, searchTerm, selectedCategory);
     }
-  }, [canView]);
+  }, [canView, currentPage]);
 
-  const fetchProducts = async () => {
+  React.useEffect(() => {
+    setCurrentPage(1);
+    if (canView) {
+      fetchProducts(1, searchTerm, selectedCategory);
+    }
+  }, [searchTerm, selectedCategory]);
+
+  const fetchProducts = async (page: number = 1, search?: string, category?: string) => {
     setLoading(true);
     try {
-      const params: { search?: string; category?: string } = {};
-      if (searchTerm) params.search = searchTerm;
-      if (selectedCategory) params.category = selectedCategory;
-
-      const response = await productApi.getAll(
-        Object.keys(params).length > 0 ? params : undefined
-      );
+      const response = await productApi.getAll({ page, limit: 10, search, category });
 
       const productsData = response.data?.products ?? [];
       setProducts(productsData);
-    } catch {
-      addToast("Failed to load products", "error");
+      if (response.data && typeof response.data === "object" && "pagination" in response.data) {
+        setPagination((response.data as any).pagination);
+      }
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to load products";
+      addToast(errorMsg, "error");
     } finally {
       setLoading(false);
     }
   };
-
-  React.useEffect(() => {
-    fetchProducts();
-  }, [searchTerm, selectedCategory]);
 
   const filteredProducts = React.useMemo(() => {
     return products.filter((product) => {
@@ -136,12 +139,13 @@ function ProductsTab() {
       const response = await productApi.updateStatus(product.id, newStatus);
       if (response.success) {
         addToast(`Product ${newStatus ? "activated" : "deactivated"} successfully`, "success");
-        fetchProducts();
+        fetchProducts(currentPage, searchTerm, selectedCategory);
       } else {
         addToast(response.message || "Failed to update status", "error");
       }
-    } catch {
-      addToast("Failed to update status", "error");
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to update status";
+      addToast(errorMsg, "error");
     }
   };
 
@@ -308,6 +312,35 @@ function ProductsTab() {
                 </tbody>
               </table>
             </div>
+            {/* Pagination */}
+            {pagination && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+                <p className="text-sm text-gray-500">
+                  Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} entries
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={pagination.page <= 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-gray-600">
+                    Page {pagination.page} of {pagination.totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(pagination.totalPages, p + 1))}
+                    disabled={pagination.page >= pagination.totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -424,15 +457,21 @@ function CreateProductModal({
           onClose();
         } else {
           addToast(response.message || "Product created but response shape was unexpected", "error");
+          setLoading(false);
+          return;
         }
       } else {
         addToast(response?.message || "Failed to create product", "error");
+        setLoading(false);
+        return;
       }
-    } catch {
-      addToast("Failed to create product", "error");
-    } finally {
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to create product";
+      addToast(errorMsg, "error");
       setLoading(false);
+      return;
     }
+    setLoading(false);
   };
 
   return (
@@ -677,15 +716,21 @@ function EditProductModal({
           onClose();
         } else {
           addToast(response.message || "Product updated but response shape was unexpected", "error");
+          setLoading(false);
+          return;
         }
       } else {
         addToast(response?.message || "Failed to update product", "error");
+        setLoading(false);
+        return;
       }
-    } catch {
-      addToast("Failed to update product", "error");
-    } finally {
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to update product";
+      addToast(errorMsg, "error");
       setLoading(false);
+      return;
     }
+    setLoading(false);
   };
 
   return (

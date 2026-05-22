@@ -32,7 +32,6 @@ import { hasModulePermission } from "@/lib/usePermissions";
 import { Agency } from "@/app/types/agency";
 import { formatDate } from "@/lib/utils";
 import { AlertTriangle } from "lucide-react";
-import { validateIndianPincode } from "@/lib/pincode";
 
 const agencyTypeLabels: Record<string, string> = {
   VENDOR: "Vendor",
@@ -64,6 +63,8 @@ function AgenciesTab() {
   const [agencies, setAgencies] = React.useState<Agency[]>([]);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [selectedType, setSelectedType] = React.useState("");
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pagination, setPagination] = React.useState<{ total: number; totalPages: number; page: number; limit: number } | null>(null);
   const [createModalOpen, setCreateModalOpen] = React.useState(false);
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [viewModalOpen, setViewModalOpen] = React.useState(false);
@@ -75,33 +76,34 @@ function AgenciesTab() {
 
   React.useEffect(() => {
     if (canView) {
-      fetchAgencies();
+      fetchAgencies(currentPage, searchTerm, selectedType);
     }
-  }, [canView]);
+  }, [canView, currentPage]);
 
-  const fetchAgencies = async () => {
+  React.useEffect(() => {
+    setCurrentPage(1);
+    if (canView) {
+      fetchAgencies(1, searchTerm, selectedType);
+    }
+  }, [searchTerm, selectedType]);
+
+  const fetchAgencies = async (page: number = 1, search?: string, type?: string) => {
     setLoading(true);
     try {
-      const params: { search?: string; type?: string; branch?: string } = {};
-      if (searchTerm) params.search = searchTerm;
-      if (selectedType) params.type = selectedType;
-
-      const response = await agencyApi.getAll(
-        Object.keys(params).length > 0 ? params as any : undefined
-      );
+      const response = await agencyApi.getAll({ page, limit: 10, search, type: type as any });
 
       const agenciesData = response.data?.agencies ?? [];
       setAgencies(agenciesData);
-    } catch {
-      addToast("Failed to load agencies", "error");
+      if (response.data && typeof response.data === "object" && "pagination" in response.data) {
+        setPagination((response.data as any).pagination);
+      }
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to load agencies";
+      addToast(errorMsg, "error");
     } finally {
       setLoading(false);
     }
   };
-
-  React.useEffect(() => {
-    fetchAgencies();
-  }, [searchTerm, selectedType]);
 
   const filteredAgencies = React.useMemo(() => {
     return agencies.filter((agency) => {
@@ -133,12 +135,13 @@ function AgenciesTab() {
       const response = await agencyApi.updateStatus(agency.id, newStatus);
       if (response.success) {
         addToast(`Agency ${!agency.isActive ? "activated" : "deactivated"} successfully`, "success");
-        fetchAgencies();
+        fetchAgencies(currentPage, searchTerm, selectedType);
       } else {
         addToast(response.message || "Failed to update status", "error");
       }
-    } catch {
-      addToast("Failed to update status", "error");
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to update status";
+      addToast(errorMsg, "error");
     }
   };
 
@@ -314,6 +317,35 @@ function AgenciesTab() {
                 </tbody>
               </table>
             </div>
+            {/* Pagination */}
+            {pagination && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+                <p className="text-sm text-gray-500">
+                  Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} entries
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={pagination.page <= 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-gray-600">
+                    Page {pagination.page} of {pagination.totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(pagination.totalPages, p + 1))}
+                    disabled={pagination.page >= pagination.totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -371,8 +403,6 @@ function CreateAgencyModal({
   const { addToast } = useToast();
   const [loading, setLoading] = React.useState(false);
   const [showConfirm, setShowConfirm] = React.useState(false);
-  const [pincodeError, setPincodeError] = React.useState<string | null>(null);
-  const [isValidatingPincode, setIsValidatingPincode] = React.useState(false);
   const [states, setStates] = React.useState<{ name: string; isoCode: string; stateCode: string }[]>([]);
   const [form, setForm] = React.useState<CreateAgencyPayload>({
     name: "",
@@ -411,7 +441,6 @@ function CreateAgencyModal({
         pinCode: "",
         branches: [],
       });
-      setPincodeError(null);
     }
   }, [open]);
 
@@ -433,43 +462,10 @@ function CreateAgencyModal({
     }
   };
 
-  const handlePincodeChange = async (value: string) => {
-    setForm({ ...form, pinCode: value });
-    setPincodeError(null);
-
-    if (value.length === 6) {
-      setIsValidatingPincode(true);
-      const result = await validateIndianPincode(value);
-      setIsValidatingPincode(false);
-
-      if (!result.valid) {
-        setPincodeError(result.message || "Invalid PIN code");
-      } else if (result.data && !form.state) {
-        const matchingState = states.find(
-          (s) => s.name.toLowerCase() === result.data!.state.toLowerCase()
-        );
-        if (matchingState) {
-          setForm((prev) => ({
-            ...prev,
-            pinCode: value,
-            state: result.data!.state,
-            stateCode: matchingState.stateCode,
-          }));
-        } else {
-          setForm((prev) => ({ ...prev, pinCode: value }));
-        }
-      }
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.type) {
       addToast("Name and type are required", "error");
-      return;
-    }
-    if (pincodeError) {
-      addToast("Please enter a valid PIN code", "error");
       return;
     }
     setShowConfirm(true);
@@ -489,15 +485,21 @@ function CreateAgencyModal({
           onClose();
         } else {
           addToast(response.message || "Agency created but response shape was unexpected", "error");
+          setLoading(false);
+          return;
         }
       } else {
         addToast(response?.message || "Failed to create agency", "error");
+        setLoading(false);
+        return;
       }
-    } catch {
-      addToast("Failed to create agency", "error");
-    } finally {
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to create agency";
+      addToast(errorMsg, "error");
       setLoading(false);
+      return;
     }
+    setLoading(false);
   };
 
   return (
@@ -637,15 +639,8 @@ function CreateAgencyModal({
               <Input
                 id="pinCode"
                 value={form.pinCode || ""}
-                onChange={(e) => handlePincodeChange(e.target.value)}
-                className={pincodeError ? "border-red-500" : ""}
+                onChange={(e) => setForm({ ...form, pinCode: e.target.value })}
               />
-              {isValidatingPincode && (
-                <p className="text-xs text-gray-500">Validating...</p>
-              )}
-              {pincodeError && (
-                <p className="text-xs text-red-500">{pincodeError}</p>
-              )}
             </div>
           </div>
 
@@ -697,20 +692,12 @@ function EditAgencyModal({
   const { addToast } = useToast();
   const [loading, setLoading] = React.useState(false);
   const [showConfirm, setShowConfirm] = React.useState(false);
-  const [pincodeError, setPincodeError] = React.useState<string | null>(null);
-  const [isValidatingPincode, setIsValidatingPincode] = React.useState(false);
   const [states, setStates] = React.useState<{ name: string; isoCode: string; stateCode: string }[]>([]);
   const [form, setForm] = React.useState<UpdateAgencyPayload>({});
 
   React.useEffect(() => {
     fetchStates();
   }, []);
-
-  React.useEffect(() => {
-    if (open) {
-      setPincodeError(null);
-    }
-  }, [open]);
 
   React.useEffect(() => {
     if (agency) {
@@ -749,43 +736,10 @@ function EditAgencyModal({
     }
   };
 
-  const handlePincodeChange = async (value: string) => {
-    setForm({ ...form, pinCode: value });
-    setPincodeError(null);
-
-    if (value.length === 6) {
-      setIsValidatingPincode(true);
-      const result = await validateIndianPincode(value);
-      setIsValidatingPincode(false);
-
-      if (!result.valid) {
-        setPincodeError(result.message || "Invalid PIN code");
-      } else if (result.data && !form.state) {
-        const matchingState = states.find(
-          (s) => s.name.toLowerCase() === result.data!.state.toLowerCase()
-        );
-        if (matchingState) {
-          setForm((prev) => ({
-            ...prev,
-            pinCode: value,
-            state: result.data!.state,
-            stateCode: matchingState.stateCode,
-          }));
-        } else {
-          setForm((prev) => ({ ...prev, pinCode: value }));
-        }
-      }
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.type) {
       addToast("Name and type are required", "error");
-      return;
-    }
-    if (pincodeError) {
-      addToast("Please enter a valid PIN code", "error");
       return;
     }
     setShowConfirm(true);
@@ -805,15 +759,21 @@ function EditAgencyModal({
           onClose();
         } else {
           addToast(response.message || "Agency updated but response shape was unexpected", "error");
+          setLoading(false);
+          return;
         }
       } else {
         addToast(response?.message || "Failed to update agency", "error");
+        setLoading(false);
+        return;
       }
-    } catch {
-      addToast("Failed to update agency", "error");
-    } finally {
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to update agency";
+      addToast(errorMsg, "error");
       setLoading(false);
+      return;
     }
+    setLoading(false);
   };
 
   return (
@@ -953,15 +913,8 @@ function EditAgencyModal({
               <Input
                 id="edit-pinCode"
                 value={form.pinCode || ""}
-                onChange={(e) => handlePincodeChange(e.target.value)}
-                className={pincodeError ? "border-red-500" : ""}
+                onChange={(e) => setForm({ ...form, pinCode: e.target.value })}
               />
-              {isValidatingPincode && (
-                <p className="text-xs text-gray-500">Validating...</p>
-              )}
-              {pincodeError && (
-                <p className="text-xs text-red-500">{pincodeError}</p>
-              )}
             </div>
           </div>
 

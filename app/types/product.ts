@@ -26,8 +26,16 @@ export interface Product {
   };
 }
 
+export interface PaginationMeta {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export interface ProductsListResponse {
   products: Product[];
+  pagination?: PaginationMeta;
 }
 
 export interface ProductResponse {

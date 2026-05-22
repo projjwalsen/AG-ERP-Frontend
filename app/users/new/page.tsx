@@ -85,8 +85,9 @@ export default function CreateUserPage() {
         ? response.data
         : response.data?.branches ?? [];
       setBranches(branchesData);
-    } catch {
-      addToast("Failed to load branches", "error");
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to load branches";
+      addToast(errorMsg, "error");
     } finally {
       setLoadingBranches(false);
     }

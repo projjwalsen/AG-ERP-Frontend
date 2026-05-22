@@ -90,12 +90,16 @@ export default function UsersListPage() {
         setUserToReset(null);
       } else {
         addToast(response.message || "Failed to reset password", "error");
+        setResetLoading(false);
+        return;
       }
-    } catch {
-      addToast("Failed to reset password", "error");
-    } finally {
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to reset password";
+      addToast(errorMsg, "error");
       setResetLoading(false);
+      return;
     }
+    setResetLoading(false);
   };
 
   const columns: ColumnDef<User>[] = [

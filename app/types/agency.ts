@@ -30,8 +30,16 @@ export interface Agency {
   updatedAt?: string;
 }
 
+export interface PaginationMeta {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export interface AgenciesListResponse {
   agencies: Agency[];
+  pagination?: PaginationMeta;
 }
 
 export interface AgencyResponse {
