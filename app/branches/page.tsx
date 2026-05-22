@@ -32,7 +32,6 @@ import { hasModulePermission } from "@/lib/usePermissions";
 import { Branch } from "@/app/types/branch";
 import { formatDate } from "@/lib/utils";
 import { AlertTriangle } from "lucide-react";
-import { validateIndianPincode } from "@/lib/pincode";
 
 export default function BranchesPage() {
   return (
@@ -57,6 +56,8 @@ function BranchesTab() {
   const [loading, setLoading] = React.useState(true);
   const [branches, setBranches] = React.useState<Branch[]>([]);
   const [searchTerm, setSearchTerm] = React.useState("");
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pagination, setPagination] = React.useState<{ total: number; totalPages: number; page: number; limit: number } | null>(null);
   const [createModalOpen, setCreateModalOpen] = React.useState(false);
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [viewModalOpen, setViewModalOpen] = React.useState(false);
@@ -68,25 +69,39 @@ function BranchesTab() {
 
   React.useEffect(() => {
     if (canView) {
-      fetchBranches();
+      fetchBranches(currentPage, searchTerm);
     }
-  }, [canView]);
+  }, [canView, currentPage]);
 
-  const fetchBranches = async () => {
+  React.useEffect(() => {
+    setCurrentPage(1);
+    if (canView) {
+      fetchBranches(1, searchTerm);
+    }
+  }, [searchTerm]);
+
+  const fetchBranches = async (page: number = 1, search?: string) => {
     setLoading(true);
     try {
-      const response = await branchApi.getAll();
+      const response = await branchApi.getAll({ page, limit: 10, search });
       // Handle both array response and object with branches property
       const branchesData = Array.isArray(response.data)
         ? response.data
         : response.data?.branches ?? [];
       setBranches(branchesData);
-    } catch {
-      addToast("Failed to load branches", "error");
+      if (response.data && typeof response.data === "object" && "pagination" in response.data) {
+        setPagination((response.data as any).pagination);
+      }
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to load branches";
+      addToast(errorMsg, "error");
     } finally {
       setLoading(false);
     }
   };
+
+  const totalPages = pagination?.totalPages || 1;
+  const totalEntries = pagination?.total || 0;
 
   const filteredBranches = React.useMemo(() => {
     return branches.filter((branch) => {
@@ -156,12 +171,13 @@ function BranchesTab() {
       const response = await branchApi.updateStatus(branch.id, newStatus);
       if (response.success) {
         addToast(`Branch ${newStatus ? "activated" : "deactivated"} successfully`, "success");
-        fetchBranches();
+        fetchBranches(currentPage, searchTerm);
       } else {
         addToast(response.message || "Failed to update status", "error");
       }
-    } catch {
-      addToast("Failed to update status", "error");
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to update status";
+      addToast(errorMsg, "error");
     }
   };
 
@@ -289,6 +305,35 @@ function BranchesTab() {
                 </tbody>
               </table>
             </div>
+            {/* Pagination */}
+            {pagination && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+                <p className="text-sm text-gray-500">
+                  Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} entries
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={pagination.page <= 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-gray-600">
+                    Page {pagination.page} of {pagination.totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(pagination.totalPages, p + 1))}
+                    disabled={pagination.page >= pagination.totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -327,7 +372,7 @@ function BranchesTab() {
           open={viewModalOpen}
           onClose={() => setViewModalOpen(false)}
           branch={selectedBranch}
-          onToggleStatus={fetchBranches}
+          onToggleStatus={() => fetchBranches(currentPage, searchTerm)}
         />
       )}
     </div>
@@ -347,8 +392,6 @@ function CreateBranchModal({
   const { addToast } = useToast();
   const [loading, setLoading] = React.useState(false);
   const [showConfirm, setShowConfirm] = React.useState(false);
-  const [pincodeError, setPincodeError] = React.useState<string | null>(null);
-  const [isValidatingPincode, setIsValidatingPincode] = React.useState(false);
   const [states, setStates] = React.useState<{ name: string; isoCode: string; stateCode: string }[]>([]);
   const [form, setForm] = React.useState<CreateBranchPayload>({
     name: "",
@@ -360,6 +403,8 @@ function CreateBranchModal({
     city: "",
     state: "",
     pinCode: "",
+    phone: "",
+    email: "",
   });
 
   React.useEffect(() => {
@@ -378,8 +423,9 @@ function CreateBranchModal({
         city: "",
         state: "",
         pinCode: "",
+        phone: "",
+        email: "",
       });
-      setPincodeError(null);
     }
   }, [open]);
 
@@ -409,46 +455,10 @@ function CreateBranchModal({
     setForm({ ...form, name, code: normalizeCode(name) });
   };
 
-  const handlePincodeChange = async (value: string) => {
-    setForm({ ...form, pinCode: value });
-    setPincodeError(null);
-
-    if (value.length === 6) {
-      setIsValidatingPincode(true);
-      const result = await validateIndianPincode(value);
-      setIsValidatingPincode(false);
-
-      if (!result.valid) {
-        setPincodeError(result.message || "Invalid PIN code");
-      } else if (result.data) {
-        // Auto-fill state from pincode if not already set
-        if (!form.state) {
-          const matchingState = states.find(
-            (s) => s.name.toLowerCase() === result.data!.state.toLowerCase()
-          );
-          if (matchingState) {
-            setForm((prev) => ({
-              ...prev,
-              pinCode: value,
-              state: result.data!.state,
-              stateCode: matchingState.stateCode,
-            }));
-          } else {
-            setForm((prev) => ({ ...prev, pinCode: value }));
-          }
-        }
-      }
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.code || !form.gstin || !form.stateCode || !form.addressLine1 || !form.city || !form.state || !form.pinCode) {
       addToast("Please fill all required fields", "error");
-      return;
-    }
-    if (pincodeError) {
-      addToast("Please enter a valid PIN code", "error");
       return;
     }
     setShowConfirm(true);
@@ -481,12 +491,14 @@ function CreateBranchModal({
       } else {
         addToast(response?.message || "Failed to create branch", "error");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Create branch error:", err);
-      addToast("Failed to create branch", "error");
-    } finally {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to create branch";
+      addToast(errorMsg, "error");
       setLoading(false);
+      return;
     }
+    setLoading(false);
   };
 
   return (
@@ -566,15 +578,31 @@ function CreateBranchModal({
               <Input
                 id="pinCode"
                 value={form.pinCode}
-                onChange={(e) => handlePincodeChange(e.target.value)}
-                className={pincodeError ? "border-red-500" : ""}
+                onChange={(e) => setForm({ ...form, pinCode: e.target.value })}
+                required
               />
-              {isValidatingPincode && (
-                <p className="text-xs text-gray-500">Validating...</p>
-              )}
-              {pincodeError && (
-                <p className="text-xs text-red-500">{pincodeError}</p>
-              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone Number</Label>
+              <Input
+                id="phone"
+                value={form.phone || ""}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                placeholder="+91 9876543210"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={form.email || ""}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="branch@example.com"
+              />
             </div>
           </div>
 
@@ -626,20 +654,12 @@ function EditBranchModal({
   const { addToast } = useToast();
   const [loading, setLoading] = React.useState(false);
   const [showConfirm, setShowConfirm] = React.useState(false);
-  const [pincodeError, setPincodeError] = React.useState<string | null>(null);
-  const [isValidatingPincode, setIsValidatingPincode] = React.useState(false);
   const [states, setStates] = React.useState<{ name: string; isoCode: string; stateCode: string }[]>([]);
   const [form, setForm] = React.useState<UpdateBranchPayload>({});
 
   React.useEffect(() => {
     fetchStates();
   }, []);
-
-  React.useEffect(() => {
-    if (open) {
-      setPincodeError(null);
-    }
-  }, [open]);
 
   React.useEffect(() => {
     if (branch) {
@@ -653,6 +673,8 @@ function EditBranchModal({
         city: branch.city,
         state: branch.state,
         pinCode: branch.pinCode,
+        phone: branch.phone || "",
+        email: branch.email || "",
       });
     }
   }, [branch, open]);
@@ -678,43 +700,10 @@ function EditBranchModal({
   const normalizeCode = (value: string) =>
     value.toUpperCase().replace(/\s+/g, "_").replace(/^[\s_]+|[\s_]+$/g, "");
 
-  const handlePincodeChange = async (value: string) => {
-    setForm({ ...form, pinCode: value });
-    setPincodeError(null);
-
-    if (value.length === 6) {
-      setIsValidatingPincode(true);
-      const result = await validateIndianPincode(value);
-      setIsValidatingPincode(false);
-
-      if (!result.valid) {
-        setPincodeError(result.message || "Invalid PIN code");
-      } else if (result.data && !form.state) {
-        const matchingState = states.find(
-          (s) => s.name.toLowerCase() === result.data!.state.toLowerCase()
-        );
-        if (matchingState) {
-          setForm((prev) => ({
-            ...prev,
-            pinCode: value,
-            state: result.data!.state,
-            stateCode: matchingState.stateCode,
-          }));
-        } else {
-          setForm((prev) => ({ ...prev, pinCode: value }));
-        }
-      }
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.code) {
       addToast("Name and code are required", "error");
-      return;
-    }
-    if (pincodeError) {
-      addToast("Please enter a valid PIN code", "error");
       return;
     }
     setShowConfirm(true);
@@ -730,12 +719,16 @@ function EditBranchModal({
         onSuccess(response.data.branch);
       } else {
         addToast(response.message || "Failed to update branch", "error");
+        setLoading(false);
+        return;
       }
-    } catch {
-      addToast("Failed to update branch", "error");
-    } finally {
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to update branch";
+      addToast(errorMsg, "error");
       setLoading(false);
+      return;
     }
+    setLoading(false);
   };
 
   return (
@@ -815,15 +808,31 @@ function EditBranchModal({
               <Input
                 id="edit-pinCode"
                 value={form.pinCode || ""}
-                onChange={(e) => handlePincodeChange(e.target.value)}
-                className={pincodeError ? "border-red-500" : ""}
+                onChange={(e) => setForm({ ...form, pinCode: e.target.value })}
+                required
               />
-              {isValidatingPincode && (
-                <p className="text-xs text-gray-500">Validating...</p>
-              )}
-              {pincodeError && (
-                <p className="text-xs text-red-500">{pincodeError}</p>
-              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-phone">Phone Number</Label>
+              <Input
+                id="edit-phone"
+                value={form.phone || ""}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                placeholder="+91 9876543210"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Email</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={form.email || ""}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="branch@example.com"
+              />
             </div>
           </div>
 
@@ -887,8 +896,9 @@ function ViewBranchModal({
       } else {
         addToast(response.message || "Failed to update status", "error");
       }
-    } catch {
-      addToast("Failed to update status", "error");
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to update status";
+      addToast(errorMsg, "error");
     } finally {
       setLoading(false);
     }
@@ -940,6 +950,16 @@ function ViewBranchModal({
               {branch.city}, {branch.state} - {branch.pinCode}
             </p>
           </div>
+
+          {(branch.phone || branch.email) && (
+            <div>
+              <p className="text-xs text-gray-500 uppercase">Contact Information</p>
+              <div className="space-y-1 text-sm text-gray-700">
+                {branch.phone && <p>Phone: {branch.phone}</p>}
+                {branch.email && <p>Email: {branch.email}</p>}
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
             <div className="flex items-center gap-2">

@@ -3,6 +3,8 @@ import { apiFetch } from "./api";
 import { Agency, AgenciesListResponse, AgencyResponse } from "../types/agency";
 
 export interface GetAgenciesParams {
+  page?: number;
+  limit?: number;
   search?: string;
   type?: "VENDOR" | "CLIENT" | "BOTH";
   branch?: string;
@@ -43,6 +45,8 @@ export interface UpdateAgencyPayload {
 export const agencyApi = {
   async getAll(params?: GetAgenciesParams): Promise<{ success: boolean; message: string; data?: AgenciesListResponse }> {
     const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append("page", String(params.page));
+    if (params?.limit) queryParams.append("limit", String(params.limit));
     if (params?.search) queryParams.append("search", params.search);
     if (params?.type) queryParams.append("type", params.type);
     if (params?.branch) queryParams.append("branch", params.branch);

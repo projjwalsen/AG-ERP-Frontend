@@ -3,6 +3,8 @@ import { apiFetch } from "./api";
 import { Product, ProductsListResponse, ProductResponse } from "../types/product";
 
 export interface GetProductsParams {
+  page?: number;
+  limit?: number;
   search?: string;
   category?: string;
 }
@@ -38,6 +40,8 @@ export interface UpdateProductPayload {
 export const productApi = {
   async getAll(params?: GetProductsParams): Promise<{ success: boolean; message: string; data?: ProductsListResponse }> {
     const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append("page", String(params.page));
+    if (params?.limit) queryParams.append("limit", String(params.limit));
     if (params?.search) queryParams.append("search", params.search);
     if (params?.category) queryParams.append("category", params.category);
 
