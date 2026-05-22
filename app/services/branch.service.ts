@@ -60,7 +60,7 @@ export interface CreateBranchPayload {
   city: string;
   state: string;
   pinCode: string;
-  phone?: string;
+  phnNumber?: string;
   email?: string;
 }
 
@@ -74,6 +74,6 @@ export interface UpdateBranchPayload {
   city?: string;
   state?: string;
   pinCode?: string;
-  phone?: string;
+  phnNumber?: string;
   email?: string;
 }

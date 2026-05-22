@@ -132,30 +132,18 @@ function BranchesTab() {
     setViewModalOpen(true);
   };
 
-  const handleCreateSuccess = (branch: Branch) => {
+  const handleCreateSuccess = (_branch: Branch) => {
     // Close modal
     setCreateModalOpen(false);
-    // Force refresh the list
-    fetchBranches(currentPage, searchTerm);
-    // Notify other pages to refresh branch data
-    try {
-      window.dispatchEvent(new CustomEvent("branches:changed", { detail: branch }));
-    } catch (e) {
-      // ignore for SSR environments
-    }
+    // Force refresh the whole page to get latest data
+    window.location.reload();
   };
 
-  const handleEditSuccess = (branch: Branch) => {
+  const handleEditSuccess = (_branch: Branch) => {
     // Close modal
     setEditModalOpen(false);
-    // Force refresh the list
-    fetchBranches(currentPage, searchTerm);
-    // Notify other pages to refresh branch data
-    try {
-      window.dispatchEvent(new CustomEvent("branches:changed", { detail: branch }));
-    } catch (e) {
-      // ignore for SSR environments
-    }
+    // Force refresh the whole page to get latest data
+    window.location.reload();
   };
 
   const handleToggleStatus = async (branch: Branch) => {
@@ -224,6 +212,7 @@ function BranchesTab() {
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Branch</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Code</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Location</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Phone</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">GSTIN</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Created</th>
@@ -254,6 +243,9 @@ function BranchesTab() {
                           <MapPin className="h-3.5 w-3.5 text-gray-400" />
                           {branch.city}, {branch.state}
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-sm text-gray-600">{branch.phnNumber || "-"}</span>
                       </td>
                       <td className="px-4 py-3">
                         <span className="font-mono text-sm text-gray-600">{branch.gstin}</span>
@@ -396,7 +388,7 @@ function CreateBranchModal({
     city: "",
     state: "",
     pinCode: "",
-    phone: "",
+    phnNumber: "",
     email: "",
   });
 
@@ -416,7 +408,7 @@ function CreateBranchModal({
         city: "",
         state: "",
         pinCode: "",
-        phone: "",
+        phnNumber: "",
         email: "",
       });
     }
@@ -466,25 +458,7 @@ function CreateBranchModal({
         const possible = response.data ?? (response as any).branch ?? (response as any).data?.branch;
         const newBranch = (possible && (possible.branch ?? possible)) || null;
         if (newBranch && typeof newBranch === "object") {
-          // Show success toast
-          addToast("Branch created successfully", "success");
-          setForm({
-            name: "",
-            code: "",
-            gstin: "",
-            stateCode: "",
-            addressLine1: "",
-            addressLine2: "",
-            city: "",
-            state: "",
-            pinCode: "",
-          });
-          // Wait a moment for user to see the toast, then close modal and refresh
-          setTimeout(() => {
-            setLoading(false);
-            onClose();
-            onSuccess(newBranch as Branch);
-          }, 800);
+          onSuccess(newBranch as Branch);
         } else {
           addToast(response.message || "Branch created but response shape was unexpected", "error");
           setLoading(false);
@@ -503,7 +477,7 @@ function CreateBranchModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Building className="h-5 w-5 text-green-600" />
@@ -589,8 +563,8 @@ function CreateBranchModal({
               <Label htmlFor="phone">Phone Number</Label>
               <Input
                 id="phone"
-                value={form.phone || ""}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                value={form.phnNumber || ""}
+                onChange={(e) => setForm({ ...form, phnNumber: e.target.value })}
                 placeholder="+91 9876543210"
               />
             </div>
@@ -673,7 +647,7 @@ function EditBranchModal({
         city: branch.city || "",
         state: branch.state || "",
         pinCode: branch.pinCode || "",
-        phone: branch.phone || "",
+        phnNumber: branch.phnNumber || "",
         email: branch.email || "",
       });
     }
@@ -715,14 +689,7 @@ function EditBranchModal({
     try {
       const response = await branchApi.update(branch.id, form);
       if (response.success && response.data?.branch) {
-        // Show success toast in the modal
-        addToast("Branch updated successfully", "success");
-        // Wait a moment for user to see the toast, then close modal and refresh
-        setTimeout(() => {
-          setLoading(false);
-          onClose();
-          onSuccess(response.data!.branch);
-        }, 800);
+        onSuccess(response.data!.branch);
       } else {
         addToast(response.message || "Failed to update branch", "error");
         setLoading(false);
@@ -736,7 +703,7 @@ function EditBranchModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Building className="h-5 w-5 text-green-600" />
@@ -822,8 +789,8 @@ function EditBranchModal({
               <Label htmlFor="edit-phone">Phone Number</Label>
               <Input
                 id="edit-phone"
-                value={form.phone || ""}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                value={form.phnNumber || ""}
+                onChange={(e) => setForm({ ...form, phnNumber: e.target.value })}
                 placeholder="+91 9876543210"
               />
             </div>
@@ -954,11 +921,11 @@ function ViewBranchModal({
             </p>
           </div>
 
-          {(branch.phone || branch.email) && (
+          {(branch.phnNumber || branch.email) && (
             <div>
               <p className="text-xs text-gray-500 uppercase">Contact Information</p>
               <div className="space-y-1 text-sm text-gray-700">
-                {branch.phone && <p>Phone: {branch.phone}</p>}
+                {branch.phnNumber && <p>Phone: {branch.phnNumber}</p>}
                 {branch.email && <p>Email: {branch.email}</p>}
               </div>
             </div>

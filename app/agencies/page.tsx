@@ -146,13 +146,11 @@ function AgenciesTab() {
   };
 
   const handleCreateSuccess = (agency: Agency) => {
-    addToast("Agency created successfully", "success");
     setCreateModalOpen(false);
     fetchAgencies(currentPage, searchTerm, selectedType);
   };
 
   const handleEditSuccess = (agency: Agency) => {
-    addToast("Agency updated successfully", "success");
     setEditModalOpen(false);
     fetchAgencies(currentPage, searchTerm, selectedType);
   };
@@ -482,12 +480,7 @@ function CreateAgencyModal({
         const possible = response.data ?? (response as any).agency ?? (response as any).data?.agency;
         const newAgency = (possible && (possible.agency ?? possible)) || null;
         if (newAgency && typeof newAgency === "object") {
-          // Show success toast and close modal after a short delay so user sees the toast
-          addToast("Agency created successfully", "success");
-          setTimeout(() => {
-            onSuccess(newAgency as Agency);
-            onClose();
-          }, 1500);
+          onSuccess(newAgency as Agency);
         } else {
           addToast(response.message || "Agency created but response shape was unexpected", "error");
           setLoading(false);
@@ -504,7 +497,6 @@ function CreateAgencyModal({
       setLoading(false);
       return;
     }
-    setLoading(false);
   };
 
   return (
@@ -598,7 +590,7 @@ function CreateAgencyModal({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="addressLine1">Address Line 1</Label>
+            <Label htmlFor="addressLine1">Address Line 1*</Label>
             <Input
               id="addressLine1"
               value={form.addressLine1 || ""}
@@ -759,12 +751,7 @@ function EditAgencyModal({
         const possible = response.data ?? (response as any).agency ?? (response as any).data?.agency;
         const updatedAgency = (possible && (possible.agency ?? possible)) || null;
         if (updatedAgency && typeof updatedAgency === "object") {
-          // Show success toast and close modal after a short delay so user sees the toast
-          addToast("Agency updated successfully", "success");
-          setTimeout(() => {
-            onSuccess(updatedAgency as Agency);
-            onClose();
-          }, 1500);
+          onSuccess(updatedAgency as Agency);
         } else {
           addToast(response.message || "Agency updated but response shape was unexpected", "error");
           setLoading(false);
@@ -781,7 +768,6 @@ function EditAgencyModal({
       setLoading(false);
       return;
     }
-    setLoading(false);
   };
 
   return (
@@ -875,7 +861,7 @@ function EditAgencyModal({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="edit-addressLine1">Address Line 1</Label>
+            <Label htmlFor="edit-addressLine1">Address Line 1*</Label>
             <Input
               id="edit-addressLine1"
               value={form.addressLine1 || ""}
