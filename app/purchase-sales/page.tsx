@@ -28,12 +28,14 @@ import { agencyApi } from "@/app/services/agency.service";
 import { productApi } from "@/app/services/product.service";
 import { branchApi } from "@/app/services/branch.service";
 import { inventoryApi } from "@/app/services/inventory.service";
+import { purchaseApi } from "@/app/services/purchase.service";
+import { salesApi } from "@/app/services/sales.service";
 import { Purchase } from "@/app/types/purchase";
 import { Sales } from "@/app/types/sales";
 import { Agency } from "@/app/types/agency";
 import { Product } from "@/app/types/product";
 import { Branch } from "@/app/types/branch";
-import { formatDate, formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { hasModulePermission } from "@/lib/usePermissions";
 
 const statusColors: Record<string, { bg: string; text: string }> = {
@@ -117,6 +119,7 @@ function PurchaseTab() {
     open: false,
     purchase: null,
   });
+  const [viewLoading, setViewLoading] = React.useState(false);
   const [remarks, setRemarks] = React.useState("");
   const [rejectionRemarks, setRejectionRemarks] = React.useState("");
   const [actionLoading, setActionLoading] = React.useState(false);
@@ -135,7 +138,7 @@ function PurchaseTab() {
   });
 
   React.useEffect(() => {
-    fetchPurchases();
+    fetchPurchases(currentPage, statusFilter);
     fetchBranches();
   }, [currentPage, statusFilter]);
 
@@ -316,6 +319,25 @@ function PurchaseTab() {
     }
   };
 
+  const handleViewPurchase = async (purchase: Purchase) => {
+    setViewLoading(true);
+    setViewModal({ open: true, purchase: null }); // Clear previous
+    try {
+      const response = await purchaseApi.getById(purchase.id);
+      if (response.success && response.data) {
+        setViewModal({ open: true, purchase: response.data });
+      } else {
+        addToast(response.message || "Failed to fetch purchase details", "error");
+        setViewModal({ open: false, purchase: null });
+      }
+    } catch (err: any) {
+      addToast(err || "Failed to fetch purchase details", "error");
+      setViewModal({ open: false, purchase: null });
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
   const filteredPurchases = React.useMemo(() => {
     if (!searchTerm) return purchases;
     const term = searchTerm.toLowerCase();
@@ -365,7 +387,7 @@ function PurchaseTab() {
           <option value="APPROVED">Approved</option>
           <option value="REJECTED">Rejected</option>
         </select>
-        <Button variant="outline" size="sm" onClick={() => fetchPurchases()}>
+        <Button variant="outline" size="sm" onClick={() => fetchPurchases(currentPage, statusFilter)}>
           <RefreshCw className="h-4 w-4" />
         </Button>
       </div>
@@ -394,7 +416,7 @@ function PurchaseTab() {
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Qty</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Price</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Date</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Created At</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
@@ -430,7 +452,7 @@ function PurchaseTab() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">
-                        {formatDate(purchase.createdAt)}
+                        {formatDateTime(purchase.createdAt)}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
@@ -459,7 +481,7 @@ function PurchaseTab() {
                               size="sm"
                               variant="ghost"
                               className="text-gray-600 hover:text-gray-700 hover:bg-gray-100"
-                              onClick={() => setViewModal({ open: true, purchase })}
+                              onClick={() => handleViewPurchase(purchase)}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -759,7 +781,11 @@ function PurchaseTab() {
             </DialogTitle>
           </DialogHeader>
 
-          {viewModal.purchase && (
+          {viewLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+            </div>
+          ) : viewModal.purchase ? (
             <div className="space-y-6">
               {/* Invoice Info */}
               <div className="bg-gray-50 rounded-lg p-4">
@@ -775,15 +801,67 @@ function PurchaseTab() {
                     </span>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 uppercase">Created Date</p>
-                    <p className="font-medium">{formatDate(viewModal.purchase.createdAt)}</p>
+                    <p className="text-xs text-gray-500 uppercase">Created At</p>
+                    <p className="font-medium">{formatDateTime(viewModal.purchase.createdAt)}</p>
                   </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Updated At</p>
+                    <p className="font-medium">{formatDateTime(viewModal.purchase.updatedAt!)}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                   <div>
                     <p className="text-xs text-gray-500 uppercase">Branch</p>
                     <p className="font-medium">{viewModal.purchase.branch?.name || "-"}</p>
+                    <p className="text-xs text-gray-400">{viewModal.purchase.branch?.code || "-"}</p>
                   </div>
+                  {viewModal.purchase.approvedAt && (
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">Approved At</p>
+                      <p className="font-medium">{formatDateTime(viewModal.purchase.approvedAt!)}</p>
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* Branch Details */}
+              {viewModal.purchase.branch && (
+                <div className="border rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Branch Details</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">Name</p>
+                      <p className="font-medium">{viewModal.purchase.branch.name || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">Code</p>
+                      <p className="font-mono text-sm">{viewModal.purchase.branch.code || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">GSTIN</p>
+                      <p className="font-mono text-sm">{viewModal.purchase.branch.gstin || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">State</p>
+                      <p className="font-medium">{viewModal.purchase.branch.state || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">City</p>
+                      <p className="font-medium">{viewModal.purchase.branch.city || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">Phone</p>
+                      <p className="font-medium">{viewModal.purchase.branch.phnNumber || "-"}</p>
+                    </div>
+                    <div className="col-span-2 md:col-span-3">
+                      <p className="text-xs text-gray-500 uppercase">Address</p>
+                      <p className="text-sm">
+                        {[viewModal.purchase.branch.addressLine1, viewModal.purchase.branch.addressLine2].filter(Boolean).join(", ") || "-"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Agency Details */}
               <div className="border rounded-lg p-4">
@@ -876,6 +954,9 @@ function PurchaseTab() {
                   <h4 className="text-xs text-gray-500 uppercase mb-2">Created By</h4>
                   <p className="font-medium">{viewModal.purchase.createdBy?.name || "-"}</p>
                   <p className="text-sm text-gray-500">{viewModal.purchase.createdBy?.email || "-"}</p>
+                  {viewModal.purchase.createdAt && (
+                    <p className="text-xs text-gray-400 mt-1">{formatDateTime(viewModal.purchase.createdAt!)}</p>
+                  )}
                 </div>
                 <div className="border rounded-lg p-4">
                   <h4 className="text-xs text-gray-500 uppercase mb-2">Approved By</h4>
@@ -884,7 +965,7 @@ function PurchaseTab() {
                       <p className="font-medium">{viewModal.purchase.approvedBy.name || "-"}</p>
                       <p className="text-sm text-gray-500">{viewModal.purchase.approvedBy.email || "-"}</p>
                       {viewModal.purchase.approvedAt && (
-                        <p className="text-xs text-gray-400 mt-1">on {formatDate(viewModal.purchase.approvedAt)}</p>
+                        <p className="text-xs text-gray-400 mt-1">{formatDateTime(viewModal.purchase.approvedAt!)}</p>
                       )}
                     </>
                   ) : (
@@ -901,7 +982,7 @@ function PurchaseTab() {
                 </div>
               )}
             </div>
-          )}
+          ) : null}
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setViewModal({ open: false, purchase: null })}>Close</Button>
@@ -947,6 +1028,7 @@ function SalesTab() {
     open: false,
     sale: null,
   });
+  const [viewLoading, setViewLoading] = React.useState(false);
   const [remarks, setRemarks] = React.useState("");
   const [rejectionRemarks, setRejectionRemarks] = React.useState("");
   const [actionLoading, setActionLoading] = React.useState(false);
@@ -963,7 +1045,7 @@ function SalesTab() {
   });
 
   React.useEffect(() => {
-    fetchSales();
+    fetchSales(currentPage, statusFilter);
     fetchBranches();
   }, [currentPage, statusFilter]);
 
@@ -1189,6 +1271,25 @@ function SalesTab() {
     }
   };
 
+  const handleViewSale = async (sale: Sales) => {
+    setViewLoading(true);
+    setViewModal({ open: true, sale: null }); // Clear previous
+    try {
+      const response = await salesApi.getById(sale.id);
+      if (response.success && response.data) {
+        setViewModal({ open: true, sale: response.data });
+      } else {
+        addToast(response.message || "Failed to fetch sale details", "error");
+        setViewModal({ open: false, sale: null });
+      }
+    } catch (err: any) {
+      addToast(err || "Failed to fetch sale details", "error");
+      setViewModal({ open: false, sale: null });
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
   const filteredSales = React.useMemo(() => {
     if (!searchTerm) return sales;
     const term = searchTerm.toLowerCase();
@@ -1238,7 +1339,7 @@ function SalesTab() {
           <option value="APPROVED">Approved</option>
           <option value="REJECTED">Rejected</option>
         </select>
-        <Button variant="outline" size="sm" onClick={() => fetchSales()}>
+        <Button variant="outline" size="sm" onClick={() => fetchSales(currentPage, statusFilter)}>
           <RefreshCw className="h-4 w-4" />
         </Button>
       </div>
@@ -1266,7 +1367,7 @@ function SalesTab() {
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Batch</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Qty</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Date</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Created At</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
@@ -1299,7 +1400,7 @@ function SalesTab() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">
-                        {formatDate(sale.createdAt)}
+                        {formatDateTime(sale.createdAt)}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
@@ -1328,7 +1429,7 @@ function SalesTab() {
                               size="sm"
                               variant="ghost"
                               className="text-gray-600 hover:text-gray-700 hover:bg-gray-100"
-                              onClick={() => setViewModal({ open: true, sale })}
+                              onClick={() => handleViewSale(sale)}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -1615,7 +1716,11 @@ function SalesTab() {
             </DialogTitle>
           </DialogHeader>
 
-          {viewModal.sale && (
+          {viewLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+            </div>
+          ) : viewModal.sale ? (
             <div className="space-y-6">
               {/* Invoice Info */}
               <div className="bg-gray-50 rounded-lg p-4">
@@ -1631,15 +1736,67 @@ function SalesTab() {
                     </span>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 uppercase">Created Date</p>
-                    <p className="font-medium">{formatDate(viewModal.sale.createdAt)}</p>
+                    <p className="text-xs text-gray-500 uppercase">Created At</p>
+                    <p className="font-medium">{formatDateTime(viewModal.sale.createdAt!)}</p>
                   </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Updated At</p>
+                    <p className="font-medium">{formatDateTime(viewModal.sale.updatedAt!)}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                   <div>
                     <p className="text-xs text-gray-500 uppercase">Branch</p>
                     <p className="font-medium">{viewModal.sale.branch?.name || "-"}</p>
+                    <p className="text-xs text-gray-400">{viewModal.sale.branch?.code || "-"}</p>
                   </div>
+                  {viewModal.sale.approvedAt && (
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">Approved At</p>
+                      <p className="font-medium">{formatDateTime(viewModal.sale.approvedAt!)}</p>
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* Branch Details */}
+              {viewModal.sale.branch && (
+                <div className="border rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Branch Details</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">Name</p>
+                      <p className="font-medium">{viewModal.sale.branch.name || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">Code</p>
+                      <p className="font-mono text-sm">{viewModal.sale.branch.code || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">GSTIN</p>
+                      <p className="font-mono text-sm">{viewModal.sale.branch.gstin || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">State</p>
+                      <p className="font-medium">{viewModal.sale.branch.state || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">City</p>
+                      <p className="font-medium">{viewModal.sale.branch.city || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">Phone</p>
+                      <p className="font-medium">{viewModal.sale.branch.phnNumber || "-"}</p>
+                    </div>
+                    <div className="col-span-2 md:col-span-3">
+                      <p className="text-xs text-gray-500 uppercase">Address</p>
+                      <p className="text-sm">
+                        {[viewModal.sale.branch.addressLine1, viewModal.sale.branch.addressLine2].filter(Boolean).join(", ") || "-"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Agency Details */}
               <div className="border rounded-lg p-4">
@@ -1732,6 +1889,9 @@ function SalesTab() {
                   <h4 className="text-xs text-gray-500 uppercase mb-2">Created By</h4>
                   <p className="font-medium">{viewModal.sale.createdBy?.name || "-"}</p>
                   <p className="text-sm text-gray-500">{viewModal.sale.createdBy?.email || "-"}</p>
+                  {viewModal.sale.createdAt && (
+                    <p className="text-xs text-gray-400 mt-1">{formatDateTime(viewModal.sale.createdAt!)}</p>
+                  )}
                 </div>
                 <div className="border rounded-lg p-4">
                   <h4 className="text-xs text-gray-500 uppercase mb-2">Approved By</h4>
@@ -1740,7 +1900,7 @@ function SalesTab() {
                       <p className="font-medium">{viewModal.sale.approvedBy.name || "-"}</p>
                       <p className="text-sm text-gray-500">{viewModal.sale.approvedBy.email || "-"}</p>
                       {viewModal.sale.approvedAt && (
-                        <p className="text-xs text-gray-400 mt-1">on {formatDate(viewModal.sale.approvedAt)}</p>
+                        <p className="text-xs text-gray-400 mt-1">{formatDateTime(viewModal.sale.approvedAt!)}</p>
                       )}
                     </>
                   ) : (
@@ -1757,7 +1917,7 @@ function SalesTab() {
                 </div>
               )}
             </div>
-          )}
+          ) : null}
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setViewModal({ open: false, sale: null })}>Close</Button>
