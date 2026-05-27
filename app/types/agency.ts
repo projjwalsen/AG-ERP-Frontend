@@ -1,4 +1,4 @@
-// Agency Types
+// Agency Types - matches backend API contract
 
 export interface AgencyBranch {
   branchId: string;
@@ -35,11 +35,15 @@ export interface PaginationMeta {
   page: number;
   limit: number;
   totalPages: number;
+  hasNextPage?: boolean;
+  hasPreviousPage?: boolean;
 }
 
+// Backend returns: { data: { agencies: Agency[], meta: PaginationMeta } }
 export interface AgenciesListResponse {
   agencies: Agency[];
-  pagination?: PaginationMeta;
+  meta?: PaginationMeta;
+  pagination?: PaginationMeta; // Alias for compatibility
 }
 
 export interface AgencyResponse {

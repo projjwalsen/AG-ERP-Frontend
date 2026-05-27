@@ -14,4 +14,5 @@ export { ScrollArea, ScrollBar } from "./scroll-area";
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "./tooltip";
 export { Skeleton } from "./skeleton";
 export { Separator } from "./separator";
-export { ToastProvider, useToast } from "./toast";
+export { ToastProvider, useToast, ToastContainer } from "./toast";
+export { Textarea } from "./textarea";

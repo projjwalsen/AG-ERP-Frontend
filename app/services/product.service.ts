@@ -1,6 +1,6 @@
 // Product API Service
 import { apiFetch } from "./api";
-import { Product, ProductsListResponse, ProductResponse } from "../types/product";
+import { Product, ProductsListResponse, ProductResponse, PaginationMeta } from "../types/product";
 
 export interface GetProductsParams {
   page?: number;
@@ -37,6 +37,13 @@ export interface UpdateProductPayload {
   sellPricePerUnit?: number;
 }
 
+// Raw API response types
+interface RawActiveProductsResponse {
+  success: boolean;
+  message: string;
+  data?: Product[] | { products: Product[] };
+}
+
 export const productApi = {
   async getAll(params?: GetProductsParams): Promise<{ success: boolean; message: string; data?: ProductsListResponse }> {
     const queryParams = new URLSearchParams();
@@ -47,11 +54,29 @@ export const productApi = {
 
     const query = queryParams.toString();
     const url = query ? `/api/products/all-list?${query}` : "/api/products/all-list";
-    return apiFetch<ProductsListResponse>(url);
+    return apiFetch<{ products: Product[]; meta: PaginationMeta }>(url).then((response) => ({
+      success: response.success,
+      message: response.message,
+      data: response.data ? {
+        products: response.data.products,
+        meta: response.data.meta,
+        pagination: response.data.meta,
+      } : undefined,
+    }));
   },
 
-  async getActive(): Promise<{ success: boolean; message: string; data?: ProductsListResponse }> {
-    return apiFetch<ProductsListResponse>("/api/products/active-list");
+  // Backend may return active products as either a direct array or wrapped object.
+  async getActive(): Promise<{ success: boolean; message: string; data?: { products: Product[] } }> {
+    const response: RawActiveProductsResponse = await apiFetch(`/api/products/active-list`);
+    const products = Array.isArray(response.data)
+      ? response.data
+      : response.data?.products ?? [];
+
+    return {
+      success: response.success,
+      message: response.message,
+      data: response.success ? { products } : undefined,
+    };
   },
 
   async getById(productId: string): Promise<{ success: boolean; message: string; data?: ProductResponse }> {

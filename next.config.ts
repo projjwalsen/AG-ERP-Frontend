@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "images.unsplash.com",
       },
+      {
+        protocol: "https",
+        hostname: "d1vxqtxg8u140a.cloudfront.net",
+      },
     ],
   },
   async rewrites() {

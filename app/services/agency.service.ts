@@ -1,6 +1,6 @@
 // Agency API Service
 import { apiFetch } from "./api";
-import { Agency, AgenciesListResponse, AgencyResponse } from "../types/agency";
+import { Agency, AgenciesListResponse, AgencyResponse, PaginationMeta } from "../types/agency";
 
 export interface GetAgenciesParams {
   page?: number;
@@ -53,7 +53,15 @@ export const agencyApi = {
 
     const query = queryParams.toString();
     const url = query ? `/api/agencies/all?${query}` : "/api/agencies/all";
-    return apiFetch<AgenciesListResponse>(url);
+    return apiFetch<{ agencies: Agency[]; meta: PaginationMeta }>(url).then((response) => ({
+      success: response.success,
+      message: response.message,
+      data: response.data ? {
+        agencies: response.data.agencies,
+        meta: response.data.meta,
+        pagination: response.data.meta, // Alias for compatibility
+      } : undefined,
+    }));
   },
 
   async getById(agencyId: string): Promise<{ success: boolean; message: string; data?: AgencyResponse }> {
