@@ -1,4 +1,4 @@
-// Product Types
+// Product Types - matches backend API contract
 
 export type ProductUnit = "KG" | "LTR";
 
@@ -31,11 +31,15 @@ export interface PaginationMeta {
   page: number;
   limit: number;
   totalPages: number;
+  hasNextPage?: boolean;
+  hasPreviousPage?: boolean;
 }
 
+// Backend returns: { data: { products: Product[], meta: PaginationMeta } }
 export interface ProductsListResponse {
   products: Product[];
-  pagination?: PaginationMeta;
+  meta?: PaginationMeta;
+  pagination?: PaginationMeta; // Alias for compatibility
 }
 
 export interface ProductResponse {

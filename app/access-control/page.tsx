@@ -161,13 +161,15 @@ function RolesAndPermissionsTab() {
     setViewRoleModalOpen(true);
   };
 
-  const handleRoleUpsertSuccess = (role: Role) => {
+  const handleRoleUpsertSuccess = async (role: Role) => {
     if (selectedRole) {
       setRoles((prev) => prev.map((r) => (r.id === role.id ? role : r)));
     } else {
       setRoles((prev) => [...prev, role]);
     }
     setUpsertModalOpen(false);
+    // Refresh to get latest data from server
+    await fetchData();
   };
 
   return (

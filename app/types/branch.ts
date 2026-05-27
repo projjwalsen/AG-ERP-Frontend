@@ -1,4 +1,4 @@
-// Branch Types
+// Branch Types - matches backend API contract
 
 export interface Branch {
   id: string;
@@ -24,11 +24,15 @@ export interface PaginationMeta {
   page: number;
   limit: number;
   totalPages: number;
+  hasNextPage?: boolean;
+  hasPreviousPage?: boolean;
 }
 
+// Backend returns: { data: { branches: Branch[], meta: PaginationMeta } }
 export interface BranchesListResponse {
   branches: Branch[];
-  pagination?: PaginationMeta;
+  meta?: PaginationMeta;
+  pagination?: PaginationMeta; // Alias for compatibility
 }
 
 export interface BranchResponse {

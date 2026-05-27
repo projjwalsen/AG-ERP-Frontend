@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, Building2, Briefcase, Package,
   ShoppingCart, FileText, History, Settings, ChevronLeft, Shield,
-  Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu, CreditCard, Receipt
+  Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu, CreditCard
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -189,9 +189,9 @@ const sidebarItems = [
   { title: "Access Control", href: "/access-control", icon: Shield, module: "ROLE" },
   { title: "Agency Management", href: "/agencies", icon: Briefcase, module: "AGENCY" },
   { title: "Product Management", href: "/inventory", icon: Package, module: "PRODUCT" },
-  { title: "Purchases", href: "/purchases", icon: ShoppingCart, module: "PURCHASE" },
-  { title: "Sales", href: "/sales", icon: Receipt, module: "SALE" },
-  { title: "Payments", href: "/payments", icon: CreditCard, module: "PAYMENT" },
+  { title: "Purchase & Sales", href: "/purchase-sales", icon: ShoppingCart, module: "PURCHASE" },
+  { title: "Transactions", href: "/transactions", icon: CreditCard, module: "PAYMENT" },
+  { title: "Inventory Management", href: "/inventory-management", icon: Package, module: "PRODUCT" },
   { title: "Reports", href: "/reports", icon: FileText, module: "REPORT" },
   { title: "Audit Logs", href: "/audit-logs", icon: History, module: "AUDIT" },
   { title: "Settings", href: "/settings", icon: Settings, module: null },
