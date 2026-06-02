@@ -213,8 +213,8 @@ const buildSidebarItems = (): SidebarItem[] => [
   //   module: "PAYMENT",
   // },
   { title: "Inventory Management", href: "/inventory-management", icon: Package, module: "PRODUCT" },
-  { title: "Reports", href: "/reports", icon: FileText, module: "REPORT" },
-  { title: "Audit Logs", href: "/audit-logs", icon: History, module: "AUDIT" },
+  // { title: "Reports", href: "/reports", icon: FileText, module: "REPORT" },
+  // { title: "Audit Logs", href: "/audit-logs", icon: History, module: "AUDIT" },
   { title: "Settings", href: "/settings", icon: Settings, module: null },
 ];
 

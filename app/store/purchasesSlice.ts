@@ -219,9 +219,10 @@ const purchasesSlice = createSlice({
       })
       .addCase(approvePurchase.fulfilled, (state, action) => {
         state.isLoading = false;
-        const index = state.purchases.findIndex((p) => p.id === action.payload.id);
-        if (index !== -1) {
-          state.purchases[index] = action.payload;
+        // Remove the approved purchase from the current list (it is no longer PENDING)
+        state.purchases = state.purchases.filter((p) => p.id !== action.payload.id);
+        if (state.pagination) {
+          state.pagination.total = Math.max(0, state.pagination.total - 1);
         }
       })
       .addCase(approvePurchase.rejected, (state, action) => {
@@ -235,9 +236,10 @@ const purchasesSlice = createSlice({
       })
       .addCase(rejectPurchase.fulfilled, (state, action) => {
         state.isLoading = false;
-        const index = state.purchases.findIndex((p) => p.id === action.payload.id);
-        if (index !== -1) {
-          state.purchases[index] = action.payload;
+        // Remove the rejected purchase from the current list (it is no longer PENDING)
+        state.purchases = state.purchases.filter((p) => p.id !== action.payload.id);
+        if (state.pagination) {
+          state.pagination.total = Math.max(0, state.pagination.total - 1);
         }
       })
       .addCase(rejectPurchase.rejected, (state, action) => {

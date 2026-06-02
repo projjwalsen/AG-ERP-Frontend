@@ -779,7 +779,18 @@ function SalesTab() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {sale.items[0]?.product?.name || "-"}
+                        {sale.items && sale.items.length > 0 ? (
+                          <div className="flex flex-col gap-1">
+                            <span className="font-medium">{sale.items[0]?.product?.name || "-"}</span>
+                            {sale.items.length > 1 && (
+                              <span className="inline-flex w-fit items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700">
+                                +{sale.items.length - 1} more {sale.items.length - 1 === 1 ? "item" : "items"}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <span className="font-mono">{sale.items[0]?.batch?.batchNo || "-"}</span>
