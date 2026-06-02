@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, Building2, Briefcase, Package,
   ShoppingCart, FileText, History, Settings, ChevronLeft, Shield,
-  Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu, CreditCard
+  Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu, CreditCard,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -46,6 +47,21 @@ interface SidebarProps {
 
 // Pages that should NOT show the sidebar
 const noSidebarPaths = ["/login", "/"];
+
+type SidebarChild = {
+  title: string;
+  href: string;
+  icon: React.ElementType;
+  badge?: { count: number; tone: "amber" | "blue" | "rose" };
+};
+
+type SidebarItem = {
+  title: string;
+  href: string;
+  icon: React.ElementType;
+  module: string | null;
+  children?: SidebarChild[];
+};
 
 // Wrapper component that manages sidebar state
 export function SidebarWrapper({ children }: { children: React.ReactNode }) {
@@ -98,7 +114,7 @@ export function SidebarWrapper({ children }: { children: React.ReactNode }) {
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-6">
           {/* Left side */}
           <div className="flex items-center gap-4">
-            
+
           </div>
 
           {/* Right Actions */}
@@ -182,7 +198,7 @@ export function SidebarWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
-const sidebarItems = [
+const buildSidebarItems = (): SidebarItem[] => [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard, module: null },
   { title: "Branch Management", href: "/branches", icon: Building2, module: "BRANCH" },
   { title: "User Management", href: "/users", icon: Users, module: "USER" },
@@ -190,16 +206,147 @@ const sidebarItems = [
   { title: "Agency Management", href: "/agencies", icon: Briefcase, module: "AGENCY" },
   { title: "Product Management", href: "/inventory", icon: Package, module: "PRODUCT" },
   { title: "Purchase & Sales", href: "/purchase-sales", icon: ShoppingCart, module: "PURCHASE" },
-  { title: "Transactions", href: "/transactions", icon: CreditCard, module: "PAYMENT" },
+  // {
+  //   title: "Transactions",
+  //   href: "/transactions",
+  //   icon: CreditCard,
+  //   module: "PAYMENT",
+  // },
   { title: "Inventory Management", href: "/inventory-management", icon: Package, module: "PRODUCT" },
   { title: "Reports", href: "/reports", icon: FileText, module: "REPORT" },
   { title: "Audit Logs", href: "/audit-logs", icon: History, module: "AUDIT" },
   { title: "Settings", href: "/settings", icon: Settings, module: null },
 ];
 
+function NavItem({
+  item,
+  pathname,
+  collapsed,
+}: {
+  item: SidebarItem;
+  pathname: string;
+  collapsed: boolean;
+}) {
+  const isExactActive = pathname === item.href;
+  const isDescendantActive =
+    pathname.startsWith(`${item.href}/`) && item.href !== "/dashboard";
+  const isActive = isExactActive || isDescendantActive;
+  const Icon = item.icon;
+  const hasChildren = !!item.children?.length;
+
+  const [open, setOpen] = React.useState<boolean>(isDescendantActive);
+
+  React.useEffect(() => {
+    if (isDescendantActive) setOpen(true);
+  }, [isDescendantActive]);
+
+  const linkContent = (
+    <div
+      className={cn(
+        "flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
+        isActive && !hasChildren
+          ? "bg-green-50 text-green-700 border-l-2 border-green-600"
+          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+      )}
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      {!collapsed && (
+        <>
+          <span className="truncate flex-1">{item.title}</span>
+          {hasChildren && (
+            <ChevronRight
+              className={cn(
+                "h-3.5 w-3.5 text-gray-400 transition-transform",
+                open && "rotate-90"
+              )}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+
+  // When collapsed show only icon as link
+  if (collapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Link href={item.href}>{linkContent}</Link>
+        </TooltipTrigger>
+        <TooltipContent side="right">{item.title}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <div>
+      <div
+        onClick={() => {
+          if (hasChildren) {
+            setOpen((s) => !s);
+          } else {
+            window.location.href = item.href;
+          }
+        }}
+      >
+        {hasChildren ? (
+          linkContent
+        ) : (
+          <Link href={item.href}>{linkContent}</Link>
+        )}
+      </div>
+
+      {hasChildren && open && (
+        <div className="mt-0.5 ml-3 space-y-0.5 border-l border-gray-100 pl-1">
+          {item.children!.map((child) => {
+            const childActive = pathname === child.href;
+            const ChildIcon = child.icon;
+            return (
+              <Link
+                key={child.href}
+                href={child.href}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                  childActive
+                    ? "bg-green-50 text-green-700"
+                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                )}
+              >
+                <ChildIcon className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate flex-1">{child.title}</span>
+                {child.badge && (
+                  <span
+                    className={cn(
+                      "inline-flex items-center justify-center px-1.5 min-w-5 h-4 text-[10px] font-semibold rounded-full",
+                      child.badge.tone === "amber"
+                        ? "bg-amber-100 text-amber-700"
+                        : child.badge.tone === "rose"
+                        ? "bg-rose-100 text-rose-700"
+                        : "bg-blue-100 text-blue-700"
+                    )}
+                  >
+                    {child.badge.count}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
   const { permissions } = useAppSelector((state) => state.auth);
+
+  const sidebarItems = React.useMemo(() => buildSidebarItems(), []);
+
+  // If the auth backend has not yet returned any permissions (UI-only mode,
+  // empty session, or a logged-out user landing on a non-public page),
+  // fall back to showing every module so the navigation is not blank.
+  const showAllWhenNoPermissions = permissions.length === 0;
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -212,56 +359,41 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <div className="flex h-full flex-col">
           {/* Logo */}
           <div className={cn("flex h-14 items-center border-b border-gray-100 px-4", collapsed ? "justify-center" : "justify-between")}>
-            
+
                 <div className="flex items-center gap-3">
-                  
+
                   <div>
                     <h1 className="text-sm font-bold text-gray-900">ASHTAVINAYAKA</h1>
                     <p className="text-[10px] text-gray-500 uppercase tracking-wider">ERP Suite</p>
                   </div>
                 </div>
-              
+
           </div>
 
           {/* Navigation */}
           <ScrollArea className="flex-1 px-3 py-3">
             <nav className="space-y-0.5">
               {sidebarItems.map((item) => {
-                // Skip items that require module permission and user doesn't have access
-                if (item.module && !hasModuleAccess(permissions, item.module)) {
+                // Transactions module is always shown (UI-only build).
+                const isTransactionEntry = item.href === "/transactions";
+
+                // Skip items that require module permission and user doesn't have access.
+                if (
+                  item.module &&
+                  !isTransactionEntry &&
+                  !showAllWhenNoPermissions &&
+                  !hasModuleAccess(permissions, item.module)
+                ) {
                   return null;
                 }
-
-                const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-                const Icon = item.icon;
-
-                const linkContent = (
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-green-50 text-green-700 border-l-2 border-green-600"
-                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                    )}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    {!collapsed && <span className="truncate">{item.title}</span>}
-                  </Link>
+                return (
+                  <NavItem
+                    key={item.href}
+                    item={item}
+                    pathname={pathname}
+                    collapsed={collapsed}
+                  />
                 );
-
-                if (collapsed) {
-                  return (
-                    <Tooltip key={item.href}>
-                      <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
-                      <TooltipContent side="right">
-                        {item.title}
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                }
-
-                return <div key={item.href}>{linkContent}</div>;
               })}
             </nav>
           </ScrollArea>

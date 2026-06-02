@@ -12,6 +12,15 @@ export interface CreateSalesPayload {
     unit: "KG" | "LTR";
   }[];
   remarks?: string;
+  deliveryNote:string;
+  suppliersRef: string;
+  otherReference:string; 
+  buyerOrderNo: string;
+  buyerOrderDate: string,
+  despatchDocNo: string,
+  despatchDocDate: string,
+  despatchThrough: string,
+  destination: string,
 }
 
 export interface ApproveSalesPayload {

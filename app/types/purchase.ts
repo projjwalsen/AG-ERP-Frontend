@@ -26,9 +26,13 @@ export interface PurchaseItem {
   product?: PurchaseItemProduct;
   batchId: string | null;
   batchNo: string;
-  quantity: string;
+  quantity: string | number;
   unit: ProductUnit;
-  purchasePrice: string;
+  purchasePrice: string | number;
+  taxableAmount?: string | number;
+  gstPercent?: string | number;
+  gstAmount?: string | number;
+  totalAmount?: string | number;
   createdAt: string;
 }
 
@@ -80,6 +84,9 @@ export interface Purchase {
   branchId: string;
   branch?: PurchaseBranch;
   items: PurchaseItem[];
+  subtotalAmount?: string | number;
+  totalGSTAmount?: string | number;
+  grandTotal?: string | number;
   status: PurchaseStatus;
   remarks?: string;
   approvedById?: string;
