@@ -12,7 +12,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -25,18 +24,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { useAppSelector } from "@/app/store/hooks";
-import { productApi, CreateProductPayload, UpdateProductPayload } from "@/app/services/product.service";
+import { productApi, UpdateProductPayload } from "@/app/services/product.service";
 import { hasModulePermission } from "@/lib/usePermissions";
 import { Product } from "@/app/types/product";
-import { formatDate } from "@/lib/utils";
-import { AlertTriangle } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 const categoryOptions = [
   "PETROL",
   "DIESEL",
   "LUBRICANT",
   "GREASE",
-  "Kerosene",
+  "KEROSENE",
   "CNG",
   "LPG",
 ];
@@ -45,8 +43,7 @@ const unitOptions = ["KG", "LTR"] as const;
 
 export default function InventoryPage() {
   return (
-    <div className="p-6 min-h-screen bg-gray-50">
-      {/* Page Header */}
+    <div className="min-h-screen bg-gray-50">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Inventory Management</h1>
         <p className="text-gray-500 mt-1">
@@ -60,8 +57,8 @@ export default function InventoryPage() {
   );
 }
 
-// ============== PRODUCTS TAB ==============
 function ProductsTab() {
+  const router = useRouter();
   const { addToast } = useToast();
   const [loading, setLoading] = React.useState(true);
   const [products, setProducts] = React.useState<Product[]>([]);
@@ -69,7 +66,6 @@ function ProductsTab() {
   const [selectedCategory, setSelectedCategory] = React.useState("");
   const [currentPage, setCurrentPage] = React.useState(1);
   const [pagination, setPagination] = React.useState<{ total: number; totalPages: number; page: number; limit: number } | null>(null);
-  const [createModalOpen, setCreateModalOpen] = React.useState(false);
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [viewModalOpen, setViewModalOpen] = React.useState(false);
   const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null);
@@ -95,15 +91,13 @@ function ProductsTab() {
     setLoading(true);
     try {
       const response = await productApi.getAll({ page, limit: 10, search, category });
-
       const productsData = response.data?.products ?? [];
       setProducts(productsData);
       if (response.data && typeof response.data === "object" && "pagination" in response.data) {
         setPagination((response.data as any).pagination);
       }
     } catch (err: any) {
-      const errorMsg = err?.response?.data?.message || err?.message || "Failed to load products";
-      addToast(errorMsg, "error");
+      addToast(err?.message || "Failed to load products", "error");
     } finally {
       setLoading(false);
     }
@@ -119,8 +113,11 @@ function ProductsTab() {
   }, [products, searchTerm]);
 
   const handleCreate = () => {
-    setSelectedProduct(null);
-    setCreateModalOpen(true);
+    router.push("/inventory/new");
+  };
+
+  const handleEditSuccess = () => {
+    window.location.reload();
   };
 
   const handleEdit = (product: Product) => {
@@ -144,24 +141,12 @@ function ProductsTab() {
         addToast(response.message || "Failed to update status", "error");
       }
     } catch (err: any) {
-      const errorMsg = err?.response?.data?.message || err?.message || "Failed to update status";
-      addToast(errorMsg, "error");
+      addToast(err?.message || "Failed to update status", "error");
     }
-  };
-
-  const handleCreateSuccess = (product: Product) => {
-    setCreateModalOpen(false);
-    fetchProducts(currentPage, searchTerm, selectedCategory);
-  };
-
-  const handleEditSuccess = (product: Product) => {
-    setEditModalOpen(false);
-    fetchProducts(currentPage, searchTerm, selectedCategory);
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">All Products</h2>
@@ -175,7 +160,6 @@ function ProductsTab() {
         )}
       </div>
 
-      {/* Filters */}
       <div className="flex items-center gap-4 bg-white p-4 rounded-lg border border-gray-200">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -212,7 +196,6 @@ function ProductsTab() {
         )}
       </div>
 
-      {/* Products Table */}
       {loading ? (
         <Card>
           <CardContent className="p-0">
@@ -312,7 +295,6 @@ function ProductsTab() {
                 </tbody>
               </table>
             </div>
-            {/* Pagination */}
             {pagination && (
               <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
                 <p className="text-sm text-gray-500">
@@ -356,14 +338,6 @@ function ProductsTab() {
         </Card>
       )}
 
-      {/* Create Product Modal */}
-      <CreateProductModal
-        open={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
-        onSuccess={handleCreateSuccess}
-      />
-
-      {/* Edit Product Modal */}
       {selectedProduct && (
         <EditProductModal
           open={editModalOpen}
@@ -373,7 +347,6 @@ function ProductsTab() {
         />
       )}
 
-      {/* View Product Modal */}
       {selectedProduct && (
         <ViewProductModal
           open={viewModalOpen}
@@ -385,277 +358,6 @@ function ProductsTab() {
   );
 }
 
-// ============== CREATE PRODUCT MODAL ==============
-function CreateProductModal({
-  open,
-  onClose,
-  onSuccess,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSuccess: (product: Product) => void;
-}) {
-  const { addToast } = useToast();
-  const [loading, setLoading] = React.useState(false);
-  const [showConfirm, setShowConfirm] = React.useState(false);
-  const [form, setForm] = React.useState<CreateProductPayload>({
-    name: "",
-    sku: "",
-    category: "",
-    description: "",
-    hsnNo: "",
-    applicableGST: undefined,
-    baseUnit: "KG",
-    density: undefined,
-    operationalUnit: "LTR",
-    minimumStockKG: undefined,
-    sellPricePerUnit: 0,
-  });
-
-  React.useEffect(() => {
-    if (open) {
-      setForm({
-        name: "",
-        sku: "",
-        category: "",
-        description: "",
-        hsnNo: "",
-        applicableGST: undefined,
-        baseUnit: "KG",
-        density: undefined,
-        operationalUnit: "LTR",
-        minimumStockKG: undefined,
-        sellPricePerUnit: 0,
-      });
-    }
-  }, [open]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name || !form.sku || !form.category) {
-      addToast("Name, SKU, and category are required", "error");
-      return;
-    }
-    if (!form.sellPricePerUnit || form.sellPricePerUnit <= 0) {
-      addToast("Sell price must be greater than 0", "error");
-      return;
-    }
-    setShowConfirm(true);
-  };
-
-  const handleConfirmCreate = async () => {
-    setShowConfirm(false);
-    setLoading(true);
-    try {
-      const response = await productApi.create(form);
-      if (response && response.success) {
-        const possible = response.data ?? (response as any).product ?? (response as any).data?.product;
-        const newProduct = (possible && (possible.product ?? possible)) || null;
-        if (newProduct && typeof newProduct === "object") {
-          onSuccess(newProduct as Product);
-        } else {
-          addToast(response.message || "Product created but response shape was unexpected", "error");
-          setLoading(false);
-          return;
-        }
-      } else {
-        addToast(response?.message || "Failed to create product", "error");
-        setLoading(false);
-        return;
-      }
-    } catch (err: any) {
-      const errorMsg = err?.response?.data?.message || err?.message || "Failed to create product";
-      addToast(errorMsg, "error");
-      setLoading(false);
-      return;
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-purple-600" />
-            Add New Product
-          </DialogTitle>
-          <DialogDescription>
-            Create a new product for inventory management.
-          </DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Product Name *</Label>
-              <Input
-                id="name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="sku">SKU *</Label>
-              <Input
-                id="sku"
-                value={form.sku}
-                onChange={(e) => setForm({ ...form, sku: e.target.value.toUpperCase() })}
-                className="font-mono uppercase"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="category">Category *</Label>
-              <select
-                id="category"
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                required
-              >
-                <option value="">Select category</option>
-                {categoryOptions.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="hsnNo">HSN Number</Label>
-              <Input
-                id="hsnNo"
-                value={form.hsnNo || ""}
-                onChange={(e) => setForm({ ...form, hsnNo: e.target.value })}
-                className="font-mono"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Input
-              id="description"
-              value={form.description || ""}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="applicableGST">GST %</Label>
-              <Input
-                id="applicableGST"
-                type="number"
-                value={form.applicableGST ?? ""}
-                onChange={(e) => setForm({ ...form, applicableGST: e.target.value ? Number(e.target.value) : undefined })}
-                placeholder="18"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="sellPricePerUnit">Sell Price *</Label>
-              <Input
-                id="sellPricePerUnit"
-                type="number"
-                value={form.sellPricePerUnit || ""}
-                onChange={(e) => setForm({ ...form, sellPricePerUnit: Number(e.target.value) })}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="baseUnit">Base Unit *</Label>
-              <select
-                id="baseUnit"
-                value={form.baseUnit}
-                onChange={(e) => setForm({ ...form, baseUnit: e.target.value as "KG" | "LTR" })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                required
-              >
-                {unitOptions.map((unit) => (
-                  <option key={unit} value={unit}>{unit}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="operationalUnit">Operational Unit *</Label>
-              <select
-                id="operationalUnit"
-                value={form.operationalUnit}
-                onChange={(e) => setForm({ ...form, operationalUnit: e.target.value as "KG" | "LTR" })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                required
-              >
-                {unitOptions.map((unit) => (
-                  <option key={unit} value={unit}>{unit}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          
-            <div className="space-y-2">
-              <Label htmlFor="density">Density* (kg/L)</Label>
-              <Input
-                id="density"
-                type="number"
-                step="0.01"
-                value={form.density ?? ""}
-                onChange={(e) => setForm({ ...form, density: e.target.value ? Number(e.target.value) : undefined })}
-                placeholder="0.85"
-              />
-              <p className="text-xs text-gray-500">Required for unit conversion</p>
-            </div>
-          
-
-          <div className="space-y-2">
-            <Label htmlFor="minimumStockKG">Stock Threshold (KG)</Label>
-            <Input
-              id="minimumStockKG"
-              type="number"
-              value={form.minimumStockKG ?? ""}
-              onChange={(e) => setForm({ ...form, minimumStockKG: e.target.value ? Number(e.target.value) : undefined })}
-            />
-          </div>
-
-          {/* Confirmation Dialog */}
-          {showConfirm && (
-            <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
-              <DialogContent className="max-w-sm">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 text-amber-600">
-                    <AlertTriangle className="h-5 w-5" />
-                    Confirm Create Product
-                  </DialogTitle>
-                  <DialogDescription>
-                    Are you sure you want to create product <span className="font-semibold text-gray-900">{form.name}</span>?
-                  </DialogDescription>
-                </DialogHeader>
-                <DialogFooter className="gap-2">
-                  <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
-                  <Button type="button" onClick={handleConfirmCreate} loading={loading}>
-                    Yes, Create
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          )}
-
-          <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit">Create Product</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ============== EDIT PRODUCT MODAL ==============
 function EditProductModal({
   open,
   onClose,
@@ -664,7 +366,7 @@ function EditProductModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onSuccess: (product: Product) => void;
+  onSuccess: () => void;
   product: Product;
 }) {
   const { addToast } = useToast();
@@ -704,26 +406,16 @@ function EditProductModal({
     setLoading(true);
     try {
       const response = await productApi.update(product.id, form);
-      if (response && response.success) {
-        const possible = response.data ?? (response as any).product ?? (response as any).data?.product;
-        const updatedProduct = (possible && (possible.product ?? possible)) || null;
-        if (updatedProduct && typeof updatedProduct === "object") {
-          onSuccess(updatedProduct as Product);
-        } else {
-          addToast(response.message || "Product updated but response shape was unexpected", "error");
-          setLoading(false);
-          return;
-        }
+      if (response.success) {
+        addToast("Product updated successfully", "success");
+        onSuccess();
       } else {
-        addToast(response?.message || "Failed to update product", "error");
+        addToast(response.message || "Failed to update product", "error");
         setLoading(false);
-        return;
       }
     } catch (err: any) {
-      const errorMsg = err?.response?.data?.message || err?.message || "Failed to update product";
-      addToast(errorMsg, "error");
+      addToast(err?.message || "Failed to update product", "error");
       setLoading(false);
-      return;
     }
   };
 
@@ -735,9 +427,6 @@ function EditProductModal({
             <Package className="h-5 w-5 text-purple-600" />
             Edit Product
           </DialogTitle>
-          <DialogDescription>
-            Update product information.
-          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -852,18 +541,16 @@ function EditProductModal({
             </div>
           </div>
 
-          {form.operationalUnit === "KG" && (
-            <div className="space-y-2">
-              <Label htmlFor="edit-density">Density (kg/L)</Label>
-              <Input
-                id="edit-density"
-                type="number"
-                step="0.01"
-                value={form.density ?? ""}
-                onChange={(e) => setForm({ ...form, density: e.target.value ? Number(e.target.value) : undefined })}
-              />
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="edit-density">Density (kg/L)</Label>
+            <Input
+              id="edit-density"
+              type="number"
+              step="0.01"
+              value={form.density ?? ""}
+              onChange={(e) => setForm({ ...form, density: e.target.value ? Number(e.target.value) : undefined })}
+            />
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="edit-minimumStockKG">Minimum Stock (KG)</Label>
@@ -875,27 +562,28 @@ function EditProductModal({
             />
           </div>
 
-          {/* Confirmation Dialog */}
           {showConfirm && (
-            <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
-              <DialogContent className="max-w-sm">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 text-amber-600">
-                    <AlertTriangle className="h-5 w-5" />
-                    Confirm Update Product
-                  </DialogTitle>
-                  <DialogDescription>
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <Card className="max-w-sm w-full mx-4">
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-amber-100 rounded-full">
+                      <svg className="h-6 w-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900">Confirm Update</h3>
+                  </div>
+                  <p className="text-gray-600 mb-6">
                     Are you sure you want to update product <span className="font-semibold text-gray-900">{form.name}</span>?
-                  </DialogDescription>
-                </DialogHeader>
-                <DialogFooter className="gap-2">
-                  <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
-                  <Button type="button" onClick={handleConfirmUpdate} loading={loading}>
-                    Yes, Update
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
+                    <Button onClick={handleConfirmUpdate} loading={loading}>Yes, Update</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
           <DialogFooter className="gap-2">
@@ -908,7 +596,6 @@ function EditProductModal({
   );
 }
 
-// ============== VIEW PRODUCT MODAL ==============
 function ViewProductModal({
   open,
   onClose,
@@ -979,12 +666,12 @@ function ViewProductModal({
                 <span className="text-sm text-gray-600">Operational Unit:</span>
                 <span className="text-sm font-medium">{product.operationalUnit}</span>
               </div>
-              
+              {product.density && (
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Density:</span>
                   <span className="text-sm font-medium">{product.density} kg/L</span>
                 </div>
-              
+              )}
               <div className="flex justify-between border-t pt-2">
                 <span className="text-sm text-gray-600">Sell Price:</span>
                 <span className="text-sm font-medium text-green-600">
@@ -998,17 +685,6 @@ function ViewProductModal({
             <div>
               <p className="text-xs text-gray-500 uppercase">Minimum Stock</p>
               <p className="text-sm text-gray-700">{product.minimumStockKG} KG</p>
-            </div>
-          )}
-
-          {product.conversionPreview && (
-            <div>
-              <p className="text-xs text-gray-500 uppercase mb-2">Unit Conversion Preview</p>
-              <div className="bg-blue-50 rounded-lg p-3 space-y-1">
-                <p className="text-xs text-gray-600">
-                  {product.conversionPreview.sampleKg} {product.baseUnit} = {product.conversionPreview.equivalentLtr?.toFixed(2)} {product.operationalUnit}
-                </p>
-              </div>
             </div>
           )}
         </div>

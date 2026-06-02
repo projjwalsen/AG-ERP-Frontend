@@ -2,6 +2,39 @@
 import { apiFetch } from "./api";
 import { Sales, SalesListResponse } from "../types/sales";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5100";
+
+/**
+ * Internal helper to fetch a binary response (PDF) with auth cookies.
+ * Returns the Blob plus a best-effort filename parsed from Content-Disposition
+ * (falls back to the supplied defaultName).
+ */
+async function fetchPdfBlob(endpoint: string, defaultName: string): Promise<{ blob: Blob; filename: string }> {
+  const cleanEndpoint = endpoint.startsWith("/") ? endpoint.slice(1) : endpoint;
+  const url = `${API_BASE_URL}/${cleanEndpoint}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({
+      message: `HTTP error! status: ${response.status}`,
+    }));
+    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+
+  // Best-effort filename extraction from Content-Disposition
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+  const filename = match ? decodeURIComponent(match[1]) : defaultName;
+
+  return { blob, filename };
+}
+
 export interface GetSalesParams {
   page?: number;
   limit?: number;
@@ -20,6 +53,16 @@ export interface CreateSalesPayload {
     unit: "KG" | "LTR";
   }[];
   remarks?: string;
+  deliveryNote:string;
+  suppliersRef: string;
+  otherReference:string; 
+  buyerOrderNo: string;
+  buyerOrderDate: string,
+  despatchDocNo: string,
+  despatchDocDate: string,
+  despatchThrough: string,
+  destination: string,
+
 }
 
 export interface ApproveSalesPayload {
@@ -73,5 +116,25 @@ export const salesApi = {
       method: "PATCH",
       body: { remarks: payload.remarks },
     });
+  },
+
+  // GET /api/sales/invoice/preview/:saleId
+  // Returns the invoice PDF as a Blob plus its filename (parsed from Content-Disposition).
+  // Use this for PENDING sales to show an in-app preview.
+  async previewInvoice(saleId: string): Promise<{ blob: Blob; filename: string }> {
+    return fetchPdfBlob(
+      `api/sales/invoice/preview/${saleId}`,
+      `invoice-preview-${saleId}.pdf`
+    );
+  },
+
+  // GET /api/sales/invoice/download/:saleId
+  // Returns the invoice PDF as a Blob plus its filename (parsed from Content-Disposition).
+  // Use this for APPROVED sales to trigger a browser download.
+  async downloadInvoice(saleId: string): Promise<{ blob: Blob; filename: string }> {
+    return fetchPdfBlob(
+      `api/sales/invoice/download/${saleId}`,
+      `invoice-${saleId}.pdf`
+    );
   },
 };

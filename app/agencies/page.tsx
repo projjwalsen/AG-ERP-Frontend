@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Briefcase, Plus, Search, Edit, Eye, MapPin, MoreHorizontal, Building2, Phone, Mail } from "lucide-react";
+import { Briefcase, Plus, Search, Edit, Eye, MapPin, MoreHorizontal, Phone, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
@@ -26,12 +25,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { useAppSelector } from "@/app/store/hooks";
-import { agencyApi, CreateAgencyPayload, UpdateAgencyPayload } from "@/app/services/agency.service";
+import { agencyApi, UpdateAgencyPayload } from "@/app/services/agency.service";
 import { metaApi } from "@/app/services/meta.service";
 import { hasModulePermission } from "@/lib/usePermissions";
 import { Agency } from "@/app/types/agency";
-import { formatDate } from "@/lib/utils";
-import { AlertTriangle } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 const agencyTypeLabels: Record<string, string> = {
   VENDOR: "Vendor",
@@ -41,8 +39,7 @@ const agencyTypeLabels: Record<string, string> = {
 
 export default function AgenciesPage() {
   return (
-    <div className="p-6 min-h-screen bg-gray-50">
-      {/* Page Header */}
+    <div className="min-h-screen bg-gray-50">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Agency Management</h1>
         <p className="text-gray-500 mt-1">
@@ -56,8 +53,8 @@ export default function AgenciesPage() {
   );
 }
 
-// ============== AGENCIES TAB ==============
 function AgenciesTab() {
+  const router = useRouter();
   const { addToast } = useToast();
   const [loading, setLoading] = React.useState(true);
   const [agencies, setAgencies] = React.useState<Agency[]>([]);
@@ -65,7 +62,6 @@ function AgenciesTab() {
   const [selectedType, setSelectedType] = React.useState("");
   const [currentPage, setCurrentPage] = React.useState(1);
   const [pagination, setPagination] = React.useState<{ total: number; totalPages: number; page: number; limit: number } | null>(null);
-  const [createModalOpen, setCreateModalOpen] = React.useState(false);
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [viewModalOpen, setViewModalOpen] = React.useState(false);
   const [selectedAgency, setSelectedAgency] = React.useState<Agency | null>(null);
@@ -91,15 +87,13 @@ function AgenciesTab() {
     setLoading(true);
     try {
       const response = await agencyApi.getAll({ page, limit: 10, search, type: type as any });
-
       const agenciesData = response.data?.agencies ?? [];
       setAgencies(agenciesData);
       if (response.data && typeof response.data === "object" && "pagination" in response.data) {
         setPagination((response.data as any).pagination);
       }
     } catch (err: any) {
-      const errorMsg = err?.response?.data?.message || err?.message || "Failed to load agencies";
-      addToast(errorMsg, "error");
+      addToast(err?.message || "Failed to load agencies", "error");
     } finally {
       setLoading(false);
     }
@@ -115,8 +109,11 @@ function AgenciesTab() {
   }, [agencies, searchTerm]);
 
   const handleCreate = () => {
-    setSelectedAgency(null);
-    setCreateModalOpen(true);
+    router.push("/agencies/new");
+  };
+
+  const handleEditSuccess = () => {
+    window.location.reload();
   };
 
   const handleEdit = (agency: Agency) => {
@@ -134,30 +131,18 @@ function AgenciesTab() {
       const newStatus = agency.isActive ? false : true;
       const response = await agencyApi.updateStatus(agency.id, newStatus);
       if (response.success) {
-        addToast(`Agency ${!agency.isActive ? "activated" : "deactivated"} successfully`, "success");
+        addToast(`Agency ${newStatus ? "activated" : "deactivated"} successfully`, "success");
         fetchAgencies(currentPage, searchTerm, selectedType);
       } else {
         addToast(response.message || "Failed to update status", "error");
       }
     } catch (err: any) {
-      const errorMsg = err?.response?.data?.message || err?.message || "Failed to update status";
-      addToast(errorMsg, "error");
+      addToast(err?.message || "Failed to update status", "error");
     }
-  };
-
-  const handleCreateSuccess = (agency: Agency) => {
-    setCreateModalOpen(false);
-    fetchAgencies(currentPage, searchTerm, selectedType);
-  };
-
-  const handleEditSuccess = (agency: Agency) => {
-    setEditModalOpen(false);
-    fetchAgencies(currentPage, searchTerm, selectedType);
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">All Agencies</h2>
@@ -171,7 +156,6 @@ function AgenciesTab() {
         )}
       </div>
 
-      {/* Filters */}
       <div className="flex items-center gap-4 bg-white p-4 rounded-lg border border-gray-200">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -208,7 +192,6 @@ function AgenciesTab() {
         )}
       </div>
 
-      {/* Agencies Table */}
       {loading ? (
         <Card>
           <CardContent className="p-0">
@@ -317,7 +300,6 @@ function AgenciesTab() {
                 </tbody>
               </table>
             </div>
-            {/* Pagination */}
             {pagination && (
               <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
                 <p className="text-sm text-gray-500">
@@ -361,14 +343,6 @@ function AgenciesTab() {
         </Card>
       )}
 
-      {/* Create Agency Modal */}
-      <CreateAgencyModal
-        open={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
-        onSuccess={handleCreateSuccess}
-      />
-
-      {/* Edit Agency Modal */}
       {selectedAgency && (
         <EditAgencyModal
           open={editModalOpen}
@@ -378,7 +352,6 @@ function AgenciesTab() {
         />
       )}
 
-      {/* View Agency Modal */}
       {selectedAgency && (
         <ViewAgencyModal
           open={viewModalOpen}
@@ -390,291 +363,6 @@ function AgenciesTab() {
   );
 }
 
-// ============== CREATE AGENCY MODAL ==============
-function CreateAgencyModal({
-  open,
-  onClose,
-  onSuccess,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSuccess: (agency: Agency) => void;
-}) {
-  const { addToast } = useToast();
-  const [loading, setLoading] = React.useState(false);
-  const [showConfirm, setShowConfirm] = React.useState(false);
-  const [states, setStates] = React.useState<{ name: string; isoCode: string; stateCode: string }[]>([]);
-  const [form, setForm] = React.useState<CreateAgencyPayload>({
-    name: "",
-    type: "VENDOR",
-    gstin: "",
-    contactPerson: "",
-    mobileNumber: "",
-    email: "",
-    addressLine1: "",
-    addressLine2: "",
-    city: "",
-    state: "",
-    stateCode: "",
-    pinCode: "",
-    branches: [],
-  });
-
-  React.useEffect(() => {
-    fetchStates();
-  }, []);
-
-  React.useEffect(() => {
-    if (open) {
-      setForm({
-        name: "",
-        type: "VENDOR",
-        gstin: "",
-        contactPerson: "",
-        mobileNumber: "",
-        email: "",
-        addressLine1: "",
-        addressLine2: "",
-        city: "",
-        state: "",
-        stateCode: "",
-        pinCode: "",
-        branches: [],
-      });
-    }
-  }, [open]);
-
-  const fetchStates = async () => {
-    try {
-      const response = await metaApi.getStates();
-      if (response.success && response.data?.states) {
-        setStates(response.data.states);
-      }
-    } catch (err) {
-      console.error("Failed to fetch states", err);
-    }
-  };
-
-  const handleStateChange = (stateName: string) => {
-    const selectedState = states.find((s) => s.name === stateName);
-    if (selectedState) {
-      setForm({ ...form, state: stateName, stateCode: selectedState.stateCode });
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name || !form.type) {
-      addToast("Name and type are required", "error");
-      return;
-    }
-    setShowConfirm(true);
-  };
-
-  const handleConfirmCreate = async () => {
-    setShowConfirm(false);
-    setLoading(true);
-    try {
-      const response = await agencyApi.create(form);
-      if (response && response.success) {
-        const possible = response.data ?? (response as any).agency ?? (response as any).data?.agency;
-        const newAgency = (possible && (possible.agency ?? possible)) || null;
-        if (newAgency && typeof newAgency === "object") {
-          onSuccess(newAgency as Agency);
-        } else {
-          addToast(response.message || "Agency created but response shape was unexpected", "error");
-          setLoading(false);
-          return;
-        }
-      } else {
-        addToast(response?.message || "Failed to create agency", "error");
-        setLoading(false);
-        return;
-      }
-    } catch (err: any) {
-      const errorMsg = err?.response?.data?.message || err?.message || "Failed to create agency";
-      addToast(errorMsg, "error");
-      setLoading(false);
-      return;
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Briefcase className="h-5 w-5 text-blue-600" />
-            Add New Agency
-          </DialogTitle>
-          <DialogDescription>
-            Create a new agency (vendor/client).
-          </DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Agency Name *</Label>
-              <Input
-                id="name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="type">Agency Type *</Label>
-              <select
-                id="type"
-                value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value as any })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                required
-              >
-                <option value="VENDOR">Vendor</option>
-                <option value="CLIENT">Client</option>
-                <option value="BOTH">Both</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="gstin">GSTIN</Label>
-              <Input
-                id="gstin"
-                value={form.gstin || ""}
-                onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })}
-                className="font-mono uppercase"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="stateCode">State Code</Label>
-              <Input
-                id="stateCode"
-                value={form.stateCode || ""}
-                readOnly
-                className="bg-gray-50"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="contactPerson">Contact Person</Label>
-              <Input
-                id="contactPerson"
-                value={form.contactPerson || ""}
-                onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="mobileNumber">Mobile Number</Label>
-              <Input
-                id="mobileNumber"
-                value={form.mobileNumber || ""}
-                onChange={(e) => setForm({ ...form, mobileNumber: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={form.email || ""}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="addressLine1">Address Line 1*</Label>
-            <Input
-              id="addressLine1"
-              value={form.addressLine1 || ""}
-              onChange={(e) => setForm({ ...form, addressLine1: e.target.value })}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="addressLine2">Address Line 2</Label>
-            <Input
-              id="addressLine2"
-              value={form.addressLine2 || ""}
-              onChange={(e) => setForm({ ...form, addressLine2: e.target.value })}
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="city">City</Label>
-              <Input
-                id="city"
-                value={form.city || ""}
-                onChange={(e) => setForm({ ...form, city: e.target.value })}
-                placeholder="Enter city name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="state">State</Label>
-              <select
-                id="state"
-                value={form.state || ""}
-                onChange={(e) => handleStateChange(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-              >
-                <option value="">Select state</option>
-                {states.map((state) => (
-                  <option key={state.isoCode} value={state.name}>{state.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pinCode">Pin Code</Label>
-              <Input
-                id="pinCode"
-                value={form.pinCode || ""}
-                onChange={(e) => setForm({ ...form, pinCode: e.target.value })}
-              />
-            </div>
-          </div>
-
-          {/* Confirmation Dialog */}
-          {showConfirm && (
-            <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
-              <DialogContent className="max-w-sm">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 text-amber-600">
-                    <AlertTriangle className="h-5 w-5" />
-                    Confirm Create Agency
-                  </DialogTitle>
-                  <DialogDescription>
-                    Are you sure you want to create agency <span className="font-semibold text-gray-900">{form.name}</span>?
-                  </DialogDescription>
-                </DialogHeader>
-                <DialogFooter className="gap-2">
-                  <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
-                  <Button type="button" onClick={handleConfirmCreate} loading={loading}>
-                    Yes, Create
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          )}
-
-          <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit">Create Agency</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ============== EDIT AGENCY MODAL ==============
 function EditAgencyModal({
   open,
   onClose,
@@ -683,7 +371,7 @@ function EditAgencyModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onSuccess: (agency: Agency) => void;
+  onSuccess: () => void;
   agency: Agency;
 }) {
   const { addToast } = useToast();
@@ -747,26 +435,16 @@ function EditAgencyModal({
     setLoading(true);
     try {
       const response = await agencyApi.update(agency.id, form);
-      if (response && response.success) {
-        const possible = response.data ?? (response as any).agency ?? (response as any).data?.agency;
-        const updatedAgency = (possible && (possible.agency ?? possible)) || null;
-        if (updatedAgency && typeof updatedAgency === "object") {
-          onSuccess(updatedAgency as Agency);
-        } else {
-          addToast(response.message || "Agency updated but response shape was unexpected", "error");
-          setLoading(false);
-          return;
-        }
+      if (response.success) {
+        addToast("Agency updated successfully", "success");
+        onSuccess();
       } else {
-        addToast(response?.message || "Failed to update agency", "error");
+        addToast(response.message || "Failed to update agency", "error");
         setLoading(false);
-        return;
       }
     } catch (err: any) {
-      const errorMsg = err?.response?.data?.message || err?.message || "Failed to update agency";
-      addToast(errorMsg, "error");
+      addToast(err?.message || "Failed to update agency", "error");
       setLoading(false);
-      return;
     }
   };
 
@@ -778,9 +456,6 @@ function EditAgencyModal({
             <Briefcase className="h-5 w-5 text-blue-600" />
             Edit Agency
           </DialogTitle>
-          <DialogDescription>
-            Update agency information.
-          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -861,7 +536,7 @@ function EditAgencyModal({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="edit-addressLine1">Address Line 1*</Label>
+            <Label htmlFor="edit-addressLine1">Address Line 1</Label>
             <Input
               id="edit-addressLine1"
               value={form.addressLine1 || ""}
@@ -885,7 +560,6 @@ function EditAgencyModal({
                 id="edit-city"
                 value={form.city || ""}
                 onChange={(e) => setForm({ ...form, city: e.target.value })}
-                placeholder="Enter city name"
               />
             </div>
             <div className="space-y-2">
@@ -912,27 +586,28 @@ function EditAgencyModal({
             </div>
           </div>
 
-          {/* Confirmation Dialog */}
           {showConfirm && (
-            <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
-              <DialogContent className="max-w-sm">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 text-amber-600">
-                    <AlertTriangle className="h-5 w-5" />
-                    Confirm Update Agency
-                  </DialogTitle>
-                  <DialogDescription>
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <Card className="max-w-sm w-full mx-4">
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-amber-100 rounded-full">
+                      <svg className="h-6 w-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900">Confirm Update</h3>
+                  </div>
+                  <p className="text-gray-600 mb-6">
                     Are you sure you want to update agency <span className="font-semibold text-gray-900">{form.name}</span>?
-                  </DialogDescription>
-                </DialogHeader>
-                <DialogFooter className="gap-2">
-                  <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
-                  <Button type="button" onClick={handleConfirmUpdate} loading={loading}>
-                    Yes, Update
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
+                    <Button onClick={handleConfirmUpdate} loading={loading}>Yes, Update</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
           <DialogFooter className="gap-2">
@@ -945,7 +620,6 @@ function EditAgencyModal({
   );
 }
 
-// ============== VIEW AGENCY MODAL ==============
 function ViewAgencyModal({
   open,
   onClose,

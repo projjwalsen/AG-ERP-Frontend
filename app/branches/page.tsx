@@ -12,7 +12,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
@@ -26,17 +25,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { useAppSelector } from "@/app/store/hooks";
-import { branchApi, CreateBranchPayload, UpdateBranchPayload } from "@/app/services/branch.service";
+import { branchApi, UpdateBranchPayload } from "@/app/services/branch.service";
 import { metaApi } from "@/app/services/meta.service";
 import { hasModulePermission } from "@/lib/usePermissions";
 import { Branch } from "@/app/types/branch";
 import { formatDate } from "@/lib/utils";
-import { AlertTriangle } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function BranchesPage() {
   return (
     <div className=" min-h-screen bg-gray-50">
-      {/* Page Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Branches</h1>
         <p className="text-gray-500 mt-1">
@@ -50,15 +48,14 @@ export default function BranchesPage() {
   );
 }
 
-// ============== BRANCHES TAB ==============
 function BranchesTab() {
+  const router = useRouter();
   const { addToast } = useToast();
   const [loading, setLoading] = React.useState(true);
   const [branches, setBranches] = React.useState<Branch[]>([]);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [currentPage, setCurrentPage] = React.useState(1);
   const [pagination, setPagination] = React.useState<{ total: number; totalPages: number; page: number; limit: number } | null>(null);
-  const [createModalOpen, setCreateModalOpen] = React.useState(false);
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [viewModalOpen, setViewModalOpen] = React.useState(false);
   const [selectedBranch, setSelectedBranch] = React.useState<Branch | null>(null);
@@ -84,7 +81,6 @@ function BranchesTab() {
     setLoading(true);
     try {
       const response = await branchApi.getAll({ page, limit: 10, search });
-      // Handle both array response and object with branches property
       let branchesData: Branch[] = [];
       if (Array.isArray(response.data)) {
         branchesData = response.data;
@@ -96,15 +92,11 @@ function BranchesTab() {
         setPagination((response.data as any).pagination);
       }
     } catch (err: any) {
-      const errorMsg = err?.response?.data?.message || err?.message || "Failed to load branches";
-      addToast(errorMsg, "error");
+      addToast(err?.message || "Failed to load branches", "error");
     } finally {
       setLoading(false);
     }
   };
-
-  const totalPages = pagination?.totalPages || 1;
-  const totalEntries = pagination?.total || 0;
 
   const filteredBranches = React.useMemo(() => {
     return branches.filter((branch) => {
@@ -118,8 +110,11 @@ function BranchesTab() {
   }, [branches, searchTerm]);
 
   const handleCreate = () => {
-    setSelectedBranch(null);
-    setCreateModalOpen(true);
+    router.push("/branches/new");
+  };
+
+  const handleEditSuccess = () => {
+    window.location.reload();
   };
 
   const handleEdit = (branch: Branch) => {
@@ -130,20 +125,6 @@ function BranchesTab() {
   const handleView = (branch: Branch) => {
     setSelectedBranch(branch);
     setViewModalOpen(true);
-  };
-
-  const handleCreateSuccess = (_branch: Branch) => {
-    // Close modal
-    setCreateModalOpen(false);
-    // Force refresh the whole page to get latest data
-    window.location.reload();
-  };
-
-  const handleEditSuccess = (_branch: Branch) => {
-    // Close modal
-    setEditModalOpen(false);
-    // Force refresh the whole page to get latest data
-    window.location.reload();
   };
 
   const handleToggleStatus = async (branch: Branch) => {
@@ -157,14 +138,12 @@ function BranchesTab() {
         addToast(response.message || "Failed to update status", "error");
       }
     } catch (err: any) {
-      const errorMsg = err?.response?.data?.message || err?.message || "Failed to update status";
-      addToast(errorMsg, "error");
+      addToast(err?.message || "Failed to update status", "error");
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">All Branches</h2>
@@ -178,7 +157,6 @@ function BranchesTab() {
         )}
       </div>
 
-      {/* Search */}
       <div className="flex items-center gap-4 bg-white p-4 rounded-lg border border-gray-200">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -191,7 +169,6 @@ function BranchesTab() {
         </div>
       </div>
 
-      {/* Branches Table */}
       {loading ? (
         <Card>
           <CardContent className="p-0">
@@ -290,7 +267,6 @@ function BranchesTab() {
                 </tbody>
               </table>
             </div>
-            {/* Pagination */}
             {pagination && (
               <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
                 <p className="text-sm text-gray-500">
@@ -334,14 +310,6 @@ function BranchesTab() {
         </Card>
       )}
 
-      {/* Create Branch Modal */}
-      <CreateBranchModal
-        open={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
-        onSuccess={handleCreateSuccess}
-      />
-
-      {/* Edit Branch Modal */}
       {selectedBranch && (
         <EditBranchModal
           open={editModalOpen}
@@ -351,7 +319,6 @@ function BranchesTab() {
         />
       )}
 
-      {/* View Branch Modal */}
       {selectedBranch && (
         <ViewBranchModal
           open={viewModalOpen}
@@ -364,256 +331,6 @@ function BranchesTab() {
   );
 }
 
-// ============== CREATE BRANCH MODAL ==============
-function CreateBranchModal({
-  open,
-  onClose,
-  onSuccess,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSuccess: (branch: Branch) => void;
-}) {
-  const { addToast } = useToast();
-  const [loading, setLoading] = React.useState(false);
-  const [showConfirm, setShowConfirm] = React.useState(false);
-  const [states, setStates] = React.useState<{ name: string; isoCode: string; stateCode: string }[]>([]);
-  const [form, setForm] = React.useState<CreateBranchPayload>({
-    name: "",
-    code: "",
-    gstin: "",
-    stateCode: "",
-    addressLine1: "",
-    addressLine2: "",
-    city: "",
-    state: "",
-    pinCode: "",
-    phnNumber: "",
-    email: "",
-  });
-
-  React.useEffect(() => {
-    fetchStates();
-  }, []);
-
-  React.useEffect(() => {
-    if (open) {
-      setForm({
-        name: "",
-        code: "",
-        gstin: "",
-        stateCode: "",
-        addressLine1: "",
-        addressLine2: "",
-        city: "",
-        state: "",
-        pinCode: "",
-        phnNumber: "",
-        email: "",
-      });
-    }
-  }, [open]);
-
-  const fetchStates = async () => {
-    try {
-      const response = await metaApi.getStates();
-      if (response.success && response.data?.states) {
-        setStates(response.data.states);
-      }
-    } catch (err) {
-      console.error("Failed to fetch states", err);
-    }
-  };
-
-  const handleStateChange = (stateName: string) => {
-    const selectedState = states.find((s) => s.name === stateName);
-    if (selectedState) {
-      setForm({ ...form, state: stateName, stateCode: selectedState.stateCode });
-    }
-  };
-
-  const normalizeCode = (value: string) =>
-    value.toUpperCase().replace(/\s+/g, "_").replace(/^[\s_]+|[\s_]+$/g, "");
-
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const name = e.target.value;
-    setForm({ ...form, name, code: normalizeCode(name) });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name || !form.code || !form.gstin || !form.stateCode || !form.addressLine1 || !form.city || !form.state || !form.pinCode) {
-      addToast("Please fill all required fields", "error");
-      return;
-    }
-    setShowConfirm(true);
-  };
-
-  const handleConfirmCreate = async () => {
-    setShowConfirm(false);
-    setLoading(true);
-    try {
-      const response = await branchApi.create(form);
-      if (response && response.success) {
-        const possible = response.data ?? (response as any).branch ?? (response as any).data?.branch;
-        const newBranch = (possible && (possible.branch ?? possible)) || null;
-        if (newBranch && typeof newBranch === "object") {
-          onSuccess(newBranch as Branch);
-        } else {
-          addToast(response.message || "Branch created but response shape was unexpected", "error");
-          setLoading(false);
-        }
-      } else {
-        addToast(response?.message || "Failed to create branch", "error");
-        setLoading(false);
-      }
-    } catch (err: any) {
-      console.error("Create branch error:", err);
-      const errorMsg = err?.response?.data?.message || err?.message || "Failed to create branch";
-      addToast(errorMsg, "error");
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-lg" showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Building className="h-5 w-5 text-green-600" />
-            Add New Branch
-          </DialogTitle>
-          <DialogDescription>
-            Create a new branch location for your organization.
-          </DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Branch Name *</Label>
-              <Input id="name" value={form.name} onChange={handleNameChange} required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="code">Branch Code *</Label>
-              <Input id="code" value={form.code} onChange={(e) => setForm({ ...form, code: normalizeCode(e.target.value) })} className="font-mono uppercase" required />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="gstin">GSTIN *</Label>
-              <Input id="gstin" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })} className="font-mono uppercase" required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="stateCode">State Code</Label>
-              <Input id="stateCode" value={form.stateCode} readOnly className="bg-gray-50" />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="addressLine1">Address Line 1 *</Label>
-            <Input id="addressLine1" value={form.addressLine1} onChange={(e) => setForm({ ...form, addressLine1: e.target.value })} required />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="addressLine2">Address Line 2</Label>
-            <Input id="addressLine2" value={form.addressLine2 || ""} onChange={(e) => setForm({ ...form, addressLine2: e.target.value })} />
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="city">City *</Label>
-              <Input
-                id="city"
-                value={form.city || ""}
-                onChange={(e) => setForm({ ...form, city: e.target.value })}
-                placeholder="Enter city name"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="state">State *</Label>
-              <select
-                id="state"
-                value={form.state || ""}
-                onChange={(e) => handleStateChange(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                required
-              >
-                <option value="">Select state</option>
-                {states.map((state) => (
-                  <option key={state.isoCode} value={state.name}>{state.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pinCode">Pin Code *</Label>
-              <Input
-                id="pinCode"
-                value={form.pinCode}
-                onChange={(e) => setForm({ ...form, pinCode: e.target.value })}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone Number</Label>
-              <Input
-                id="phone"
-                value={form.phnNumber || ""}
-                onChange={(e) => setForm({ ...form, phnNumber: e.target.value })}
-                placeholder="+91 9876543210"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={form.email || ""}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="branch@example.com"
-              />
-            </div>
-          </div>
-
-          {/* Confirmation Dialog */}
-          {showConfirm && (
-            <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
-              <DialogContent className="max-w-sm">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 text-amber-600">
-                    <AlertTriangle className="h-5 w-5" />
-                    Confirm Create Branch
-                  </DialogTitle>
-                  <DialogDescription>
-                    Are you sure you want to create branch <span className="font-semibold text-gray-900">{form.name}</span>?
-                  </DialogDescription>
-                </DialogHeader>
-                <DialogFooter className="gap-2">
-                  <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
-                  <Button type="button" onClick={handleConfirmCreate} loading={loading}>
-                    Yes, Create
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          )}
-
-          <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="button" onClick={() => setShowConfirm(true)}>Create Branch</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ============== EDIT BRANCH MODAL ==============
 function EditBranchModal({
   open,
   onClose,
@@ -622,7 +339,7 @@ function EditBranchModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onSuccess: (branch: Branch) => void;
+  onSuccess: () => void;
   branch: Branch;
 }) {
   const { addToast } = useToast();
@@ -689,14 +406,14 @@ function EditBranchModal({
     try {
       const response = await branchApi.update(branch.id, form);
       if (response.success && response.data?.branch) {
-        onSuccess(response.data!.branch);
+        addToast("Branch updated successfully", "success");
+        onSuccess();
       } else {
         addToast(response.message || "Failed to update branch", "error");
         setLoading(false);
       }
     } catch (err: any) {
-      const errorMsg = err?.response?.data?.message || err?.message || "Failed to update branch";
-      addToast(errorMsg, "error");
+      addToast(err?.message || "Failed to update branch", "error");
       setLoading(false);
     }
   };
@@ -709,9 +426,6 @@ function EditBranchModal({
             <Building className="h-5 w-5 text-green-600" />
             Edit Branch
           </DialogTitle>
-          <DialogDescription>
-            Update branch information.
-          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -806,27 +520,28 @@ function EditBranchModal({
             </div>
           </div>
 
-          {/* Confirmation Dialog */}
           {showConfirm && (
-            <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
-              <DialogContent className="max-w-sm">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 text-amber-600">
-                    <AlertTriangle className="h-5 w-5" />
-                    Confirm Update Branch
-                  </DialogTitle>
-                  <DialogDescription>
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <Card className="max-w-sm w-full mx-4">
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-amber-100 rounded-full">
+                      <svg className="h-6 w-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900">Confirm Update</h3>
+                  </div>
+                  <p className="text-gray-600 mb-6">
                     Are you sure you want to update branch <span className="font-semibold text-gray-900">{form.name}</span>?
-                  </DialogDescription>
-                </DialogHeader>
-                <DialogFooter className="gap-2">
-                  <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
-                  <Button type="button" onClick={handleConfirmUpdate} loading={loading}>
-                    Yes, Update
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
+                    <Button onClick={handleConfirmUpdate} loading={loading}>Yes, Update</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
           <DialogFooter className="gap-2">
@@ -839,7 +554,6 @@ function EditBranchModal({
   );
 }
 
-// ============== VIEW BRANCH MODAL ==============
 function ViewBranchModal({
   open,
   onClose,
@@ -867,8 +581,7 @@ function ViewBranchModal({
         addToast(response.message || "Failed to update status", "error");
       }
     } catch (err: any) {
-      const errorMsg = err?.response?.data?.message || err?.message || "Failed to update status";
-      addToast(errorMsg, "error");
+      addToast(err?.message || "Failed to update status", "error");
     } finally {
       setLoading(false);
     }
