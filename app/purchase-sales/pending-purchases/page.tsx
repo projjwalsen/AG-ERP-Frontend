@@ -59,17 +59,17 @@ function PendingPurchasesContent() {
   const [rejectionRemarks, setRejectionRemarks] = React.useState("");
   const [actionLoading, setActionLoading] = React.useState(false);
 
-  React.useEffect(() => {
-    fetchPendingPurchases();
-  }, [currentPage]);
-
-  const fetchPendingPurchases = async () => {
+  const fetchPendingPurchases = React.useCallback(async () => {
     try {
       await dispatch(fetchAllPurchases({ page: currentPage, limit: 10, status: "PENDING" })).unwrap();
     } catch (err: any) {
       addToast(err || "Failed to fetch pending purchases", "error");
     }
-  };
+  }, [dispatch, addToast, currentPage]);
+
+  React.useEffect(() => {
+    fetchPendingPurchases();
+  }, [fetchPendingPurchases]);
 
   const handleViewPurchase = async (purchase: Purchase) => {
     setViewLoading(true);
