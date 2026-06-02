@@ -629,26 +629,6 @@ function SalesTab() {
     }
   };
 
-  const handleDownloadFromPreview = async () => {
-    if (!pdfPreview.saleId) return;
-    setPdfActionLoading(true);
-    try {
-      const { blob, filename } = await salesApi.downloadInvoice(pdfPreview.saleId);
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = filename || `invoice-${pdfPreview.saleId}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-    } catch (err: any) {
-      addToast(err?.message || "Failed to download invoice", "error");
-    } finally {
-      setPdfActionLoading(false);
-    }
-  };
-
   const fetchSales = async (page = currentPage, status?: string) => {
     try {
       const params: any = { page, limit: 10 };
@@ -764,7 +744,7 @@ function SalesTab() {
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Qty</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Created At</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Invoice</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -819,7 +799,7 @@ function SalesTab() {
                               <Eye className="h-4 w-4" />
                             </Button>
                           )}
-                          {sale.status === "PENDING" && (
+                          {(sale.status === "PENDING" || sale.status === "APPROVED" || sale.status === "REJECTED") && (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -1087,7 +1067,7 @@ function SalesTab() {
           ) : null}
 
           <div className="flex justify-end gap-2">
-            {viewModal.sale?.status === "PENDING" && (
+            {(viewModal.sale?.status === "PENDING" || viewModal.sale?.status === "APPROVED" || viewModal.sale?.status === "REJECTED") && (
               <Button
                 variant="outline"
                 onClick={() => handlePreviewInvoice(viewModal.sale!)}
@@ -1114,12 +1094,15 @@ function SalesTab() {
         </DialogContent>
       </Dialog>
 
-      {/* PDF Preview Modal (PENDING sales) */}
+      {/* PDF Preview Modal — view-only, no download */}
       <Dialog
         open={pdfPreview.open}
         onOpenChange={(isOpen) => !isOpen && closePdfPreview()}
       >
-        <DialogContent className="max-w-5xl w-[95vw] h-[90vh] flex flex-col p-0">
+        <DialogContent
+          className="max-w-5xl w-[95vw] h-[90vh] flex flex-col p-0"
+          onContextMenu={(e) => e.preventDefault()}
+        >
           <DialogHeader className="px-6 py-4 border-b">
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-amber-600" />
@@ -1129,16 +1112,45 @@ function SalesTab() {
                   {pdfPreview.saleId}
                 </span>
               )}
+              <span className="ml-auto text-[11px] font-normal text-gray-500 bg-gray-100 border border-gray-200 rounded-full px-2 py-0.5">
+                Preview only — download disabled
+              </span>
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex-1 bg-gray-100">
+          <div
+            className="flex-1 bg-gray-100 relative"
+          >
             {pdfPreview.objectUrl ? (
-              <iframe
-                src={pdfPreview.objectUrl}
-                title="Invoice PDF preview"
-                className="w-full h-full"
-              />
+              <>
+                {/* Render the PDF in an iframe. Anti-download measures:
+                    1. Append #toolbar=0 to the blob URL so the browser's PDF
+                       viewer hides its own toolbar (Chrome/Firefox/Edge).
+                    2. Right-click blocking on the parent + iframe to suppress
+                       the "Save As" / context-menu download paths.
+                    3. CSS user-select: none to make text-drag saving harder.
+                    4. A transparent bottom band covers the area where the
+                       viewer's toolbar would render, in case #toolbar=0 is
+                       ignored by the user agent. */}
+                <iframe
+                  src={`${pdfPreview.objectUrl}#toolbar=0&navpanes=0&scrollbar=1`}
+                  title="Invoice PDF preview"
+                  className="w-full h-full relative z-10"
+                  onContextMenu={(e) => e.preventDefault()}
+                  style={{
+                    userSelect: "none",
+                    WebkitUserSelect: "none",
+                  }}
+                />
+                <div
+                  className="absolute left-0 right-0 bottom-0 h-10 z-20 bg-gray-100"
+                  onContextMenu={(e) => e.preventDefault()}
+                  onMouseDown={(e) => {
+                    if (e.button === 2) e.preventDefault();
+                  }}
+                  title="Toolbar disabled"
+                />
+              </>
             ) : (
               <div className="flex items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600" />
@@ -1147,15 +1159,6 @@ function SalesTab() {
           </div>
 
           <div className="flex justify-end gap-2 px-6 py-4 border-t">
-            <Button
-              variant="outline"
-              onClick={handleDownloadFromPreview}
-              loading={pdfActionLoading}
-              className="gap-2 text-green-600 border-green-200 hover:bg-green-50"
-            >
-              <Download className="h-4 w-4" />
-              Download
-            </Button>
             <Button variant="outline" onClick={closePdfPreview}>Close</Button>
           </div>
         </DialogContent>
