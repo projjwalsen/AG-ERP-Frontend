@@ -191,16 +191,37 @@ function PendingPurchasesContent() {
                   <tr className="border-b border-gray-100 bg-gray-50">
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Invoice No</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Agency</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Product</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Batch</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Qty</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Price</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total Qty</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total Price</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total (incl. GST)</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Created At</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {pendingPurchases.map((purchase) => (
+                  {pendingPurchases.map((purchase) => {
+                    const totalQty = purchase.items.reduce(
+                      (sum, item) => sum + Number(item.quantity || 0),
+                      0
+                    );
+                    const totalPrice = purchase.items.reduce(
+                      (sum, item) =>
+                        sum + Number(item.quantity || 0) * Number(item.purchasePrice || 0),
+                      0
+                    );
+                    const totalWithGst =
+                      purchase.grandTotal != null
+                        ? Number(purchase.grandTotal)
+                        : purchase.items.reduce(
+                            (sum, item) =>
+                              sum +
+                              Number(
+                                item.totalAmount ??
+                                  Number(item.quantity || 0) * Number(item.purchasePrice || 0)
+                              ),
+                            0
+                          );
+                    return (
                     <tr key={purchase.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
                         <span className="font-mono text-sm font-medium">{purchase.invoiceNo || "-"}</span>
@@ -208,17 +229,14 @@ function PendingPurchasesContent() {
                       <td className="px-4 py-3">
                         <span className="text-sm font-medium">{purchase.agency?.name || "-"}</span>
                       </td>
-                      <td className="px-4 py-3 text-sm">
-                        {purchase.items[0]?.product?.name || "-"}
+                      <td className="px-4 py-3 text-sm font-medium">
+                        {totalQty}
                       </td>
-                      <td className="px-4 py-3 text-sm">
-                        <span className="font-mono">{purchase.items[0]?.batchNo || "-"}</span>
+                      <td className="px-4 py-3 text-sm font-medium">
+                        {formatCurrency(totalPrice)}
                       </td>
-                      <td className="px-4 py-3 text-sm">
-                        {Number(purchase.items[0]?.quantity || 0)} {purchase.items[0]?.unit || "KG"}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        {formatCurrency(Number(purchase.items[0]?.purchasePrice) || 0)}
+                      <td className="px-4 py-3 text-sm font-semibold text-green-600">
+                        {formatCurrency(totalWithGst)}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">
                         {formatDateTime(purchase.createdAt)}
@@ -261,7 +279,8 @@ function PendingPurchasesContent() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -318,15 +337,40 @@ function PendingPurchasesContent() {
 
           <div className="bg-gray-50 rounded-lg p-4 space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Invoice:</span>
-              <span className="font-medium">{approveModal.purchase?.invoiceNo}</span>
+              <span className="text-gray-500">Invoice No:</span>
+              <span className="font-mono font-medium">{approveModal.purchase?.invoiceNo}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Amount:</span>
+              <span className="text-gray-500">Vendor:</span>
+              <span className="font-medium">{approveModal.purchase?.agency?.name || "-"}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Total Amount:</span>
               <span className="font-medium">
                 {formatCurrency(
-                  Number(approveModal.purchase?.items[0]?.quantity || 0) *
-                  Number(approveModal.purchase?.items[0]?.purchasePrice || 0)
+                  (approveModal.purchase?.items || []).reduce(
+                    (sum, item) =>
+                      sum + Number(item.quantity || 0) * Number(item.purchasePrice || 0),
+                    0
+                  )
+                )}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Total Amount (incl. GST):</span>
+              <span className="font-semibold text-green-600">
+                {formatCurrency(
+                  approveModal.purchase?.grandTotal != null
+                    ? Number(approveModal.purchase.grandTotal)
+                    : (approveModal.purchase?.items || []).reduce(
+                        (sum, item) =>
+                          sum +
+                          Number(
+                            item.totalAmount ??
+                              Number(item.quantity || 0) * Number(item.purchasePrice || 0)
+                          ),
+                        0
+                      )
                 )}
               </span>
             </div>
@@ -361,15 +405,40 @@ function PendingPurchasesContent() {
 
           <div className="bg-gray-50 rounded-lg p-4 space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Invoice:</span>
-              <span className="font-medium">{rejectModal.purchase?.invoiceNo}</span>
+              <span className="text-gray-500">Invoice No:</span>
+              <span className="font-mono font-medium">{rejectModal.purchase?.invoiceNo}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Amount:</span>
+              <span className="text-gray-500">Vendor:</span>
+              <span className="font-medium">{rejectModal.purchase?.agency?.name || "-"}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Total Amount:</span>
               <span className="font-medium">
                 {formatCurrency(
-                  Number(rejectModal.purchase?.items[0]?.quantity || 0) *
-                  Number(rejectModal.purchase?.items[0]?.purchasePrice || 0)
+                  (rejectModal.purchase?.items || []).reduce(
+                    (sum, item) =>
+                      sum + Number(item.quantity || 0) * Number(item.purchasePrice || 0),
+                    0
+                  )
+                )}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Total Amount (incl. GST):</span>
+              <span className="font-semibold text-green-600">
+                {formatCurrency(
+                  rejectModal.purchase?.grandTotal != null
+                    ? Number(rejectModal.purchase.grandTotal)
+                    : (rejectModal.purchase?.items || []).reduce(
+                        (sum, item) =>
+                          sum +
+                          Number(
+                            item.totalAmount ??
+                              Number(item.quantity || 0) * Number(item.purchasePrice || 0)
+                          ),
+                        0
+                      )
                 )}
               </span>
             </div>
@@ -395,7 +464,7 @@ function PendingPurchasesContent() {
 
       {/* View Purchase Modal */}
       <Dialog open={viewModal.open} onOpenChange={(isOpen) => !isOpen && setViewModal({ open: false, purchase: null })}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Eye className="h-5 w-5 text-blue-600" />
@@ -426,11 +495,50 @@ function PendingPurchasesContent() {
                     <p className="font-medium">{formatDateTime(viewModal.purchase.createdAt)}</p>
                   </div>
                   <div>
+                    <p className="text-xs text-gray-500 uppercase">Updated At</p>
+                    <p className="font-medium">{formatDateTime(viewModal.purchase.updatedAt!)}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                  <div>
                     <p className="text-xs text-gray-500 uppercase">Branch</p>
                     <p className="font-medium">{viewModal.purchase.branch?.name || "-"}</p>
+                    <p className="text-xs text-gray-400">{viewModal.purchase.branch?.code || "-"}</p>
                   </div>
                 </div>
               </div>
+
+              {viewModal.purchase.branch && (
+                <div className="border rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Company Details</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">Name</p>
+                      <p className="font-medium">{viewModal.purchase.branch.name || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">Code</p>
+                      <p className="font-mono text-sm">{viewModal.purchase.branch.code || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">GSTIN</p>
+                      <p className="font-mono text-sm">{viewModal.purchase.branch.gstin || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">State</p>
+                      <p className="font-medium">{viewModal.purchase.branch.state || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">City</p>
+                      <p className="font-medium">{viewModal.purchase.branch.city || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase">Phone</p>
+                      <p className="font-medium">{viewModal.purchase.branch.phnNumber || "-"}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="border rounded-lg p-4">
                 <h4 className="text-sm font-semibold text-gray-900 mb-3">Vendor Details</h4>
@@ -440,6 +548,14 @@ function PendingPurchasesContent() {
                     <p className="font-medium">{viewModal.purchase.agency?.name || "-"}</p>
                   </div>
                   <div>
+                    <p className="text-xs text-gray-500 uppercase">Type</p>
+                    <p className="font-medium">{viewModal.purchase.agency?.type || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">GSTIN</p>
+                    <p className="font-mono text-sm">{viewModal.purchase.agency?.gstin || "-"}</p>
+                  </div>
+                  <div>
                     <p className="text-xs text-gray-500 uppercase">Contact Person</p>
                     <p className="font-medium">{viewModal.purchase.agency?.contactPerson || "-"}</p>
                   </div>
@@ -447,17 +563,22 @@ function PendingPurchasesContent() {
                     <p className="text-xs text-gray-500 uppercase">Mobile</p>
                     <p className="font-medium">{viewModal.purchase.agency?.mobileNumber || "-"}</p>
                   </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Email</p>
+                    <p className="text-sm">{viewModal.purchase.agency?.email || "-"}</p>
+                  </div>
                 </div>
               </div>
 
               <div className="border rounded-lg p-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">Items</h4>
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">Items ({viewModal.purchase.items?.length || 0})</h4>
                 {viewModal.purchase.items?.map((item, idx) => (
-                  <div key={idx} className="bg-gray-50 rounded-lg p-4">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div key={idx} className="bg-gray-50 rounded-lg p-4 mb-3 last:mb-0">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                       <div>
                         <p className="text-xs text-gray-500 uppercase">Product</p>
                         <p className="font-medium">{item.product?.name || "-"}</p>
+                        <p className="text-xs text-gray-500">{item.product?.sku || "-"}</p>
                       </div>
                       <div>
                         <p className="text-xs text-gray-500 uppercase">Batch No</p>
@@ -468,28 +589,69 @@ function PendingPurchasesContent() {
                         <p className="font-medium">{item.quantity} {item.unit}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500 uppercase">Price</p>
+                        <p className="text-xs text-gray-500 uppercase">Unit Price</p>
                         <p className="font-medium">{formatCurrency(Number(item.purchasePrice) || 0)}</p>
                       </div>
-                    </div>
-                    <div className="mt-3 pt-3 border-t grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
-                        <p className="text-xs text-gray-500">HSN</p>
-                        <p className="text-sm">{item.product?.hsnNo || "-"}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Total Amount</p>
-                        <p className="font-semibold text-green-600">{formatCurrency(Number(item.quantity) * Number(item.purchasePrice))}</p>
+                        <p className="text-xs text-gray-500 uppercase">Taxable Amt</p>
+                        <p className="font-semibold text-gray-900">{formatCurrency(Number(item.taxableAmount) || 0)}</p>
                       </div>
                     </div>
+                    {item.product && (
+                      <div className="mt-3 pt-3 border-t grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <div>
+                          <p className="text-xs text-gray-500">HSN</p>
+                          <p className="text-sm">{item.product.hsnNo || "-"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">GST %</p>
+                          <p className="text-sm font-medium">{item.gstPercent || item.product.applicableGST || "-"}%</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">GST Amount</p>
+                          <p className="text-sm font-medium text-blue-600">{formatCurrency(Number(item.gstAmount) || 0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Density</p>
+                          <p className="text-sm">{item.product.density || "-"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Total w/ GST</p>
+                          <p className="font-semibold text-green-600">{formatCurrency(Number(item.totalAmount) || 0)}</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
 
-              <div className="border rounded-lg p-4">
-                <h4 className="text-xs text-gray-500 uppercase mb-2">Created By</h4>
-                <p className="font-medium">{viewModal.purchase.createdBy?.name || "-"}</p>
-                <p className="text-sm text-gray-500">{viewModal.purchase.createdBy?.email || "-"}</p>
+              <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-4 border border-green-200">
+                <h4 className="text-sm font-semibold text-gray-900 mb-4">Invoice Summary</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-white rounded-lg p-3">
+                    <p className="text-xs text-gray-500 uppercase mb-1">Subtotal Amount</p>
+                    <p className="text-lg font-semibold text-gray-900">{formatCurrency(Number(viewModal.purchase.subtotalAmount || 0))}</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3">
+                    <p className="text-xs text-gray-500 uppercase mb-1">Total GST</p>
+                    <p className="text-lg font-semibold text-blue-600">{formatCurrency(Number(viewModal.purchase.totalGSTAmount || 0))}</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3">
+                    <p className="text-xs text-gray-500 uppercase mb-1">Grand Total</p>
+                    <p className="text-lg font-semibold text-green-600">{formatCurrency(Number(viewModal.purchase.grandTotal || 0))}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="border rounded-lg p-4">
+                  <h4 className="text-xs text-gray-500 uppercase mb-2">Created By</h4>
+                  <p className="font-medium">{viewModal.purchase.createdBy?.name || "-"}</p>
+                  <p className="text-sm text-gray-500">{viewModal.purchase.createdBy?.email || "-"}</p>
+                  {viewModal.purchase.createdAt && (
+                    <p className="text-xs text-gray-400 mt-1">{formatDateTime(viewModal.purchase.createdAt!)}</p>
+                  )}
+                </div>
               </div>
 
               {viewModal.purchase.remarks && (

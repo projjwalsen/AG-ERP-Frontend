@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Receipt, ArrowLeft, Eye, CheckCircle, XCircle, FileText, Download } from "lucide-react";
+import { Receipt, ArrowLeft, Eye, CheckCircle, XCircle, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -96,26 +96,6 @@ function PendingSalesContent() {
     }
   };
 
-  const handleDownloadFromPreview = async () => {
-    if (!pdfPreview.saleId) return;
-    setPdfActionLoading(true);
-    try {
-      const { blob, filename } = await salesApi.downloadInvoice(pdfPreview.saleId);
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = filename || `invoice-${pdfPreview.saleId}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-    } catch (err: any) {
-      addToast(err?.message || "Failed to download invoice", "error");
-    } finally {
-      setPdfActionLoading(false);
-    }
-  };
-
   React.useEffect(() => {
     fetchPendingSales();
   }, [currentPage]);
@@ -201,7 +181,7 @@ function PendingSalesContent() {
   return (
     <div className="space-y-6">
       <div>
-        <Button variant="ghost" className="gap-2 mb-4" onClick={() => router.push("/purchase-sales")}>
+        <Button variant="ghost" className="gap-2 mb-4" onClick={() => router.push("/purchase-sales?tab=sale")}>
           <ArrowLeft className="h-4 w-4" />
           Back to Purchase & Sales
         </Button>
@@ -248,17 +228,40 @@ function PendingSalesContent() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Invoice No</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Client</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Product</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Batch</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Qty</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total Qty</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total Price</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total (incl. GST)</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Created At</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {pendingSales.map((sale) => (
+                  {pendingSales.map((sale) => {
+                    const totalQty = sale.items.reduce(
+                      (sum, item) => sum + Number(item.quantity || 0),
+                      0
+                    );
+                    const totalPrice = sale.items.reduce(
+                      (sum, item) =>
+                        sum + Number(item.quantity || 0) * Number(item.sellingPrice || 0),
+                      0
+                    );
+                    const totalWithGst = sale.items.reduce((sum, item) => {
+                      const qty = Number(item.quantity || 0);
+                      const price = Number(item.sellingPrice || 0);
+                      const productGst = item.product?.applicableGST
+                        ? Number(item.product.applicableGST)
+                        : 0;
+                      const amount = qty * price;
+                      return sum + amount + (amount * productGst) / 100;
+                    }, 0);
+                    return (
                     <tr key={sale.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-sm font-medium">{sale.invoiceNo || "-"}</span>
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <div className="p-1.5 bg-green-100 rounded-lg">
@@ -267,14 +270,14 @@ function PendingSalesContent() {
                           <span className="text-sm font-medium">{sale.agency?.name || "-"}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm">
-                        {sale.items[0]?.product?.name || "-"}
+                      <td className="px-4 py-3 text-sm font-medium">
+                        {totalQty}
                       </td>
-                      <td className="px-4 py-3 text-sm">
-                        <span className="font-mono">{sale.items[0]?.batch?.batchNo || "-"}</span>
+                      <td className="px-4 py-3 text-sm font-medium">
+                        {formatCurrency(totalPrice)}
                       </td>
-                      <td className="px-4 py-3 text-sm">
-                        {sale.items[0]?.quantity || 0} {sale.items[0]?.unit || "KG"}
+                      <td className="px-4 py-3 text-sm font-semibold text-green-600">
+                        {formatCurrency(totalWithGst)}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">
                         {formatDateTime(sale.createdAt)}
@@ -327,7 +330,8 @@ function PendingSalesContent() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -384,12 +388,40 @@ function PendingSalesContent() {
 
           <div className="bg-gray-50 rounded-lg p-4 space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Invoice:</span>
-              <span className="font-medium">{approveModal.sale?.invoiceNo}</span>
+              <span className="text-gray-500">Invoice No:</span>
+              <span className="font-mono font-medium">{approveModal.sale?.invoiceNo}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Quantity:</span>
-              <span className="font-medium">{approveModal.sale?.items[0]?.quantity} {approveModal.sale?.items[0]?.unit}</span>
+              <span className="text-gray-500">Client:</span>
+              <span className="font-medium">{approveModal.sale?.agency?.name || "-"}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Total Amount:</span>
+              <span className="font-medium">
+                {formatCurrency(
+                  (approveModal.sale?.items || []).reduce(
+                    (sum, item) =>
+                      sum + Number(item.quantity || 0) * Number(item.sellingPrice || 0),
+                    0
+                  )
+                )}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Total Amount (incl. GST):</span>
+              <span className="font-semibold text-green-600">
+                {formatCurrency(
+                  (approveModal.sale?.items || []).reduce((sum, item) => {
+                    const qty = Number(item.quantity || 0);
+                    const price = Number(item.sellingPrice || 0);
+                    const productGst = item.product?.applicableGST
+                      ? Number(item.product.applicableGST)
+                      : 0;
+                    const amount = qty * price;
+                    return sum + amount + (amount * productGst) / 100;
+                  }, 0)
+                )}
+              </span>
             </div>
           </div>
 
@@ -422,12 +454,40 @@ function PendingSalesContent() {
 
           <div className="bg-gray-50 rounded-lg p-4 space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Invoice:</span>
-              <span className="font-medium">{rejectModal.sale?.invoiceNo}</span>
+              <span className="text-gray-500">Invoice No:</span>
+              <span className="font-mono font-medium">{rejectModal.sale?.invoiceNo}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Quantity:</span>
-              <span className="font-medium">{rejectModal.sale?.items[0]?.quantity} {rejectModal.sale?.items[0]?.unit}</span>
+              <span className="text-gray-500">Client:</span>
+              <span className="font-medium">{rejectModal.sale?.agency?.name || "-"}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Total Amount:</span>
+              <span className="font-medium">
+                {formatCurrency(
+                  (rejectModal.sale?.items || []).reduce(
+                    (sum, item) =>
+                      sum + Number(item.quantity || 0) * Number(item.sellingPrice || 0),
+                    0
+                  )
+                )}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Total Amount (incl. GST):</span>
+              <span className="font-semibold text-green-600">
+                {formatCurrency(
+                  (rejectModal.sale?.items || []).reduce((sum, item) => {
+                    const qty = Number(item.quantity || 0);
+                    const price = Number(item.sellingPrice || 0);
+                    const productGst = item.product?.applicableGST
+                      ? Number(item.product.applicableGST)
+                      : 0;
+                    const amount = qty * price;
+                    return sum + amount + (amount * productGst) / 100;
+                  }, 0)
+                )}
+              </span>
             </div>
           </div>
 
@@ -451,7 +511,7 @@ function PendingSalesContent() {
 
       {/* View Sale Modal */}
       <Dialog open={viewModal.open} onOpenChange={(isOpen) => !isOpen && setViewModal({ open: false, sale: null })}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Eye className="h-5 w-5 text-blue-600" />
@@ -482,8 +542,15 @@ function PendingSalesContent() {
                     <p className="font-medium">{formatDateTime(viewModal.sale.createdAt!)}</p>
                   </div>
                   <div>
+                    <p className="text-xs text-gray-500 uppercase">Updated At</p>
+                    <p className="font-medium">{formatDateTime(viewModal.sale.updatedAt!)}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                  <div>
                     <p className="text-xs text-gray-500 uppercase">Branch</p>
                     <p className="font-medium">{viewModal.sale.branch?.name || "-"}</p>
+                    <p className="text-xs text-gray-400">{viewModal.sale.branch?.code || "-"}</p>
                   </div>
                 </div>
               </div>
@@ -496,6 +563,14 @@ function PendingSalesContent() {
                     <p className="font-medium">{viewModal.sale.agency?.name || "-"}</p>
                   </div>
                   <div>
+                    <p className="text-xs text-gray-500 uppercase">Type</p>
+                    <p className="font-medium">{viewModal.sale.agency?.type || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">GSTIN</p>
+                    <p className="font-mono text-sm">{viewModal.sale.agency?.gstin || "-"}</p>
+                  </div>
+                  <div>
                     <p className="text-xs text-gray-500 uppercase">Contact Person</p>
                     <p className="font-medium">{viewModal.sale.agency?.contactPerson || "-"}</p>
                   </div>
@@ -503,17 +578,22 @@ function PendingSalesContent() {
                     <p className="text-xs text-gray-500 uppercase">Mobile</p>
                     <p className="font-medium">{viewModal.sale.agency?.mobileNumber || "-"}</p>
                   </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Email</p>
+                    <p className="text-sm">{viewModal.sale.agency?.email || "-"}</p>
+                  </div>
                 </div>
               </div>
 
               <div className="border rounded-lg p-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">Items</h4>
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">Items ({viewModal.sale.items?.length || 0})</h4>
                 {viewModal.sale.items?.map((item, idx) => (
-                  <div key={idx} className="bg-gray-50 rounded-lg p-4">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div key={idx} className="bg-gray-50 rounded-lg p-4 mb-3 last:mb-0">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                       <div>
                         <p className="text-xs text-gray-500 uppercase">Product</p>
                         <p className="font-medium">{item.product?.name || "-"}</p>
+                        <p className="text-xs text-gray-500">{item.product?.sku || "-"}</p>
                       </div>
                       <div>
                         <p className="text-xs text-gray-500 uppercase">Batch No</p>
@@ -527,25 +607,101 @@ function PendingSalesContent() {
                         <p className="text-xs text-gray-500 uppercase">Selling Price</p>
                         <p className="font-medium">{formatCurrency(Number(item.sellingPrice) || 0)}</p>
                       </div>
-                    </div>
-                    <div className="mt-3 pt-3 border-t grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
-                        <p className="text-xs text-gray-500">HSN</p>
-                        <p className="text-sm">{item.product?.hsnNo || "-"}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Total Amount</p>
-                        <p className="font-semibold text-green-600">{formatCurrency(Number(item.quantity) * Number(item.sellingPrice))}</p>
+                        <p className="text-xs text-gray-500 uppercase">Taxable Amt</p>
+                        <p className="font-semibold text-gray-900">{formatCurrency(Number(item.quantity) * Number(item.sellingPrice))}</p>
                       </div>
                     </div>
+                    {item.product && (
+                      <div className="mt-3 pt-3 border-t grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <div>
+                          <p className="text-xs text-gray-500">HSN</p>
+                          <p className="text-sm">{item.product.hsnNo || "-"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">GST %</p>
+                          <p className="text-sm font-medium">{item.product.applicableGST || "-"}%</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">GST Amount</p>
+                          <p className="text-sm font-medium text-blue-600">
+                            {formatCurrency(
+                              (Number(item.quantity) * Number(item.sellingPrice) *
+                                Number(item.product.applicableGST || 0)) /
+                                100
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Density</p>
+                          <p className="text-sm">{item.product.density || "-"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Total w/ GST</p>
+                          <p className="font-semibold text-green-600">
+                            {formatCurrency(
+                              Number(item.quantity) * Number(item.sellingPrice) *
+                                (1 + Number(item.product.applicableGST || 0) / 100)
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
 
-              <div className="border rounded-lg p-4">
-                <h4 className="text-xs text-gray-500 uppercase mb-2">Created By</h4>
-                <p className="font-medium">{viewModal.sale.createdBy?.name || "-"}</p>
-                <p className="text-sm text-gray-500">{viewModal.sale.createdBy?.email || "-"}</p>
+              <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-4 border border-green-200">
+                <h4 className="text-sm font-semibold text-gray-900 mb-4">Invoice Summary</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-white rounded-lg p-3">
+                    <p className="text-xs text-gray-500 uppercase mb-1">Subtotal Amount</p>
+                    <p className="text-lg font-semibold text-gray-900">
+                      {formatCurrency(
+                        viewModal.sale.items.reduce(
+                          (sum, item) =>
+                            sum + Number(item.quantity || 0) * Number(item.sellingPrice || 0),
+                          0
+                        )
+                      )}
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3">
+                    <p className="text-xs text-gray-500 uppercase mb-1">Total GST</p>
+                    <p className="text-lg font-semibold text-blue-600">
+                      {formatCurrency(
+                        viewModal.sale.items.reduce((sum, item) => {
+                          const amount = Number(item.quantity || 0) * Number(item.sellingPrice || 0);
+                          const gst = Number(item.product?.applicableGST || 0);
+                          return sum + (amount * gst) / 100;
+                        }, 0)
+                      )}
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3">
+                    <p className="text-xs text-gray-500 uppercase mb-1">Grand Total</p>
+                    <p className="text-lg font-semibold text-green-600">
+                      {formatCurrency(
+                        viewModal.sale.items.reduce((sum, item) => {
+                          const amount = Number(item.quantity || 0) * Number(item.sellingPrice || 0);
+                          const gst = Number(item.product?.applicableGST || 0);
+                          return sum + amount + (amount * gst) / 100;
+                        }, 0)
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="border rounded-lg p-4">
+                  <h4 className="text-xs text-gray-500 uppercase mb-2">Created By</h4>
+                  <p className="font-medium">{viewModal.sale.createdBy?.name || "-"}</p>
+                  <p className="text-sm text-gray-500">{viewModal.sale.createdBy?.email || "-"}</p>
+                  {viewModal.sale.createdAt && (
+                    <p className="text-xs text-gray-400 mt-1">{formatDateTime(viewModal.sale.createdAt!)}</p>
+                  )}
+                </div>
               </div>
 
               {viewModal.sale.remarks && (
@@ -572,12 +728,15 @@ function PendingSalesContent() {
         </DialogContent>
       </Dialog>
 
-      {/* PDF Preview Modal (PENDING sales) */}
+      {/* PDF Preview Modal (PENDING sales) — view-only, no download */}
       <Dialog
         open={pdfPreview.open}
         onOpenChange={(isOpen) => !isOpen && closePdfPreview()}
       >
-        <DialogContent className="max-w-5xl w-[95vw] h-[90vh] flex flex-col p-0">
+        <DialogContent
+          className="max-w-5xl w-[95vw] h-[90vh] flex flex-col p-0"
+          onContextMenu={(e) => e.preventDefault()}
+        >
           <DialogHeader className="px-6 py-4 border-b">
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-amber-600" />
@@ -587,16 +746,34 @@ function PendingSalesContent() {
                   {pdfPreview.saleId}
                 </span>
               )}
+              <span className="ml-auto text-[11px] font-normal text-gray-500 bg-gray-100 border border-gray-200 rounded-full px-2 py-0.5">
+                Preview only — download disabled
+              </span>
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex-1 bg-gray-100">
+          <div className="flex-1 bg-gray-100 relative">
             {pdfPreview.objectUrl ? (
-              <iframe
-                src={pdfPreview.objectUrl}
-                title="Invoice PDF preview"
-                className="w-full h-full"
-              />
+              <>
+                <iframe
+                  src={`${pdfPreview.objectUrl}#toolbar=0&navpanes=0&scrollbar=1`}
+                  title="Invoice PDF preview"
+                  className="w-full h-full relative z-10"
+                  onContextMenu={(e) => e.preventDefault()}
+                  style={{
+                    userSelect: "none",
+                    WebkitUserSelect: "none",
+                  }}
+                />
+                <div
+                  className="absolute left-0 right-0 bottom-0 h-10 z-20 bg-gray-100"
+                  onContextMenu={(e) => e.preventDefault()}
+                  onMouseDown={(e) => {
+                    if (e.button === 2) e.preventDefault();
+                  }}
+                  title="Toolbar disabled"
+                />
+              </>
             ) : (
               <div className="flex items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600" />
@@ -605,15 +782,6 @@ function PendingSalesContent() {
           </div>
 
           <div className="flex justify-end gap-2 px-6 py-4 border-t">
-            <Button
-              variant="outline"
-              onClick={handleDownloadFromPreview}
-              loading={pdfActionLoading}
-              className="gap-2 text-green-600 border-green-200 hover:bg-green-50"
-            >
-              <Download className="h-4 w-4" />
-              Download
-            </Button>
             <Button variant="outline" onClick={closePdfPreview}>Close</Button>
           </div>
         </DialogContent>

@@ -21,7 +21,7 @@ import { Purchase } from "@/app/types/purchase";
 import { Sales } from "@/app/types/sales";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { hasModulePermission } from "@/lib/usePermissions";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 const statusColors: Record<string, { bg: string; text: string }> = {
   PENDING: { bg: "bg-amber-100", text: "text-amber-700" },
@@ -36,6 +36,35 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function PurchaseSalesPage() {
+  // `useSearchParams` requires a Suspense boundary during static rendering.
+  return (
+    <React.Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <PurchaseSalesContent />
+    </React.Suspense>
+  );
+}
+
+function PurchaseSalesContent() {
+  // Allow other pages (e.g. pending-sales, new-sale) to land back on a
+  // specific tab via ?tab=sale. Defaults to "purchase" otherwise.
+  const searchParams = useSearchParams();
+  const tabFromUrl = searchParams?.get("tab");
+  const defaultTab = tabFromUrl === "sale" || tabFromUrl === "sales" ? "sales" : "purchase";
+  const router = useRouter();
+
+  const handleTabChange = (value: string) => {
+    // Reflect the active tab in the URL so back-navigation / refresh
+    // preserve the user's selection.
+    const params = new URLSearchParams(Array.from(searchParams?.entries() ?? []));
+    if (value === "purchase") {
+      params.delete("tab");
+    } else {
+      params.set("tab", value);
+    }
+    const query = params.toString();
+    router.replace(query ? `/purchase-sales?${query}` : "/purchase-sales", { scroll: false });
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mb-6">
@@ -45,7 +74,7 @@ export default function PurchaseSalesPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="purchase" className="w-full">
+      <Tabs value={defaultTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-2 max-w-md mb-6 bg-gray-100">
           <TabsTrigger value="purchase" className="flex items-center gap-2">
             <ShoppingCart className="h-4 w-4" />
@@ -318,7 +347,7 @@ function PurchaseTab() {
 
       {/* View Purchase Modal */}
       <Dialog open={viewModal.open} onOpenChange={(isOpen) => !isOpen && setViewModal({ open: false, purchase: null })}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Eye className="h-5 w-5 text-blue-600" />
@@ -925,7 +954,7 @@ function SalesTab() {
 
               {viewModal.sale.branch && (
                 <div className="border rounded-lg p-4">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Branch Details</h4>
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Company Details</h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <div>
                       <p className="text-xs text-gray-500 uppercase">Name</p>

@@ -10,17 +10,19 @@ export interface CreateSalesPayload {
     batchId: string;
     quantity: number;
     unit: "KG" | "LTR";
+    unitPrice?: number;
   }[];
   remarks?: string;
   deliveryNote:string;
   suppliersRef: string;
-  otherReference:string; 
+  otherReference:string;
   buyerOrderNo: string;
   buyerOrderDate: string,
   despatchDocNo: string,
   despatchDocDate: string,
   despatchThrough: string,
   destination: string,
+  invoiceDate?: string,
 }
 
 export interface ApproveSalesPayload {
