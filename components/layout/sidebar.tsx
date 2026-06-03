@@ -72,18 +72,32 @@ export function SidebarWrapper({ children }: { children: React.ReactNode }) {
   const dispatch = useAppDispatch();
   const { user, permissions } = useAppSelector((state) => state.auth);
 
-  // Fetch profile and user access on mount
+  // Fetch profile and user access on mount, but only after the user has
+  // successfully logged in. Skipping the call when there is no user keeps
+  // the auth slice's `isLoading` flag at false, so the login form's
+  // "Sign in" button is not disabled by a stale profile fetch on first paint.
   React.useEffect(() => {
-    if (!user) {
-      dispatch(getProfile()).then((action) => {
-        if (getProfile.fulfilled.match(action) && action.payload.profile?.id) {
-          dispatch(fetchUserAccess(action.payload.profile.id));
-        }
-      });
-    } else if (permissions.length === 0 && user.id) {
-      dispatch(fetchUserAccess(user.id));
+    if (noSidebarPaths.includes(pathname)) return;
+    if (user) {
+      if (permissions.length === 0 && user.id) {
+        dispatch(fetchUserAccess(user.id));
+      }
     }
-  }, [dispatch, user, permissions.length]);
+  }, [dispatch, pathname, user, permissions.length]);
+
+  // On a hard refresh the Redux store is wiped, so `user` is null. The
+  // login page already gates the form on `isLoading`, so we only want to
+  // hydrate the session when we're not on the login page. This restores
+  // permissions for users who refresh while logged in.
+  React.useEffect(() => {
+    if (noSidebarPaths.includes(pathname)) return;
+    if (user) return;
+    dispatch(getProfile()).then((action) => {
+      if (getProfile.fulfilled.match(action) && action.payload.profile?.id) {
+        dispatch(fetchUserAccess(action.payload.profile.id));
+      }
+    });
+  }, [dispatch, pathname, user]);
 
   // Don't show sidebar on login and home pages
   if (noSidebarPaths.includes(pathname)) {

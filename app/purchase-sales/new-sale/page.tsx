@@ -54,6 +54,7 @@ export default function NewSalePage() {
     despatchDocDate: "",
     despatchThrough: "",
     destination: "",
+    invoiceDate: "",
   });
 
   const [items, setItems] = React.useState<SaleItem[]>([
@@ -212,6 +213,7 @@ export default function NewSalePage() {
             batchId: item.batchId,
             quantity: item.quantity,
             unit: item.unit,
+            unitPrice: item.sellPrice,
           })),
           remarks: formData.remarks,
           deliveryNote: formData.deliveryNote,
@@ -223,11 +225,12 @@ export default function NewSalePage() {
           despatchDocDate: formData.despatchDocDate,
           despatchThrough: formData.despatchThrough,
           destination: formData.destination,
+          invoiceDate: formData.invoiceDate,
         })
       ).unwrap();
 
       addToast("Sales invoice created successfully", "success");
-      router.push("/purchase-sales");
+      router.push("/purchase-sales?tab=sale");
     } catch (err: any) {
       addToast(err || "Failed to create sales invoice", "error");
     } finally {
@@ -278,7 +281,7 @@ export default function NewSalePage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Header Section */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="branch">Branch *</Label>
                 <select
@@ -309,6 +312,15 @@ export default function NewSalePage() {
                   ))}
                 </select>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="invoiceDate">Invoice Date</Label>
+                <Input
+                  id="invoiceDate"
+                  type="date"
+                  value={formData.invoiceDate}
+                  onChange={(e) => setFormData({ ...formData, invoiceDate: e.target.value })}
+                />
+              </div>
             </div>
 
             {/* Sales Items Section */}
@@ -333,7 +345,7 @@ export default function NewSalePage() {
                   <thead className="bg-gray-100 border-b">
                     <tr>
                       <th className="px-4 py-3 text-left font-semibold">Product</th>
-                      <th className="px-4 py-3 text-left font-semibold">Batch</th>
+                      <th className="px-4 py-3 text-left font-semibold min-w-[220px]">Batch (Available Qty)</th>
                       <th className="px-4 py-3 text-right font-semibold">Qty</th>
                       <th className="px-4 py-3 text-left font-semibold">Unit</th>
                       <th className="px-4 py-3 text-right font-semibold">Price</th>
@@ -367,20 +379,32 @@ export default function NewSalePage() {
                               ))}
                             </select>
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3 min-w-[220px]">
                             <select
                               value={item.batchId}
                               onChange={(e) => handleItemChange(item.id, "batchId", e.target.value)}
-                              className="w-full border border-gray-200 rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                              className="w-full border border-gray-200 rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500 min-w-[200px]"
                               disabled={!item.productId || !formData.branchId || loadingBatches[item.id]}
                               required
                             >
                               <option value="">Select Batch</option>
-                              {(availableBatches[item.id] || []).map((batch) => (
-                                <option key={batch.id} value={batch.id}>
-                                  {batch.batchNo}
-                                </option>
-                              ))}
+                              {(availableBatches[item.id] || []).map((batch) => {
+                                const qtyKG = Number(batch.availableQtyKG || 0);
+                                const qtyLTR = Number(batch.availableQtyLTR || 0);
+                                const qtyText =
+                                  qtyKG > 0 && qtyLTR > 0
+                                    ? `${qtyKG} KG / ${qtyLTR} LTR`
+                                    : qtyKG > 0
+                                    ? `${qtyKG} KG`
+                                    : qtyLTR > 0
+                                    ? `${qtyLTR} LTR`
+                                    : "0";
+                                return (
+                                  <option key={batch.id} value={batch.id}>
+                                    {batch.batchNo} — Avl: {qtyText}
+                                  </option>
+                                );
+                              })}
                             </select>
                           </td>
                           <td className="px-4 py-3">
@@ -405,8 +429,18 @@ export default function NewSalePage() {
                               <option value="LTR">LTR</option>
                             </select>
                           </td>
-                          <td className="px-4 py-3 text-right font-semibold text-nowrap">
-                            ₹ {item.sellPrice.toFixed(2)}
+                          <td className="px-4 py-3 text-right text-nowrap">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.sellPrice || ""}
+                              onChange={(e) =>
+                                handleItemChange(item.id, "sellPrice", parseFloat(e.target.value) || 0)
+                              }
+                              className="text-sm text-right w-28"
+                              title="Default is the product's sell price; override as needed"
+                            />
                           </td>
                           <td className="px-4 py-3 text-right font-semibold text-nowrap">
                             ₹ {amount.toFixed(2)}
