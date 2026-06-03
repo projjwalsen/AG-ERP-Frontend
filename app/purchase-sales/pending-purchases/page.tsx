@@ -191,7 +191,6 @@ function PendingPurchasesContent() {
                   <tr className="border-b border-gray-100 bg-gray-50">
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Invoice No</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Agency</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total Qty</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total Price</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total (incl. GST)</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Created At</th>
@@ -200,10 +199,6 @@ function PendingPurchasesContent() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {pendingPurchases.map((purchase) => {
-                    const totalQty = purchase.items.reduce(
-                      (sum, item) => sum + Number(item.quantity || 0),
-                      0
-                    );
                     const totalPrice = purchase.items.reduce(
                       (sum, item) =>
                         sum + Number(item.quantity || 0) * Number(item.purchasePrice || 0),
@@ -228,9 +223,6 @@ function PendingPurchasesContent() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm font-medium">{purchase.agency?.name || "-"}</span>
-                      </td>
-                      <td className="px-4 py-3 text-sm font-medium">
-                        {totalQty}
                       </td>
                       <td className="px-4 py-3 text-sm font-medium">
                         {formatCurrency(totalPrice)}

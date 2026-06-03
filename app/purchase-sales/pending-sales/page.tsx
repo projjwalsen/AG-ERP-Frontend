@@ -230,7 +230,6 @@ function PendingSalesContent() {
                   <tr className="border-b border-gray-100 bg-gray-50">
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Invoice No</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Client</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total Qty</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total Price</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total (incl. GST)</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Created At</th>
@@ -239,10 +238,6 @@ function PendingSalesContent() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {pendingSales.map((sale) => {
-                    const totalQty = sale.items.reduce(
-                      (sum, item) => sum + Number(item.quantity || 0),
-                      0
-                    );
                     const totalPrice = sale.items.reduce(
                       (sum, item) =>
                         sum + Number(item.quantity || 0) * Number(item.sellingPrice || 0),
@@ -269,9 +264,6 @@ function PendingSalesContent() {
                           </div>
                           <span className="text-sm font-medium">{sale.agency?.name || "-"}</span>
                         </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm font-medium">
-                        {totalQty}
                       </td>
                       <td className="px-4 py-3 text-sm font-medium">
                         {formatCurrency(totalPrice)}

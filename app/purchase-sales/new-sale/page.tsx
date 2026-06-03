@@ -41,6 +41,17 @@ export default function NewSalePage() {
   const [loadingBatches, setLoadingBatches] = React.useState<{ [key: string]: boolean }>({});
   const [loading, setLoading] = React.useState(false);
 
+  // Build "today" in the local timezone as YYYY-MM-DD (the value expected
+  // by <input type="date">). `new Date().toISOString().slice(0, 10)` would
+  // produce UTC, which can be off by a day in non-UTC zones.
+  const todayLocalDate = (): string => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   const [formData, setFormData] = React.useState({
     agencyId: "",
     branchId: "",
@@ -54,7 +65,7 @@ export default function NewSalePage() {
     despatchDocDate: "",
     despatchThrough: "",
     destination: "",
-    invoiceDate: "",
+    invoiceDate: todayLocalDate(),
   });
 
   const [items, setItems] = React.useState<SaleItem[]>([
@@ -196,6 +207,11 @@ export default function NewSalePage() {
       return;
     }
 
+    if (!formData.invoiceDate) {
+      addToast("Please select an invoice date", "error");
+      return;
+    }
+
     const validItems = items.filter((item) => item.productId && item.batchId && item.quantity);
     if (validItems.length === 0) {
       addToast("Please add at least one valid product item", "error");
@@ -313,12 +329,13 @@ export default function NewSalePage() {
                 </select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="invoiceDate">Invoice Date</Label>
+                <Label htmlFor="invoiceDate">Invoice Date *</Label>
                 <Input
                   id="invoiceDate"
                   type="date"
                   value={formData.invoiceDate}
                   onChange={(e) => setFormData({ ...formData, invoiceDate: e.target.value })}
+                  required
                 />
               </div>
             </div>
