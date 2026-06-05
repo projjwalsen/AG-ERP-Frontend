@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { statusColors, statusLabels, TransactionStatus } from "../types/transaction";
+import { statusColors, statusLabels, TransactionStatus } from "@/app/types/transaction";
 
 interface StatusBadgeProps {
   status: TransactionStatus;

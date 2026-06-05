@@ -1,84 +1,134 @@
-// Transaction API Service
+// Transaction API Service — matches AG-ERP-Backend/src/modules/transaction
 import { apiFetch } from "./api";
-import { Transaction, TransactionsListResponse, TransactionResponse } from "../types/transaction";
+import {
+  Transaction,
+  TransactionsListResponse,
+  TransactionResponse,
+  AgencyOutstanding,
+  TransactionDirection,
+  GetTransactionsParams,
+  CreateTransactionPayload,
+  UpdateTransactionPayload,
+} from "@/app/types/transaction";
 
-export interface GetTransactionsParams {
-  page?: number;
-  limit?: number;
-  search?: string;
-  type?: "RECEIVE" | "RELEASE";
-  status?: "PENDING" | "APPROVED" | "REJECTED";
-  paymentMode?: "CASH" | "CHEQUE" | "ONLINE";
+export interface GetOutstandingParams {
   agencyId?: string;
   branchId?: string;
-  startDate?: string;
-  endDate?: string;
-}
-
-export interface CreateTransactionPayload {
-  type: "RECEIVE" | "RELEASE";
-  agencyId: string;
-  amount: number;
-  paymentMode: "CASH" | "CHEQUE" | "ONLINE";
-  chequeNumber?: string;
-  bankName?: string;
-  chequeDate?: string;
-  transactionId?: string;
-  remarks?: string;
-  branchId?: string;
-}
-
-export interface ApproveTransactionPayload {
-  transactionId: string;
-  remarks?: string;
-}
-
-export interface RejectTransactionPayload {
-  transactionId: string;
-  rejectionReason: string;
+  direction?: TransactionDirection;
 }
 
 export const transactionApi = {
-  async getAll(params?: GetTransactionsParams): Promise<{ success: boolean; message: string; data?: TransactionsListResponse }> {
+  /**
+   * GET /api/transactions/all
+   * Returns { success, message, data: { data: Transaction[], meta } }
+   */
+  async getAll(
+    params?: GetTransactionsParams
+  ): Promise<{
+    success: boolean;
+    message: string;
+    data?: TransactionsListResponse;
+  }> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append("page", String(params.page));
     if (params?.limit) queryParams.append("limit", String(params.limit));
     if (params?.search) queryParams.append("search", params.search);
-    if (params?.type) queryParams.append("type", params.type);
-    if (params?.status) queryParams.append("status", params.status);
-    if (params?.paymentMode) queryParams.append("paymentMode", params.paymentMode);
-    if (params?.agencyId) queryParams.append("agencyId", params.agencyId);
     if (params?.branchId) queryParams.append("branchId", params.branchId);
-    if (params?.startDate) queryParams.append("startDate", params.startDate);
-    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    if (params?.agencyId) queryParams.append("agencyId", params.agencyId);
+    if (params?.status) queryParams.append("status", params.status);
+    if (params?.direction) queryParams.append("direction", params.direction);
+    if (params?.paymentType) queryParams.append("paymentType", params.paymentType);
+    if (params?.suspenseAccount !== undefined) {
+      queryParams.append("suspenseAccount", String(params.suspenseAccount));
+    }
 
     const query = queryParams.toString();
     const url = query ? `api/transactions/all?${query}` : "api/transactions/all";
     return apiFetch<TransactionsListResponse>(url);
   },
 
-  async getById(transactionId: string): Promise<{ success: boolean; message: string; data?: TransactionResponse }> {
+  /**
+   * GET /api/transactions/:transactionId
+   * Returns { success, message, data: Transaction }
+   */
+  async getById(
+    transactionId: string
+  ): Promise<{ success: boolean; message: string; data?: TransactionResponse }> {
     return apiFetch<TransactionResponse>(`api/transactions/${transactionId}`);
   },
 
-  async create(payload: CreateTransactionPayload): Promise<{ success: boolean; message: string; data?: TransactionResponse }> {
+  /**
+   * POST /api/transactions/create
+   * Returns { success, message, data: Transaction }
+   */
+  async create(
+    payload: CreateTransactionPayload
+  ): Promise<{ success: boolean; message: string; data?: TransactionResponse }> {
     return apiFetch<TransactionResponse>("api/transactions/create", {
       method: "POST",
       body: payload,
     });
   },
 
-  async approve(payload: ApproveTransactionPayload): Promise<{ success: boolean; message: string; data?: TransactionResponse }> {
-    return apiFetch<TransactionResponse>(`api/transactions/approve/${payload.transactionId}`, {
-      method: "POST",
-      body: { remarks: payload.remarks },
-    });
+  /**
+   * PATCH /api/transactions/update/:transactionId
+   * Returns { success, message, data: Transaction }
+   */
+  async update(
+    transactionId: string,
+    payload: UpdateTransactionPayload
+  ): Promise<{ success: boolean; message: string; data?: TransactionResponse }> {
+    return apiFetch<TransactionResponse>(
+      `api/transactions/update/${transactionId}`,
+      { method: "PATCH", body: payload }
+    );
   },
 
-  async reject(payload: RejectTransactionPayload): Promise<{ success: boolean; message: string; data?: TransactionResponse }> {
-    return apiFetch<TransactionResponse>(`api/transactions/reject/${payload.transactionId}`, {
-      method: "POST",
-      body: { rejectionReason: payload.rejectionReason },
-    });
+  /**
+   * PATCH /api/transactions/:transactionId/approve
+   * Returns { success, message, data: Transaction }
+   */
+  async approve(
+    transactionId: string
+  ): Promise<{ success: boolean; message: string; data?: TransactionResponse }> {
+    return apiFetch<TransactionResponse>(
+      `api/transactions/${transactionId}/approve`,
+      { method: "PATCH" }
+    );
+  },
+
+  /**
+   * PATCH /api/transactions/:transactionId/reject
+   * Body: { remarks: string }
+   * Returns { success, message, data: Transaction }
+   */
+  async reject(
+    payload: { transactionId: string; remarks: string }
+  ): Promise<{ success: boolean; message: string; data?: TransactionResponse }> {
+    return apiFetch<TransactionResponse>(
+      `api/transactions/${payload.transactionId}/reject`,
+      { method: "PATCH", body: { remarks: payload.remarks } }
+    );
+  },
+
+  /**
+   * GET /api/transactions/outstanding?agencyId=...&branchId=...&direction=...
+   * Returns { success, message, data: AgencyOutstanding }
+   */
+  async getOutstanding(
+    params: GetOutstandingParams
+  ): Promise<{ success: boolean; message: string; data?: AgencyOutstanding }> {
+    const queryParams = new URLSearchParams();
+    if (params.agencyId) queryParams.append("agencyId", params.agencyId);
+    if (params.branchId) queryParams.append("branchId", params.branchId);
+    if (params.direction) queryParams.append("direction", params.direction);
+    const query = queryParams.toString();
+    const url = query
+      ? `api/transactions/outstanding?${query}`
+      : "api/transactions/outstanding";
+    return apiFetch<AgencyOutstanding>(url);
   },
 };
+
+// Re-export the type so service consumers can import everything from one place.
+export type { Transaction };

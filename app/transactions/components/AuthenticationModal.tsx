@@ -12,23 +12,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   ShieldCheck,
-  FileText,
   Banknote,
   Wallet,
   Building2,
   User as UserIcon,
 } from "lucide-react";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
-import { Agency, Branch, Invoice, Transaction } from "../types/transaction";
+import { Transaction } from "@/app/types/transaction";
 import { StatusBadge } from "./StatusBadge";
 
 interface AuthenticationModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   transaction: Transaction | null;
-  agency?: Agency | null;
-  invoice?: Invoice | null;
-  branch?: Branch | null;
   onConfirm: () => void;
   loading?: boolean;
 }
@@ -37,9 +33,6 @@ export function AuthenticationModal({
   open,
   onOpenChange,
   transaction,
-  agency,
-  invoice,
-  branch,
   onConfirm,
   loading,
 }: AuthenticationModalProps) {
@@ -51,8 +44,8 @@ export function AuthenticationModal({
 
   if (!transaction) return null;
 
-  const PaymentIcon = transaction.payment.mode === "ONLINE" ? Banknote : Wallet;
-  const paymentLabel = transaction.payment.mode === "ONLINE" ? "Online" : "Offline Cash";
+  const PaymentIcon = transaction.paymentMode === "ONLINE" ? Banknote : Wallet;
+  const paymentLabel = transaction.paymentMode === "ONLINE" ? "Online" : "Offline";
 
   return (
     <>
@@ -63,7 +56,7 @@ export function AuthenticationModal({
               <ShieldCheck className="h-5 w-5 text-green-600" />
               Authenticate Voucher
               <span className="font-mono text-xs text-gray-500">
-                {transaction.voucherNo}
+                {transaction.transactionNo}
               </span>
             </DialogTitle>
           </DialogHeader>
@@ -73,26 +66,36 @@ export function AuthenticationModal({
             <Card>
               <div className="p-4 border-b border-gray-100 flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-500 uppercase">Transaction Summary</p>
+                  <p className="text-xs text-gray-500 uppercase">
+                    Transaction Summary
+                  </p>
                   <p className="font-mono font-semibold text-gray-900">
-                    {transaction.voucherNo}
+                    {transaction.transactionNo}
                   </p>
                 </div>
                 <StatusBadge status={transaction.status} />
               </div>
               <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <p className="text-xs text-gray-500 uppercase">Date</p>
-                  <p className="font-medium text-sm">{formatDate(transaction.voucherDate)}</p>
+                  <p className="text-xs text-gray-500 uppercase">Created At</p>
+                  <p className="font-medium text-sm">
+                    {formatDateTime(transaction.createdAt)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Type</p>
-                  <p className="font-medium text-sm">{transaction.type}</p>
+                  <p className="font-medium text-sm">
+                    {transaction.direction}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Branch</p>
-                  <p className="font-medium text-sm">{branch?.name || "-"}</p>
-                  <p className="text-[11px] text-gray-400">{branch?.code || "-"}</p>
+                  <p className="font-medium text-sm">
+                    {transaction.branch?.name || "-"}
+                  </p>
+                  <p className="text-[11px] text-gray-400">
+                    {transaction.branch?.code || "-"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Amount</p>
@@ -103,47 +106,13 @@ export function AuthenticationModal({
               </CardContent>
             </Card>
 
-            {/* Invoice Details */}
-            {invoice && (
-              <Card>
-                <div className="p-4 border-b border-gray-100 flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-blue-600" />
-                  <p className="text-sm font-semibold text-gray-900">Invoice Details</p>
-                </div>
-                <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase">Invoice No</p>
-                    <p className="font-mono font-medium text-sm">{invoice.invoiceNo}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase">Total</p>
-                    <p className="font-medium text-sm">{formatCurrency(invoice.totalAmount)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase">Paid</p>
-                    <p className="font-medium text-sm text-green-600">
-                      {formatCurrency(invoice.paidAmount)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase">Outstanding</p>
-                    <p
-                      className={`font-medium text-sm ${
-                        invoice.outstandingAmount > 0 ? "text-red-600" : "text-green-600"
-                      }`}
-                    >
-                      {formatCurrency(invoice.outstandingAmount)}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
             {/* Payment Details */}
             <Card>
               <div className="p-4 border-b border-gray-100 flex items-center gap-2">
                 <PaymentIcon className="h-4 w-4 text-blue-600" />
-                <p className="text-sm font-semibold text-gray-900">Payment Details</p>
+                <p className="text-sm font-semibold text-gray-900">
+                  Payment Details
+                </p>
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
                   {paymentLabel}
                 </span>
@@ -151,32 +120,39 @@ export function AuthenticationModal({
               <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Amount</p>
-                  <p className="font-semibold text-sm">{formatCurrency(transaction.payment.amount)}</p>
+                  <p className="font-semibold text-sm">
+                    {formatCurrency(transaction.amount)}
+                  </p>
                 </div>
-                {transaction.payment.utr && (
+                {transaction.transactionRefNo && (
                   <div>
-                    <p className="text-xs text-gray-500 uppercase">UTR</p>
-                    <p className="font-mono text-sm">{transaction.payment.utr}</p>
+                    <p className="text-xs text-gray-500 uppercase">
+                      Transaction Reference
+                    </p>
+                    <p className="font-mono text-sm">
+                      {transaction.transactionRefNo}
+                    </p>
                   </div>
                 )}
-                {transaction.payment.transactionId && (
+                {transaction.thirdPartyAgencyId && (
                   <div>
-                    <p className="text-xs text-gray-500 uppercase">Transaction ID</p>
-                    <p className="font-mono text-sm">{transaction.payment.transactionId}</p>
+                    <p className="text-xs text-gray-500 uppercase">
+                      3rd Party Agency
+                    </p>
+                    <p className="font-medium text-sm">
+                      {transaction.thirdPartyAgency?.name ||
+                        transaction.thirdPartyAgencyId}
+                    </p>
                   </div>
                 )}
-                {transaction.payment.secondaryAgencyId && (
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase">Secondary Agency</p>
-                    <p className="font-medium text-sm">{transaction.payment.secondaryAgencyId}</p>
-                  </div>
-                )}
-                {transaction.payment.remarks && (
-                  <div className="md:col-span-4">
-                    <p className="text-xs text-gray-500 uppercase">Payment Remarks</p>
-                    <p className="text-sm">{transaction.payment.remarks}</p>
-                  </div>
-                )}
+                <div>
+                  <p className="text-xs text-gray-500 uppercase">
+                    Payment Type
+                  </p>
+                  <p className="font-medium text-sm">
+                    {transaction.paymentType}
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
@@ -189,18 +165,22 @@ export function AuthenticationModal({
               <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Created By</p>
-                  <p className="font-medium text-sm">{transaction.createdByName}</p>
+                  <p className="font-medium text-sm">
+                    {transaction.createdBy?.name || "-"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Created At</p>
-                  <p className="font-medium text-sm">{formatDateTime(transaction.createdAt)}</p>
+                  <p className="font-medium text-sm">
+                    {formatDateTime(transaction.createdAt)}
+                  </p>
                 </div>
-                {agency && (
+                {transaction.agency && (
                   <div>
                     <p className="text-xs text-gray-500 uppercase">Agency</p>
                     <p className="font-medium text-sm flex items-center gap-1">
                       <Building2 className="h-3.5 w-3.5 text-gray-400" />
-                      {agency.name}
+                      {transaction.agency.name}
                     </p>
                   </div>
                 )}
@@ -209,7 +189,9 @@ export function AuthenticationModal({
 
             {transaction.remarks && (
               <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                <p className="text-xs text-gray-500 uppercase mb-1">Voucher Remarks</p>
+                <p className="text-xs text-gray-500 uppercase mb-1">
+                  Voucher Remarks
+                </p>
                 <p className="text-sm">{transaction.remarks}</p>
               </div>
             )}
@@ -243,8 +225,13 @@ export function AuthenticationModal({
             Are you sure you want to authenticate this voucher?
           </p>
           <p className="text-xs text-gray-500">
-            Once authenticated, the voucher <span className="font-mono font-semibold">{transaction.voucherNo}</span>{" "}
-            will move to <span className="font-semibold">AUTHENTICATED</span> and be locked from further edits.
+            Once authenticated, the voucher{" "}
+            <span className="font-mono font-semibold">
+              {transaction.transactionNo}
+            </span>{" "}
+            will move to{" "}
+            <span className="font-semibold">APPROVED</span> and be locked from
+            further edits.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>

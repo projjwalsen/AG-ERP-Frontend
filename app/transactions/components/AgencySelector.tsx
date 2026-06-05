@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Building2, Phone, Mail, FileBadge } from "lucide-react";
-import { Agency } from "../types/transaction";
+import { Agency } from "@/app/types/transaction";
 
 interface AgencySelectorProps {
   agencies: Agency[];

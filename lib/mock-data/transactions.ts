@@ -4,8 +4,7 @@ import type {
   Invoice,
   Transaction,
   User,
-  TransactionStatus,
-} from "@/app/transactions/types/transaction";
+} from "@/app/transactions/types/mock";
 
 // =================== BRANCHES ===================
 export const mockBranches: Branch[] = [

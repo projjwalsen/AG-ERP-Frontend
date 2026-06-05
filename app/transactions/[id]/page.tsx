@@ -13,10 +13,8 @@ import {
   Clock,
   Download,
   Edit,
-  FileText,
   IndianRupee,
   Mail,
-  MapPin,
   Phone,
   Printer,
   ShieldCheck,
@@ -28,22 +26,23 @@ import {
   XCircle,
   Receipt,
   Globe,
+  Users,
+  Lock,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout";
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
+import { useToast, ToastContainer } from "@/components/ui/toast";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { hasModulePermission } from "@/lib/usePermissions";
+import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import {
-  mockTransactions,
-  mockAgencies,
-  mockBranches,
-  mockInvoices,
-  mockUsers,
-  getMockTransactionById,
-} from "@/lib/mock-data/transactions";
+  fetchTransactionById,
+} from "@/app/store/transactionsSlice";
 import { StatusBadge } from "../components/StatusBadge";
 import { TransactionTimeline } from "../components/TransactionTimeline";
+import { AuditLog, MockTransactionStatus } from "../types/mock";
 
 // ============== INFO ROW ==============
 function InfoRow({
@@ -129,18 +128,80 @@ function SectionCard({
 export default function TransactionDetailsPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [loading, setLoading] = React.useState<boolean>(true);
-  const [txn, setTxn] = React.useState(getMockTransactionById(params.id) || null);
+  const dispatch = useAppDispatch();
+  const { addToast } = useToast();
+
+  const txn = useAppSelector((s) => s.transactions.currentTransaction);
+  const isLoading = useAppSelector((s) => s.transactions.isLoading);
+  const error = useAppSelector((s) => s.transactions.error);
+  const permissions = useAppSelector((s) => s.auth.permissions);
+
+  const canView = hasModulePermission(permissions, "TRANSACTION", "VIEW");
+  const canWrite = hasModulePermission(permissions, "TRANSACTION", "WRITE");
+  const canApprove = hasModulePermission(
+    permissions,
+    "TRANSACTION",
+    "APPROVE"
+  );
+
+  // Fetch the transaction whenever the id (or view permission) changes.
+  // The `state.transactions.currentTransaction` slot is naturally overwritten
+  // by every new fetch, so we don't need an unmount-cleanup effect — and
+  // adding one risks it running under React 18 strict mode between the
+  // fetch dispatch and its resolution, wiping the row that just arrived.
+  React.useEffect(() => {
+    if (!canView) return;
+    dispatch(fetchTransactionById(params.id));
+  }, [dispatch, params.id, canView]);
 
   React.useEffect(() => {
-    const t = setTimeout(() => {
-      setTxn(getMockTransactionById(params.id) || null);
-      setLoading(false);
-    }, 300);
-    return () => clearTimeout(t);
-  }, [params.id]);
+    if (error) addToast(error, "error");
+  }, [error, addToast]);
 
-  if (loading) {
+  if (!canView) {
+    return (
+      <div className="space-y-5">
+        <PageHeader
+          title="Transaction"
+          description="You do not have permission to view this transaction"
+          breadcrumbs={[
+            { label: "Dashboard", href: "/dashboard" },
+            { label: "Transactions", href: "/transactions" },
+            { label: "Restricted" },
+          ]}
+        />
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-12 text-center">
+            <div className="mx-auto w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center mb-3">
+              <Lock className="h-6 w-6 text-amber-600" />
+            </div>
+            <p className="text-sm font-medium text-gray-900">
+              You do not have permission to view transactions
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Ask your administrator to grant the{" "}
+              <code className="font-mono text-[11px]">TRANSACTION:VIEW</code>{" "}
+              permission.
+            </p>
+          </CardContent>
+        </Card>
+        <ToastContainer />
+      </div>
+    );
+  }
+
+  // Treat "we have no row yet" as loading regardless of the isLoading flag.
+  // On the first render the slice's `currentTransaction` is null and
+  // `isLoading` is also false, which used to fall through to the
+  // "Not Found" branch for a single frame before the fetch effect ran.
+  // The intent of the page is to either show the row, an explicit error,
+  // or the loading skeleton — never "not found" without giving the network
+  // request a chance to complete.
+  // Skeleton: only while the fetch is in flight. Once isLoading flips to
+  // false, the response has either fulfilled (txn set) or rejected (error
+  // set) — anything else would mean the request was abandoned mid-flight,
+  // and we fall through to "Not Found" rather than spin forever.
+  if (isLoading && !txn && !error) {
     return (
       <div className="space-y-5">
         <Skeleton className="h-8 w-64" />
@@ -169,8 +230,9 @@ export default function TransactionDetailsPage() {
           <CardContent className="p-12 text-center">
             <XCircle className="h-12 w-12 text-gray-300 mx-auto mb-3" />
             <p className="text-sm text-gray-500">
-              Voucher <span className="font-mono font-semibold">{params.id}</span>{" "}
-              does not exist.
+              Voucher{" "}
+              <span className="font-mono font-semibold">{params.id}</span> does
+              not exist.
             </p>
             <Button
               variant="outline"
@@ -181,30 +243,15 @@ export default function TransactionDetailsPage() {
             </Button>
           </CardContent>
         </Card>
+        <ToastContainer />
       </div>
     );
   }
 
-  const agency = txn.agencyId
-    ? mockAgencies.find((a) => a.id === txn.agencyId)
-    : null;
-  const branch = mockBranches.find((b) => b.id === txn.branchId);
-  const invoice = txn.invoiceId
-    ? mockInvoices.find((i) => i.id === txn.invoiceId)
-    : null;
-  const secondaryAgency = txn.payment.secondaryAgencyId
-    ? mockAgencies.find((a) => a.id === txn.payment.secondaryAgencyId)
-    : null;
-  const createdByUser = mockUsers.find((u) => u.id === txn.createdById);
-  const authUser = txn.authentication
-    ? mockUsers.find((u) => u.id === txn.authentication?.authenticatedById)
-    : null;
-
-  const isInward = txn.type === "INWARD";
-  const isAuth = txn.status === "AUTHENTICATED";
+  const isInward = txn.direction === "INWARD";
+  const isApproved = txn.status === "APPROVED";
   const isRejected = txn.status === "REJECTED";
-  const isPending = txn.status === "PENDING_AUTHENTICATION";
-  const isDraft = txn.status === "DRAFT";
+  const isPending = txn.status === "PENDING";
 
   return (
     <div className="space-y-5">
@@ -218,14 +265,14 @@ export default function TransactionDetailsPage() {
       </div>
 
       <PageHeader
-        title={`Voucher ${txn.voucherNo}`}
+        title={`Voucher ${txn.transactionNo}`}
         description={`Status: ${txn.status.replace(/_/g, " ")} • Created on ${formatDateTime(
           txn.createdAt
-        )} • ${formatDate(txn.voucherDate)}`}
+        )}`}
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "Transactions", href: "/transactions" },
-          { label: txn.voucherNo },
+          { label: txn.transactionNo },
         ]}
         actions={
           <>
@@ -237,15 +284,18 @@ export default function TransactionDetailsPage() {
               <Download className="h-4 w-4" />
               Export
             </Button>
-            {(isDraft || isPending) && (
+            {isPending && canWrite && (
               <Button variant="outline" className="gap-2">
                 <Edit className="h-4 w-4" />
                 Edit
               </Button>
             )}
-            {isPending && (
+            {isPending && canApprove && (
               <Link href="/transactions/pending">
-                <Button className="gap-2">
+                <Button
+                  className="gap-2"
+                  onClick={() => {}}
+                >
                   <ShieldCheck className="h-4 w-4" />
                   Authenticate
                 </Button>
@@ -255,7 +305,7 @@ export default function TransactionDetailsPage() {
         }
       />
 
-      {/* Banner info for status */}
+      {/* Status banners */}
       {isPending && (
         <Card className="border-0 shadow-sm bg-amber-50/50">
           <CardContent className="p-4">
@@ -289,9 +339,9 @@ export default function TransactionDetailsPage() {
                 <p className="text-sm font-medium text-red-900">
                   Voucher Rejected
                 </p>
-                {txn.rejectionReason && (
+                {txn.remarks && (
                   <p className="text-xs text-red-800/80 mt-0.5">
-                    Reason: {txn.rejectionReason}
+                    Reason: {txn.remarks}
                   </p>
                 )}
               </div>
@@ -300,7 +350,7 @@ export default function TransactionDetailsPage() {
         </Card>
       )}
 
-      {isAuth && (
+      {isApproved && (
         <Card className="border-0 shadow-sm bg-emerald-50/50">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
@@ -312,10 +362,8 @@ export default function TransactionDetailsPage() {
                   Voucher Authenticated
                 </p>
                 <p className="text-xs text-emerald-800/80 mt-0.5">
-                  Authenticated by {txn.authentication?.authenticatedByName} on{" "}
-                  {txn.authentication?.authenticatedAt
-                    ? formatDateTime(txn.authentication.authenticatedAt)
-                    : "-"}
+                  Authenticated by {txn.approvedBy?.name ?? "—"} on{" "}
+                  {txn.approvedAt ? formatDateTime(txn.approvedAt) : "—"}
                 </p>
               </div>
             </div>
@@ -333,13 +381,13 @@ export default function TransactionDetailsPage() {
           <div className="grid grid-cols-2 gap-4">
             <InfoRow
               label="Voucher No"
-              value={txn.voucherNo}
+              value={txn.transactionNo}
               icon={Hash}
               mono
             />
             <InfoRow
-              label="Voucher Date"
-              value={formatDate(txn.voucherDate)}
+              label="Created At"
+              value={formatDateTime(txn.createdAt)}
               icon={Calendar}
             />
             <InfoRow
@@ -357,24 +405,23 @@ export default function TransactionDetailsPage() {
                   ) : (
                     <ArrowUpFromLine className="h-3 w-3" />
                   )}
-                  {txn.type}
+                  {txn.direction}
                 </span>
               }
             />
             <InfoRow
               label="Branch"
-              value={`${branch?.name || "-"} (${branch?.code || "-"})`}
+              value={`${txn.branch?.name ?? "—"} (${txn.branch?.code ?? "—"})`}
               icon={Building2}
               truncate
             />
             <InfoRow
-              label="Created At"
-              value={formatDateTime(txn.createdAt)}
-              icon={Clock}
-            />
-            <InfoRow
               label="Status"
               value={<StatusBadge status={txn.status} size="sm" />}
+            />
+            <InfoRow
+              label="Payment Type"
+              value={txn.paymentType}
             />
           </div>
           {txn.remarks && (
@@ -392,7 +439,7 @@ export default function TransactionDetailsPage() {
           icon={Building2}
           accent="bg-violet-50"
         >
-          {agency ? (
+          {txn.agency ? (
             <div className="space-y-3">
               <div className="flex items-start gap-3 pb-3 border-b border-gray-100">
                 <div className="p-2 bg-violet-100 rounded-lg shrink-0">
@@ -400,35 +447,35 @@ export default function TransactionDetailsPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-gray-900 truncate">
-                    {agency.name}
+                    {txn.agency.name}
                   </p>
                   <p className="text-xs text-gray-500 uppercase tracking-wide">
-                    {agency.type}
+                    {txn.agency.type}
                   </p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
-                {agency.gstin && (
-                  <InfoRow label="GSTIN" value={agency.gstin} mono />
+                {txn.agency.gstin && (
+                  <InfoRow label="GSTIN" value={txn.agency.gstin} mono />
                 )}
-                {agency.contactPerson && (
+                {txn.agency.contactPerson && (
                   <InfoRow
                     label="Contact"
-                    value={agency.contactPerson}
+                    value={txn.agency.contactPerson}
                     icon={UserIcon}
                   />
                 )}
-                {agency.mobileNumber && (
+                {txn.agency.mobileNumber && (
                   <InfoRow
                     label="Mobile"
-                    value={agency.mobileNumber}
+                    value={txn.agency.mobileNumber}
                     icon={Phone}
                   />
                 )}
-                {agency.email && (
+                {txn.agency.email && (
                   <InfoRow
                     label="Email"
-                    value={agency.email}
+                    value={txn.agency.email}
                     icon={Mail}
                     truncate
                   />
@@ -442,89 +489,59 @@ export default function TransactionDetailsPage() {
               </div>
               <p className="text-sm text-gray-700">No agency mapped</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                This is a suspense transaction pending agency reconciliation.
+                {txn.suspenseAccount
+                  ? "This is a suspense transaction pending agency reconciliation."
+                  : "No agency is associated with this transaction."}
               </p>
             </div>
           )}
         </SectionCard>
 
         <SectionCard
-          title="Invoice Information"
-          icon={FileText}
-          accent="bg-emerald-50"
+          title="3rd Party Agency"
+          icon={Users}
+          accent="bg-violet-50"
         >
-          {invoice ? (
+          {txn.thirdPartyAgencyId ? (
             <div className="space-y-3">
               <div className="flex items-start gap-3 pb-3 border-b border-gray-100">
-                <div className="p-2 bg-emerald-100 rounded-lg shrink-0">
-                  <FileText className="h-5 w-5 text-emerald-600" />
+                <div className="p-2 bg-violet-100 rounded-lg shrink-0">
+                  <Users className="h-5 w-5 text-violet-600" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs text-gray-500 uppercase">Invoice</p>
-                  <p className="font-mono font-semibold text-gray-900">
-                    {invoice.invoiceNo}
+                  <p className="text-sm font-semibold text-gray-900 truncate">
+                    {txn.thirdPartyAgency?.name ?? txn.thirdPartyAgencyId}
+                  </p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">
+                    {txn.thirdPartyAgency?.type ?? "—"}
                   </p>
                 </div>
-                <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                    invoice.status === "PAID"
-                      ? "bg-emerald-100 text-emerald-700"
-                      : invoice.status === "PARTIALLY_PAID"
-                      ? "bg-amber-100 text-amber-700"
-                      : "bg-gray-100 text-gray-700"
-                  }`}
-                >
-                  {invoice.status.replace(/_/g, " ")}
-                </span>
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <InfoRow
-                  label="Invoice Date"
-                  value={formatDate(invoice.invoiceDate)}
-                  icon={Calendar}
-                />
-                <InfoRow
-                  label="Taxable"
-                  value={formatCurrency(invoice.taxableAmount)}
-                />
-                <InfoRow
-                  label="GST"
-                  value={formatCurrency(invoice.gstAmount)}
-                />
-                <InfoRow
-                  label="Total"
-                  value={formatCurrency(invoice.totalAmount)}
-                />
-                <InfoRow
-                  label="Paid"
-                  value={formatCurrency(invoice.paidAmount)}
-                />
-                <InfoRow
-                  label="Outstanding"
-                  value={
-                    <span
-                      className={
-                        invoice.outstandingAmount > 0
-                          ? "text-red-600"
-                          : "text-emerald-600"
-                      }
-                    >
-                      {formatCurrency(invoice.outstandingAmount)}
-                    </span>
-                  }
-                />
+                {txn.thirdPartyAgency?.gstin && (
+                  <InfoRow
+                    label="GSTIN"
+                    value={txn.thirdPartyAgency.gstin}
+                    mono
+                  />
+                )}
+                {txn.thirdPartyAgency?.contactPerson && (
+                  <InfoRow
+                    label="Contact"
+                    value={txn.thirdPartyAgency.contactPerson}
+                    icon={UserIcon}
+                  />
+                )}
               </div>
             </div>
           ) : (
             <div className="text-center py-6">
               <div className="mx-auto w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-2">
-                <FileText className="h-6 w-6 text-gray-400" />
+                <Users className="h-6 w-6 text-gray-400" />
               </div>
-              <p className="text-sm text-gray-700">No invoice linked</p>
+              <p className="text-sm text-gray-700">Direct transaction</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                {txn.isSuspense
-                  ? "Will be linked during suspense reconciliation"
-                  : "Invoice mapping not available"}
+                No 3rd party agency is involved.
               </p>
             </div>
           )}
@@ -535,9 +552,7 @@ export default function TransactionDetailsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <SectionCard
           title="Payment Information"
-          icon={
-            txn.payment.mode === "ONLINE" ? Banknote : Wallet
-          }
+          icon={txn.paymentMode === "ONLINE" ? Banknote : Wallet}
           accent="bg-amber-50"
         >
           <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-200 rounded-lg p-4 mb-4">
@@ -546,66 +561,40 @@ export default function TransactionDetailsPage() {
             </p>
             <p className="text-2xl font-bold text-blue-900 mt-1 flex items-center gap-1.5">
               <IndianRupee className="h-5 w-5" />
-              {formatCurrency(txn.payment.amount).replace("₹", "")}
+              {formatCurrency(txn.amount).replace("₹", "")}
             </p>
             <p className="text-xs text-blue-700 mt-1">
-              {txn.payment.mode === "ONLINE" ? "Online Transfer" : "Offline Cash"}
-              {txn.payment.transactionId &&
-                ` • ${txn.payment.transactionId}`}
+              {txn.paymentMode === "ONLINE" ? "Online Transfer" : "Offline"} •
+              {" "}
+              {txn.transactionRefNo
+                ? txn.transactionRefNo
+                : "no reference provided"}
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <InfoRow
               label="Payment Mode"
-              value={txn.payment.mode === "ONLINE" ? "Online" : "Offline Cash"}
-              icon={
-                txn.payment.mode === "ONLINE" ? Banknote : Wallet
-              }
+              value={txn.paymentMode === "ONLINE" ? "Online" : "Offline"}
+              icon={txn.paymentMode === "ONLINE" ? Banknote : Wallet}
             />
-            {txn.payment.utr && (
+            {txn.transactionRefNo && (
               <InfoRow
-                label="UTR"
-                value={txn.payment.utr}
+                label="Transaction Reference"
+                value={txn.transactionRefNo}
                 icon={Hash}
                 mono
-              />
-            )}
-            {txn.payment.transactionId && (
-              <InfoRow
-                label="Transaction ID"
-                value={txn.payment.transactionId}
-                icon={Hash}
-                mono
-              />
-            )}
-            {secondaryAgency && (
-              <InfoRow
-                label="Secondary Agency"
-                value={secondaryAgency.name}
-                icon={Building2}
               />
             )}
           </div>
-
-          {txn.payment.remarks && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">
-                Payment Remarks
-              </p>
-              <p className="text-sm text-gray-700 mt-1">
-                {txn.payment.remarks}
-              </p>
-            </div>
-          )}
         </SectionCard>
 
         <SectionCard
           title="Suspense Information"
           icon={AlertCircle}
-          accent={txn.isSuspense ? "bg-rose-50" : "bg-gray-50"}
+          accent={txn.suspenseAccount ? "bg-rose-50" : "bg-gray-50"}
         >
-          {txn.isSuspense ? (
+          {txn.suspenseAccount ? (
             <div className="space-y-3">
               <div className="border border-rose-200 bg-rose-50 rounded-lg p-4">
                 <div className="flex items-start gap-3">
@@ -626,7 +615,7 @@ export default function TransactionDetailsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <InfoRow
                   label="Suspense Account"
-                  value={txn.suspenseAccount || "GST_Suspense_Clearing"}
+                  value="GST_Suspense_Clearing"
                   mono
                 />
                 <InfoRow
@@ -653,86 +642,37 @@ export default function TransactionDetailsPage() {
         </SectionCard>
       </div>
 
-      {/* Audit Trail + Timeline */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <SectionCard title="Audit Trail" icon={Hash} accent="bg-blue-50">
-          <div className="space-y-2">
-            {txn.auditTrail.map((log) => (
-              <div
-                key={log.id}
-                className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100"
-              >
-                <div className="p-1.5 rounded-md bg-white border border-gray-200 shrink-0">
-                  {log.action === "CREATED" && (
-                    <FileText className="h-3.5 w-3.5 text-blue-600" />
-                  )}
-                  {log.action === "SUBMITTED" && (
-                    <ArrowUpFromLine className="h-3.5 w-3.5 text-violet-600" />
-                  )}
-                  {log.action === "AUTHENTICATED" && (
-                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                  )}
-                  {log.action === "REJECTED" && (
-                    <XCircle className="h-3.5 w-3.5 text-red-600" />
-                  )}
-                  {log.action === "EDITED" && (
-                    <Edit className="h-3.5 w-3.5 text-amber-600" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-gray-900">
-                      {log.action}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {formatDateTime(log.timestamp)}
-                    </p>
-                  </div>
-                  <p className="text-xs text-gray-600 mt-0.5">
-                    By <span className="font-medium">{log.userName}</span>
-                    {log.ipAddress && ` • IP: ${log.ipAddress}`}
-                    {log.computerId && ` • ${log.computerId}`}
-                  </p>
-                  {log.remarks && (
-                    <p className="text-xs text-gray-500 italic mt-1">
-                      {log.remarks}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </SectionCard>
+      {/* Workflow Timeline */}
+      <SectionCard title="Workflow Timeline" icon={Clock} accent="bg-violet-50">
+        <TransactionTimeline
+          auditTrail={synthesizeAuditTrail(txn)}
+          currentStatus={mapStatusForTimeline(txn.status)}
+        />
+      </SectionCard>
 
-        <SectionCard title="Workflow Timeline" icon={Clock} accent="bg-violet-50">
-          <TransactionTimeline
-            auditTrail={txn.auditTrail}
-            currentStatus={txn.status}
-          />
-        </SectionCard>
-      </div>
-
-      {/* Authentication Information */}
-      {(isAuth || isRejected) && (
+      {/* Approval / Rejection Information */}
+      {(isApproved || isRejected) && (
         <SectionCard
           title={
-            isAuth
-              ? "Authentication Information"
+            isApproved
+              ? "Approval Information"
               : "Rejection Information"
           }
-          icon={isAuth ? ShieldCheck : XCircle}
-          accent={isAuth ? "bg-emerald-50" : "bg-red-50"}
+          icon={isApproved ? ShieldCheck : XCircle}
+          accent={isApproved ? "bg-emerald-50" : "bg-red-50"}
         >
-          {isAuth && txn.authentication && (
+          {isApproved && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <InfoRow
-                label="Authenticated By"
-                value={txn.authentication.authenticatedByName}
+                label="Approved By"
+                value={txn.approvedBy?.name || "—"}
                 icon={UserIcon}
               />
               <InfoRow
-                label="Authenticated At"
-                value={formatDateTime(txn.authentication.authenticatedAt)}
+                label="Approved At"
+                value={
+                  txn.approvedAt ? formatDateTime(txn.approvedAt) : "—"
+                }
                 icon={Clock}
               />
               <InfoRow
@@ -740,16 +680,6 @@ export default function TransactionDetailsPage() {
                 value="Yes - No further edits"
                 icon={ShieldCheck}
               />
-              {txn.authentication.remarks && (
-                <div className="md:col-span-3 pt-3 border-t border-gray-100">
-                  <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">
-                    Authentication Remarks
-                  </p>
-                  <p className="text-sm text-gray-700 mt-1">
-                    {txn.authentication.remarks}
-                  </p>
-                </div>
-              )}
             </div>
           )}
 
@@ -757,20 +687,14 @@ export default function TransactionDetailsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <InfoRow
                 label="Rejected By"
-                value={
-                  txn.auditTrail.find((l) => l.action === "REJECTED")?.userName ||
-                  "-"
-                }
+                value={txn.approvedBy?.name || "—"}
                 icon={UserIcon}
               />
               <InfoRow
                 label="Rejected At"
-                value={(() => {
-                  const log = txn.auditTrail.find(
-                    (l) => l.action === "REJECTED"
-                  );
-                  return log ? formatDateTime(log.timestamp) : "-";
-                })()}
+                value={
+                  txn.approvedAt ? formatDateTime(txn.approvedAt) : "—"
+                }
                 icon={Clock}
               />
               <div className="md:col-span-2 pt-3 border-t border-gray-100">
@@ -778,7 +702,7 @@ export default function TransactionDetailsPage() {
                   Rejection Reason
                 </p>
                 <p className="text-sm text-red-700 mt-1 font-medium">
-                  {txn.rejectionReason || "No reason recorded"}
+                  {txn.remarks || "No reason recorded"}
                 </p>
               </div>
             </div>
@@ -803,7 +727,7 @@ export default function TransactionDetailsPage() {
               <Printer className="h-4 w-4" />
               Print Voucher
             </Button>
-            {isPending && (
+            {isPending && canApprove && (
               <Link href="/transactions/pending">
                 <Button className="gap-2">
                   <ShieldCheck className="h-4 w-4" />
@@ -814,6 +738,62 @@ export default function TransactionDetailsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <ToastContainer />
     </div>
   );
+}
+
+// ============== HELPERS ==============
+
+/**
+ * Build a minimal audit trail for the timeline from the fields we have on
+ * the real Transaction. The backend does not return auditTrail; we synthesize
+ * "Created" + (if approved) "Approved"/"Rejected" so the timeline visual
+ * stays useful.
+ */
+function synthesizeAuditTrail(
+  txn: ReturnType<typeof useAppSelector<any>>["transactions"]["currentTransaction"]
+): AuditLog[] {
+  if (!txn) return [];
+  const trail: AuditLog[] = [
+    {
+      id: `${txn.id}-created`,
+      action: "CREATED",
+      userId: txn.createdById,
+      userName: txn.createdBy?.name || "—",
+      timestamp: txn.createdAt,
+    },
+    {
+      id: `${txn.id}-submitted`,
+      action: "SUBMITTED",
+      userId: txn.createdById,
+      userName: txn.createdBy?.name || "—",
+      timestamp: txn.createdAt,
+    },
+  ];
+  if (txn.status === "APPROVED" || txn.status === "REJECTED") {
+    trail.push({
+      id: `${txn.id}-${txn.status.toLowerCase()}`,
+      action: txn.status === "APPROVED" ? "AUTHENTICATED" : "REJECTED",
+      userId: txn.approvedById || txn.createdById,
+      userName: txn.approvedBy?.name || "—",
+      timestamp: txn.approvedAt || txn.createdAt,
+      remarks: txn.status === "REJECTED" ? txn.remarks || undefined : undefined,
+    });
+  }
+  return trail;
+}
+
+function mapStatusForTimeline(
+  status: "PENDING" | "APPROVED" | "REJECTED"
+): MockTransactionStatus {
+  switch (status) {
+    case "PENDING":
+      return "PENDING_AUTHENTICATION";
+    case "APPROVED":
+      return "AUTHENTICATED";
+    case "REJECTED":
+      return "REJECTED";
+  }
 }

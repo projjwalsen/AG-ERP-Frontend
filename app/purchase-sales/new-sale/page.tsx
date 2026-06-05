@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { DataSelect, type DataSelectOption } from "@/components/ui/data-select";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { useAppDispatch } from "@/app/store/hooks";
 import { createSale } from "@/app/store/salesSlice";
@@ -297,36 +298,44 @@ export default function NewSalePage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Header Section */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="branch">Branch *</Label>
-                <select
+                <DataSelect
                   id="branch"
                   value={formData.branchId}
-                  onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  onChange={(v) => setFormData({ ...formData, branchId: v })}
+                  placeholder="Select Branch"
                   required
-                >
-                  <option value="">Select Branch</option>
-                  {branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>{branch.name}</option>
-                  ))}
-                </select>
+                  searchable
+                  clearable
+                  options={branches.map<DataSelectOption>((branch) => ({
+                    value: branch.id,
+                    label: branch.name,
+                    description: [branch.code, branch.city, branch.state].filter(Boolean).join(" • "),
+                  }))}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="agency">Client *</Label>
-                <select
+                <DataSelect
                   id="agency"
                   value={formData.agencyId}
-                  onChange={(e) => setFormData({ ...formData, agencyId: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  onChange={(v) => setFormData({ ...formData, agencyId: v })}
+                  placeholder="Select Client"
                   required
-                >
-                  <option value="">Select Client</option>
-                  {agencies.map((agency) => (
-                    <option key={agency.id} value={agency.id}>{agency.name}</option>
-                  ))}
-                </select>
+                  searchable
+                  clearable
+                  panelClassName="w-[420px]"
+                  options={agencies.map<DataSelectOption>((agency) => ({
+                    value: agency.id,
+                    label: agency.name,
+                    description: [agency.contactPerson, agency.email, agency.gstin]
+                      .filter(Boolean)
+                      .join(" • "),
+                    badge: agency.type,
+                  }))}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="invoiceDate">Invoice Date *</Label>
@@ -358,19 +367,19 @@ export default function NewSalePage() {
 
               {/* Items Table */}
               <div className="overflow-x-auto border rounded-lg">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm min-w-[1180px]">
                   <thead className="bg-gray-100 border-b">
                     <tr>
-                      <th className="px-4 py-3 text-left font-semibold">Product</th>
-                      <th className="px-4 py-3 text-left font-semibold min-w-[220px]">Batch (Available Qty)</th>
-                      <th className="px-4 py-3 text-right font-semibold">Qty</th>
-                      <th className="px-4 py-3 text-left font-semibold">Unit</th>
-                      <th className="px-4 py-3 text-right font-semibold">Price</th>
-                      <th className="px-4 py-3 text-right font-semibold">Amount</th>
-                      <th className="px-4 py-3 text-right font-semibold text-nowrap">GST %</th>
-                      <th className="px-4 py-3 text-right font-semibold text-nowrap">GST Amt</th>
-                      <th className="px-4 py-3 text-right font-semibold text-nowrap">Total w/ GST</th>
-                      <th className="px-4 py-3 text-center font-semibold">Action</th>
+                      <th className="px-4 py-3 text-left font-semibold w-[260px]">Product</th>
+                      <th className="px-4 py-3 text-left font-semibold w-[280px]">Batch (Available Qty)</th>
+                      <th className="px-4 py-3 text-right font-semibold w-[110px]">Qty</th>
+                      <th className="px-4 py-3 text-left font-semibold w-[100px]">Unit</th>
+                      <th className="px-4 py-3 text-right font-semibold w-[130px]">Price</th>
+                      <th className="px-4 py-3 text-right font-semibold w-[120px]">Amount</th>
+                      <th className="px-4 py-3 text-right font-semibold text-nowrap w-[80px]">GST %</th>
+                      <th className="px-4 py-3 text-right font-semibold text-nowrap w-[110px]">GST Amt</th>
+                      <th className="px-4 py-3 text-right font-semibold text-nowrap w-[130px]">Total w/ GST</th>
+                      <th className="px-4 py-3 text-center font-semibold w-[80px]">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -381,31 +390,34 @@ export default function NewSalePage() {
 
                       return (
                         <tr key={item.id} className="border-b hover:bg-gray-50">
-                          <td className="px-4 py-3">
-                            <select
+                          <td className="px-3 py-2">
+                            <DataSelect
                               value={item.productId}
-                              onChange={(e) => handleItemChange(item.id, "productId", e.target.value)}
-                              className="w-full border border-gray-200 rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                              onChange={(v) => handleItemChange(item.id, "productId", v)}
+                              placeholder="Select Product"
                               required
-                            >
-                              <option value="">Select Product</option>
-                              {products.map((product) => (
-                                <option key={product.id} value={product.id}>
-                                  {product.name} ({product.sku})
-                                </option>
-                              ))}
-                            </select>
+                              searchable
+                              triggerClassName="h-9 px-2"
+                              panelClassName="w-[360px]"
+                              options={products.map<DataSelectOption>((product) => ({
+                                value: product.id,
+                                label: product.name,
+                                description: product.sku ? `SKU: ${product.sku}` : undefined,
+                                badge: product.baseUnit,
+                              }))}
+                            />
                           </td>
-                          <td className="px-4 py-3 min-w-[220px]">
-                            <select
+                          <td className="px-3 py-2">
+                            <DataSelect
                               value={item.batchId}
-                              onChange={(e) => handleItemChange(item.id, "batchId", e.target.value)}
-                              className="w-full border border-gray-200 rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500 min-w-[200px]"
-                              disabled={!item.productId || !formData.branchId || loadingBatches[item.id]}
+                              onChange={(v) => handleItemChange(item.id, "batchId", v)}
+                              placeholder="Select Batch"
                               required
-                            >
-                              <option value="">Select Batch</option>
-                              {(availableBatches[item.id] || []).map((batch) => {
+                              searchable
+                              disabled={!item.productId || !formData.branchId || loadingBatches[item.id]}
+                              triggerClassName="h-9 px-2"
+                              panelClassName="w-[360px]"
+                              options={(availableBatches[item.id] || []).map<DataSelectOption>((batch) => {
                                 const qtyKG = Number(batch.availableQtyKG || 0);
                                 const qtyLTR = Number(batch.availableQtyLTR || 0);
                                 const qtyText =
@@ -416,37 +428,40 @@ export default function NewSalePage() {
                                     : qtyLTR > 0
                                     ? `${qtyLTR} LTR`
                                     : "0";
-                                return (
-                                  <option key={batch.id} value={batch.id}>
-                                    {batch.batchNo} — Avl: {qtyText}
-                                  </option>
-                                );
+                                return {
+                                  value: batch.id,
+                                  label: `Batch ${batch.batchNo}`,
+                                  description: `Available: ${qtyText}`,
+                                  badge: batch.status,
+                                };
                               })}
-                            </select>
+                            />
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-3 py-2">
                             <Input
                               type="number"
                               min="0.01"
                               step="0.01"
                               value={item.quantity || ""}
                               onChange={(e) => handleItemChange(item.id, "quantity", parseFloat(e.target.value) || 0)}
-                              className="text-sm text-right"
+                              className="h-9 text-sm text-right px-2"
                               required
                             />
                           </td>
-                          <td className="px-4 py-3">
-                            <select
+                          <td className="px-3 py-2">
+                            <DataSelect
                               value={item.unit}
-                              onChange={(e) => handleItemChange(item.id, "unit", e.target.value)}
-                              className="w-full border border-gray-200 rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                              onChange={(v) => handleItemChange(item.id, "unit", v)}
                               required
-                            >
-                              <option value="KG">KG</option>
-                              <option value="LTR">LTR</option>
-                            </select>
+                              triggerClassName="h-9 px-2"
+                              panelClassName="w-[140px]"
+                              options={[
+                                { value: "KG", label: "KG" },
+                                { value: "LTR", label: "LTR" },
+                              ]}
+                            />
                           </td>
-                          <td className="px-4 py-3 text-right text-nowrap">
+                          <td className="px-3 py-2">
                             <Input
                               type="number"
                               min="0"
@@ -455,7 +470,7 @@ export default function NewSalePage() {
                               onChange={(e) =>
                                 handleItemChange(item.id, "sellPrice", parseFloat(e.target.value) || 0)
                               }
-                              className="text-sm text-right w-28"
+                              className="h-9 text-sm text-right px-2"
                               title="Default is the product's sell price; override as needed"
                             />
                           </td>
@@ -471,7 +486,7 @@ export default function NewSalePage() {
                           <td className="px-4 py-3 text-right font-semibold text-green-600 text-nowrap">
                             ₹ {totalWithGST.toFixed(2)}
                           </td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="px-3 py-2 text-center">
                             <Button
                               type="button"
                               variant="ghost"

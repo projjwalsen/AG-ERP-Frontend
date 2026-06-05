@@ -31,7 +31,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable}`}>
-      <body className="min-h-full antialiased font-sans">
+      <body className="min-h-full antialiased font-sans" suppressHydrationWarning>
         <Providers>
           <SidebarWrapper>
             {children}

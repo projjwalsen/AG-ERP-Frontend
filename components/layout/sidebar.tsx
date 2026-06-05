@@ -220,12 +220,12 @@ const buildSidebarItems = (): SidebarItem[] => [
   { title: "Agency Management", href: "/agencies", icon: Briefcase, module: "AGENCY" },
   { title: "Product Management", href: "/inventory", icon: Package, module: "PRODUCT" },
   { title: "Purchase & Sales", href: "/purchase-sales", icon: ShoppingCart, module: "PURCHASE" },
-  // {
-  //   title: "Transactions",
-  //   href: "/transactions",
-  //   icon: CreditCard,
-  //   module: "PAYMENT",
-  // },
+  {
+    title: "Transactions",
+    href: "/transactions",
+    icon: CreditCard,
+    module: "PAYMENT",
+  },
   { title: "Inventory Management", href: "/inventory-management", icon: Package, module: "PRODUCT" },
   // { title: "Reports", href: "/reports", icon: FileText, module: "REPORT" },
   // { title: "Audit Logs", href: "/audit-logs", icon: History, module: "AUDIT" },

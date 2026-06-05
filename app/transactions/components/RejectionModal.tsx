@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { XCircle, AlertCircle } from "lucide-react";
-import { Transaction } from "../types/transaction";
+import { Transaction } from "@/app/types/transaction";
 
 interface RejectionModalProps {
   open: boolean;
@@ -61,7 +61,7 @@ export function RejectionModal({
           <DialogDescription>
             You are about to reject voucher{" "}
             <span className="font-mono font-semibold text-gray-900">
-              {transaction.voucherNo}
+              {transaction.transactionNo}
             </span>
             . The reason will be visible to the originator in their audit trail.
           </DialogDescription>
