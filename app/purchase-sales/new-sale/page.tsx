@@ -202,7 +202,6 @@ export default function NewSalePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!formData.agencyId || !formData.branchId) {
       addToast("Please select agency and branch", "error");
       return;

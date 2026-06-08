@@ -497,12 +497,12 @@ export default function TransactionDetailsPage() {
           )}
         </SectionCard>
 
-        <SectionCard
-          title="3rd Party Agency"
-          icon={Users}
-          accent="bg-violet-50"
-        >
-          {txn.thirdPartyAgencyId ? (
+        {txn.thirdPartyAgencyId && (
+          <SectionCard
+            title="3rd Party Agency"
+            icon={Users}
+            accent="bg-violet-50"
+          >
             <div className="space-y-3">
               <div className="flex items-start gap-3 pb-3 border-b border-gray-100">
                 <div className="p-2 bg-violet-100 rounded-lg shrink-0">
@@ -534,21 +534,11 @@ export default function TransactionDetailsPage() {
                 )}
               </div>
             </div>
-          ) : (
-            <div className="text-center py-6">
-              <div className="mx-auto w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-2">
-                <Users className="h-6 w-6 text-gray-400" />
-              </div>
-              <p className="text-sm text-gray-700">Direct transaction</p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                No 3rd party agency is involved.
-              </p>
-            </div>
-          )}
-        </SectionCard>
+          </SectionCard>
+        )}
       </div>
 
-      {/* Payment Information + Suspense */}
+      {/* Payment Information + (optional) Suspense */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <SectionCard
           title="Payment Information"
@@ -589,12 +579,12 @@ export default function TransactionDetailsPage() {
           </div>
         </SectionCard>
 
-        <SectionCard
-          title="Suspense Information"
-          icon={AlertCircle}
-          accent={txn.suspenseAccount ? "bg-rose-50" : "bg-gray-50"}
-        >
-          {txn.suspenseAccount ? (
+        {txn.suspenseAccount && (
+          <SectionCard
+            title="Suspense Information"
+            icon={AlertCircle}
+            accent="bg-rose-50"
+          >
             <div className="space-y-3">
               <div className="border border-rose-200 bg-rose-50 rounded-lg p-4">
                 <div className="flex items-start gap-3">
@@ -628,18 +618,8 @@ export default function TransactionDetailsPage() {
                 />
               </div>
             </div>
-          ) : (
-            <div className="text-center py-6">
-              <div className="mx-auto w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center mb-2">
-                <CheckCircle2 className="h-6 w-6 text-emerald-600" />
-              </div>
-              <p className="text-sm text-gray-700">No Suspense Routing</p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                This transaction is directly mapped to an agency and invoice.
-              </p>
-            </div>
-          )}
-        </SectionCard>
+          </SectionCard>
+        )}
       </div>
 
       {/* Workflow Timeline */}

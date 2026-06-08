@@ -80,6 +80,17 @@ export interface AgencyOutstanding {
   salesOutstanding: number;
   purchaseOutstanding: number;
   netOutstanding: number;
+  /**
+   * Optional pending (Amount Receivable) bucket — surfaced by the backend
+   * for the new transaction form. When absent, the form falls back to 0.
+   */
+  pendingAmount?: number;
+  /**
+   * Optional explicit due/outstanding bucket — the form labels this as
+   * "DUE Amount" in the agency card. Falls back to the direction-specific
+   * sales/purchase outstanding when not provided.
+   */
+  dueAmount?: number;
 }
 
 // =================== PAYLOADS ===================

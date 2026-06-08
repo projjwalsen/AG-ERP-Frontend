@@ -10,6 +10,7 @@ import {
   Wallet,
   Users,
   Info,
+  Lock,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,8 +25,8 @@ import {
   CreateTransactionPayload,
   AgencyOutstanding,
 } from "@/app/types/transaction";
-import { AgencySelector } from "./AgencySelector";
-import { AgencyBalanceCard } from "./AgencyBalanceCard";
+import { AgencySelector, SUSPENSE_AGENCY_VALUE } from "./AgencySelector";
+import { AgencyBalanceStrip, BalanceMetric } from "./AgencyBalanceStrip";
 import { ThirdPartyAgencySection } from "./ThirdPartyAgencySection";
 
 export interface TransactionFormUser {
@@ -51,19 +52,20 @@ interface TransactionFormProps {
 }
 
 /**
- * Compute total outstanding amount across an agency's invoices.
- * Local fallback when the live outstanding endpoint isn't loaded yet.
+ * Pick which balance metric to surface for the primary agency in a given
+ * direction. INWARD receipts focus on what we're owed (DUE); OUTWARD
+ * payments focus on what is still being processed on the receivable side.
  */
-function localOutstanding(agencyId: string, agencies: Agency[]): number {
-  if (!agencyId) return 0;
-  void agencies;
-  return 0;
+function primaryMetric(direction: TransactionDirection): BalanceMetric {
+  return direction === "INWARD" ? "DUE" : "RECEIVABLE";
 }
 
-function localPending(agencyId: string, agencies: Agency[]): number {
-  if (!agencyId) return 0;
-  void agencies;
-  return 0;
+/**
+ * The 3rd party carries the opposite metric — INWARD primary is DUE
+ * while its 3rd party is RECEIVABLE, and vice versa for OUTWARD.
+ */
+function thirdPartyMetric(direction: TransactionDirection): BalanceMetric {
+  return direction === "INWARD" ? "RECEIVABLE" : "DUE";
 }
 
 export function TransactionForm({
@@ -81,7 +83,6 @@ export function TransactionForm({
   const [branchId, setBranchId] = React.useState<string>(
     defaultBranchId || branches[0]?.id || ""
   );
-  const [isSuspense, setIsSuspense] = React.useState<boolean>(false);
   const [agencyId, setAgencyId] = React.useState<string>(initialAgencyId || "");
   const [paymentType, setPaymentType] = React.useState<PaymentType>("NORMAL");
   const [transactionRefNo, setTransactionRefNo] = React.useState<string>("");
@@ -92,19 +93,42 @@ export function TransactionForm({
 
   const [errors, setErrors] = React.useState<Record<string, string>>({});
 
+  // Suspense is now part of the agency dropdown itself.
+  const isSuspense = agencyId === SUSPENSE_AGENCY_VALUE;
+  const realAgencyId = isSuspense ? "" : agencyId;
+
+  // All agencies are shown in the primary dropdown (no direction filter).
+  // 3rd party dropdown excludes the already-selected primary agency.
   const selectedBranch = branches.find((b) => b.id === branchId) || null;
-  const selectedAgency = agencies.find((a) => a.id === agencyId) || null;
+  const selectedAgency = agencies.find((a) => a.id === realAgencyId) || null;
   const selectedThirdParty =
     agencies.find((a) => a.id === thirdPartyAgencyId) || null;
 
   const thirdPartyAgencies = React.useMemo(
-    () => agencies.filter((a) => a.id !== agencyId),
-    [agencies, agencyId]
+    () => agencies.filter((a) => a.id !== realAgencyId),
+    [agencies, realAgencyId]
   );
 
+  // Switching payment type while a 3rd party is selected must clear it,
+  // but keep the primary agency intact.
   React.useEffect(() => {
     setThirdPartyAgencyId("");
-  }, [agencyId]);
+  }, [paymentType]);
+
+  // Switching the primary agency must clear the 3rd party (an agency
+  // can't be both primary and counter-party).
+  React.useEffect(() => {
+    setThirdPartyAgencyId("");
+  }, [realAgencyId]);
+
+  // Picking Suspense forces a non-3rd-party payment type. Going the
+  // other way (clearing Suspense) is the user's call — we don't change
+  // their payment-type selection just because they re-picked an agency.
+  React.useEffect(() => {
+    if (isSuspense && paymentType === "THIRD_PARTY") {
+      setPaymentType("NORMAL");
+    }
+  }, [isSuspense, paymentType]);
 
   // Report the current selection up to the page so it can refetch outstanding.
   const lastReportedKey = React.useRef<string>("");
@@ -115,28 +139,31 @@ export function TransactionForm({
     lastReportedKey.current = key;
     onContextChange({
       branchId: branchId || undefined,
-      agencyId: agencyId || undefined,
+      agencyId: isSuspense ? undefined : realAgencyId || undefined,
       direction: type,
     });
-  }, [branchId, agencyId, type, onContextChange]);
+  }, [branchId, agencyId, type, isSuspense, realAgencyId, onContextChange]);
 
-  // Derive displayed balance: prefer the live outstanding endpoint, fall back
-  // to local-only zero (the endpoint will fill it in on the next agency/direction
-  // change in the parent page).
-  const primaryOutstanding = outstanding
-    ? type === "INWARD"
+  // Outstanding figures (fall back to direction-specific sales/purchase
+  // when the new explicit buckets are absent on the wire).
+  const dueAmount = outstanding
+    ? outstanding.dueAmount !== undefined
+      ? outstanding.dueAmount
+      : type === "INWARD"
       ? outstanding.salesOutstanding
       : outstanding.purchaseOutstanding
-    : localOutstanding(agencyId, agencies);
-  const primaryPending = outstanding
-    ? Math.max(0, primaryOutstanding - 0)
-    : localPending(agencyId, agencies);
+    : 0;
+  const pendingAmount = outstanding
+    ? outstanding.pendingAmount !== undefined
+      ? outstanding.pendingAmount
+      : 0
+    : 0;
 
   const validate = (): Record<string, string> => {
     const next: Record<string, string> = {};
     if (!branchId) next.branchId = "Branch is mandatory";
-    if (!isSuspense && !agencyId) {
-      next.agencyId = "Agency is mandatory when Suspense Account is False";
+    if (!agencyId) {
+      next.agencyId = "Please select an agency or Suspense Account";
     }
     if (!transactionRefNo.trim()) {
       next.transactionRefNo = "Transaction Reference No is mandatory";
@@ -164,7 +191,7 @@ export function TransactionForm({
       paymentType,
       amount,
       paymentMode,
-      ...(isSuspense ? {} : { agencyId }),
+      ...(isSuspense || !realAgencyId ? {} : { agencyId: realAgencyId }),
       ...(paymentType === "THIRD_PARTY" && thirdPartyAgencyId
         ? { thirdPartyAgencyId }
         : {}),
@@ -218,130 +245,41 @@ export function TransactionForm({
         </CardContent>
       </Card>
 
-      {/* Branch */}
+      {/* Branch + Primary Agency in one row */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Building2 className="h-4 w-4 text-blue-600" />
-            Branch
+            Branch &amp; Agency
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <label className="text-sm font-medium text-gray-700 block mb-1.5">
-            Select Branch<span className="text-red-500 ml-0.5">*</span>
-          </label>
-          <select
-            value={branchId}
-            onChange={(e) => {
-              setBranchId(e.target.value);
-              setErrors((prev) => ({ ...prev, branchId: "" }));
-            }}
-            className="flex h-9 w-full border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-          >
-            <option value="">Select branch</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name} ({b.code})
-              </option>
-            ))}
-          </select>
-          {errors.branchId && (
-            <p className="mt-1 text-xs text-red-500">{errors.branchId}</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Suspense Account */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-amber-600" />
-            Suspense Account
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div>
-            <p className="text-sm font-medium text-gray-700 mb-2">
-              Suspense Account<span className="text-red-500 ml-0.5">*</span>
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSuspense(false);
-                  setErrors((prev) => ({ ...prev, agencyId: "" }));
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1.5">
+                Select Branch<span className="text-red-500 ml-0.5">*</span>
+              </label>
+              <select
+                value={branchId}
+                onChange={(e) => {
+                  setBranchId(e.target.value);
+                  setErrors((prev) => ({ ...prev, branchId: "" }));
                 }}
-                className={`flex items-center justify-center gap-2 border rounded-lg px-3 py-2 text-sm font-medium ${
-                  !isSuspense
-                    ? "border-green-500 bg-green-50 text-green-700"
-                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                }`}
+                className="flex h-9 w-full border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
               >
-                False
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSuspense(true);
-                  setAgencyId("");
-                  setErrors((prev) => ({ ...prev, agencyId: "" }));
-                }}
-                className={`flex items-center justify-center gap-2 border rounded-lg px-3 py-2 text-sm font-medium ${
-                  isSuspense
-                    ? "border-amber-500 bg-amber-50 text-amber-700"
-                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                }`}
-              >
-                True
-              </button>
+                <option value="">Select branch</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.code})
+                  </option>
+                ))}
+              </select>
+              {errors.branchId && (
+                <p className="mt-1 text-xs text-red-500">{errors.branchId}</p>
+              )}
             </div>
-          </div>
 
-          <div className="border border-gray-200 rounded-lg p-3 flex items-start gap-2 bg-gray-50">
-            <Info className="h-4 w-4 text-gray-500 mt-0.5 shrink-0" />
-            <div className="text-xs text-gray-600 space-y-1">
-              <p>
-                <span className="font-semibold text-gray-800">False:</span>{" "}
-                Agency selection is enabled.
-              </p>
-              <p>
-                <span className="font-semibold text-gray-800">True:</span>{" "}
-                Agency selection is disabled. The transaction will be routed to{" "}
-                <span className="font-mono font-semibold">
-                  GST_Suspense_Clearing
-                </span>{" "}
-                for Finance to map against a real invoice.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Agency */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-blue-600" />
-            Agency
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isSuspense ? (
-            <div className="border border-amber-200 bg-amber-50 rounded-lg p-3 flex items-start gap-2">
-              <Info className="h-4 w-4 text-amber-600 mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold text-amber-800">
-                  Agency selection disabled
-                </p>
-                <p className="text-xs text-amber-700 mt-0.5">
-                  Suspense Account is set to{" "}
-                  <span className="font-semibold">True</span>. Agency will be
-                  mapped by Finance during suspense clearing.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <>
+            <div>
               <AgencySelector
                 agencies={agencies}
                 value={agencyId}
@@ -352,10 +290,33 @@ export function TransactionForm({
                 required
               />
               {errors.agencyId && (
-                <p className="mt-2 text-xs text-red-500">{errors.agencyId}</p>
+                <p className="mt-1 text-xs text-red-500">{errors.agencyId}</p>
               )}
-            </>
-          )}
+
+              {/* Direction-specific balance strip directly under the
+                  primary agency selection. Hidden when Suspense is the
+                  choice — there's no real agency to summarise. */}
+              {selectedAgency && !isSuspense && (
+                <AgencyBalanceStrip
+                  metric={primaryMetric(type)}
+                  amount={primaryMetric(type) === "DUE" ? dueAmount : pendingAmount}
+                />
+              )}
+
+              {isSuspense && (
+                <div className="mt-2 border border-amber-200 bg-amber-50 rounded-lg p-2.5 flex items-start gap-2">
+                  <Info className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
+                  <p className="text-[11px] text-amber-700">
+                    Suspense Account selected. The transaction will be routed to{" "}
+                    <span className="font-mono font-semibold">
+                      GST_Suspense_Clearing
+                    </span>{" "}
+                    for Finance to map against a real invoice.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -373,7 +334,6 @@ export function TransactionForm({
               type="button"
               onClick={() => {
                 setPaymentType("NORMAL");
-                setThirdPartyAgencyId("");
                 setErrors((prev) => ({ ...prev, thirdPartyAgencyId: "" }));
               }}
               className={`flex items-center justify-center gap-2 border rounded-lg px-3 py-3 text-sm font-medium ${
@@ -387,14 +347,31 @@ export function TransactionForm({
             </button>
             <button
               type="button"
-              onClick={() => setPaymentType("THIRD_PARTY")}
+              onClick={() => {
+                if (isSuspense) return; // 3rd party is not available for suspense
+                setPaymentType("THIRD_PARTY");
+              }}
+              disabled={isSuspense}
+              title={
+                isSuspense
+                  ? "3rd Party is not available for Suspense Account transactions"
+                  : undefined
+              }
               className={`flex items-center justify-center gap-2 border rounded-lg px-3 py-3 text-sm font-medium ${
                 isThirdParty
                   ? "border-purple-500 bg-purple-50 text-purple-700 ring-2 ring-purple-200"
                   : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+              } ${
+                isSuspense
+                  ? "opacity-50 cursor-not-allowed hover:border-gray-200"
+                  : ""
               }`}
             >
-              <Users className="h-4 w-4" />
+              {isSuspense ? (
+                <Lock className="h-4 w-4" />
+              ) : (
+                <Users className="h-4 w-4" />
+              )}
               3rd Party Transaction
             </button>
           </div>
@@ -469,9 +446,7 @@ export function TransactionForm({
                   <div className="flex items-center gap-2">
                     <div
                       className={`p-1.5 rounded-lg ${
-                        paymentMode === "ONLINE"
-                          ? "bg-green-100"
-                          : "bg-gray-100"
+                        paymentMode === "ONLINE" ? "bg-green-100" : "bg-gray-100"
                       }`}
                     >
                       <Banknote
@@ -504,9 +479,7 @@ export function TransactionForm({
                   <div className="flex items-center gap-2">
                     <div
                       className={`p-1.5 rounded-lg ${
-                        paymentMode === "OFFLINE"
-                          ? "bg-blue-100"
-                          : "bg-gray-100"
+                        paymentMode === "OFFLINE" ? "bg-blue-100" : "bg-gray-100"
                       }`}
                     >
                       <Wallet
@@ -574,6 +547,17 @@ export function TransactionForm({
               error={errors.thirdPartyAgencyId}
             />
 
+            {/* Direction-specific balance strip directly under the
+                3rd party agency selection. */}
+            {selectedThirdParty && (
+              <AgencyBalanceStrip
+                metric={thirdPartyMetric(type)}
+                amount={
+                  thirdPartyMetric(type) === "DUE" ? dueAmount : pendingAmount
+                }
+              />
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1.5">
@@ -632,9 +616,7 @@ export function TransactionForm({
                   <div className="flex items-center gap-2">
                     <div
                       className={`p-1.5 rounded-lg ${
-                        paymentMode === "ONLINE"
-                          ? "bg-green-100"
-                          : "bg-gray-100"
+                        paymentMode === "ONLINE" ? "bg-green-100" : "bg-gray-100"
                       }`}
                     >
                       <Banknote
@@ -665,9 +647,7 @@ export function TransactionForm({
                   <div className="flex items-center gap-2">
                     <div
                       className={`p-1.5 rounded-lg ${
-                        paymentMode === "OFFLINE"
-                          ? "bg-blue-100"
-                          : "bg-gray-100"
+                        paymentMode === "OFFLINE" ? "bg-blue-100" : "bg-gray-100"
                       }`}
                     >
                       <Wallet
@@ -705,51 +685,6 @@ export function TransactionForm({
         </Card>
       )}
 
-      {/* Agency Balances */}
-      {(paymentType === "NORMAL" || paymentType === "THIRD_PARTY") &&
-        selectedAgency &&
-        !isSuspense && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText
-                  className={`h-4 w-4 ${
-                    paymentType === "NORMAL" ? "text-green-600" : "text-purple-600"
-                  }`}
-                />
-                Agency Balances
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <AgencyBalanceCard
-                  agency={selectedAgency}
-                  type={type}
-                  outstandingAmount={primaryOutstanding}
-                  pendingAmount={primaryPending}
-                  label="Primary Agency"
-                  variant="primary"
-                />
-                {paymentType === "THIRD_PARTY" &&
-                  (selectedThirdParty ? (
-                    <AgencyBalanceCard
-                      agency={selectedThirdParty}
-                      type={type}
-                      outstandingAmount={primaryOutstanding}
-                      pendingAmount={primaryPending}
-                      label="3rd Party Agency"
-                      variant="third-party"
-                    />
-                  ) : (
-                    <div className="border border-dashed border-gray-200 rounded-lg p-4 text-center text-xs text-gray-500">
-                      Select a 3rd party agency to view balances.
-                    </div>
-                  ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
       {/* Audit Information */}
       <Card>
         <CardHeader>
@@ -779,7 +714,7 @@ export function TransactionForm({
               </p>
               <p className="text-xs text-gray-500">
                 {isSuspense
-                  ? "Suspense"
+                  ? "Suspense Account"
                   : selectedAgency?.name || "—"}
               </p>
             </div>

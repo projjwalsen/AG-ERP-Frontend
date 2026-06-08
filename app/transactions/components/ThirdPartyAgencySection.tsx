@@ -43,7 +43,7 @@ export function ThirdPartyAgencySection({
           <option value="">Select 3rd party agency</option>
           {agencies.map((agency) => (
             <option key={agency.id} value={agency.id}>
-              {agency.name} ({agency.type})
+              {agency.name}
             </option>
           ))}
         </select>

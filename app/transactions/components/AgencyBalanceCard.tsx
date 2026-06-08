@@ -65,7 +65,7 @@ export function AgencyBalanceCard({
         <div className="bg-white border border-gray-200 rounded-lg p-2.5">
           <div className="flex items-center gap-1.5 text-[10px] text-gray-500 uppercase">
             <AlertCircle className="h-3 w-3" />
-            Outstanding
+            DUE Amount
           </div>
           <p className="text-sm font-semibold text-red-600 mt-0.5">
             {formatCurrency(outstandingAmount)}
@@ -74,7 +74,7 @@ export function AgencyBalanceCard({
         <div className="bg-white border border-gray-200 rounded-lg p-2.5">
           <div className="flex items-center gap-1.5 text-[10px] text-gray-500 uppercase">
             <Clock className="h-3 w-3" />
-            Pending
+            Amount Receivable
           </div>
           <p className="text-sm font-semibold text-amber-600 mt-0.5">
             {formatCurrency(pendingAmount)}
@@ -84,3 +84,4 @@ export function AgencyBalanceCard({
     </div>
   );
 }
+
