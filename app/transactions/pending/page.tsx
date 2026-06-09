@@ -27,12 +27,17 @@ import { hasModulePermission } from "@/lib/usePermissions";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { branchApi } from "@/app/services/branch.service";
+import { agencyApi } from "@/app/services/agency.service";
 import {
   approveTransaction,
   fetchAllTransactions,
+  fetchOutstanding,
   rejectTransaction,
+  updateTransaction,
 } from "@/app/store/transactionsSlice";
 import {
+  Agency,
+  AgencyOutstanding,
   Branch,
   Transaction,
   TransactionDirection,
@@ -88,6 +93,7 @@ export default function PendingAuthenticationPage() {
   const isLoading = useAppSelector((s) => s.transactions.isLoading);
   const isSubmitting = useAppSelector((s) => s.transactions.isSubmitting);
   const error = useAppSelector((s) => s.transactions.error);
+  const outstanding = useAppSelector((s) => s.transactions.outstanding);
   const permissions = useAppSelector((s) => s.auth.permissions);
 
   const canView = hasModulePermission(permissions, "TRANSACTION", "VIEW");
@@ -98,6 +104,7 @@ export default function PendingAuthenticationPage() {
   );
 
   const [branches, setBranches] = React.useState<Branch[]>([]);
+  const [agencies, setAgencies] = React.useState<Agency[]>([]);
   const [search, setSearch] = React.useState<string>("");
   const [branchFilter, setBranchFilter] = React.useState<string>("");
   const [directionFilter, setDirectionFilter] = React.useState<string>("");
@@ -106,16 +113,23 @@ export default function PendingAuthenticationPage() {
   const [rejectOpen, setRejectOpen] = React.useState<boolean>(false);
   const [activeTxn, setActiveTxn] = React.useState<Transaction | null>(null);
 
-  // Load branches for the filter dropdown.
+  // Load branches and agencies on mount. Agencies are only needed when
+  // authenticating a suspense transaction, but we fetch them once up
+  // front so the modal opens with the picker pre-populated.
   React.useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const b = await branchApi.getActive();
+        const [b, a] = await Promise.all([
+          branchApi.getActive(),
+          agencyApi.getAll({ limit: 200 }),
+        ]);
         if (cancelled) return;
         if (b.success && b.data) setBranches(b.data.branches || []);
+        if (a.success && a.data) setAgencies(a.data.agencies || []);
       } catch {
-        // Filter is non-critical.
+        // Filters and the suspense picker are non-critical; the page
+        // still renders.
       }
     };
     load();
@@ -168,9 +182,40 @@ export default function PendingAuthenticationPage() {
     setRejectOpen(true);
   };
 
-  const handleAuthenticate = async () => {
+  const handleAuthenticate = async (
+    edit: import("../components/AuthenticationModal").AuthenticationEdit | null
+  ) => {
     if (!activeTxn) return;
+
+    // The modal hands us a full edit payload for both suspense and
+    // non-suspense flows. For suspense we always PATCH first (clearing
+    // `suspenseAccount` to false, attaching the chosen agency, and
+    // applying any other field changes the manager made). For
+    // non-suspense we still PATCH when the manager edited anything —
+    // otherwise we skip straight to approve to avoid a no-op write.
     try {
+      if (edit) {
+        await dispatch(
+          updateTransaction({
+            transactionId: activeTxn.id,
+            payload: {
+              agencyId: edit.agencyId || undefined,
+              thirdPartyAgencyId: edit.thirdPartyAgencyId ?? undefined,
+              paymentType: edit.paymentType,
+              paymentThrough: edit.paymentThrough,
+              paymentMode: edit.paymentMode,
+              transactionRefNo: edit.transactionRefNo || undefined,
+              referenceNo: edit.referenceNo || undefined,
+              amount: edit.amount,
+              remarks: edit.remarks || undefined,
+              // For suspense the modal always sets agencyId; flip the
+              // flag so the row is no longer routed to the suspense
+              // clearing account.
+              suspense: activeTxn.suspenseAccount ? false : undefined,
+            },
+          })
+        ).unwrap();
+      }
       const result = await dispatch(approveTransaction(activeTxn.id)).unwrap();
       addToast(
         `Voucher ${result.data?.transactionNo ?? activeTxn.transactionNo} authenticated successfully`,
@@ -542,6 +587,22 @@ export default function PendingAuthenticationPage() {
           if (!o) setActiveTxn(null);
         }}
         transaction={activeTxn}
+        agencies={agencies}
+        outstanding={outstanding}
+        onContextChange={(ctx) => {
+          // Re-fetch the outstanding figures for the agency the
+          // manager just picked. The modal uses the result to render
+          // DUE / Amount Receivable strips under the selection.
+          dispatch(
+            fetchOutstanding({
+              agencyId: ctx.agencyId,
+              branchId: ctx.branchId,
+              direction: ctx.direction,
+            })
+          ).catch(() => {
+            // Non-critical preview; the modal still works.
+          });
+        }}
         onConfirm={handleAuthenticate}
         loading={isSubmitting}
       />

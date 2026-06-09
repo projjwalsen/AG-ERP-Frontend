@@ -46,7 +46,10 @@ export function AgencySelector({
             {agency.name}
           </option>
         ))}
-        <option value={SUSPENSE_AGENCY_VALUE}>
+        <option
+          value={SUSPENSE_AGENCY_VALUE}
+          className="font-bold text-amber-700 bg-amber-50"
+        >
           Suspense Account
         </option>
       </select>

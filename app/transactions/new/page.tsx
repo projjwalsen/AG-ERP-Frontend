@@ -3,14 +3,18 @@
 import * as React from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { agencyApi } from "@/app/services/agency.service";
 import { branchApi } from "@/app/services/branch.service";
-import { Agency, CreateTransactionPayload, TransactionDirection } from "@/app/types/transaction";
+import {
+  Agency,
+  CreateTransactionPayload,
+  TransactionDirection,
+} from "@/app/types/transaction";
 import { Branch } from "@/app/types/branch";
 import { hasModulePermission } from "@/lib/usePermissions";
 import {
@@ -22,7 +26,17 @@ import { Lock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default function NewTransactionPage() {
+  // `useSearchParams` requires a Suspense boundary during static rendering.
+  return (
+    <React.Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <NewTransactionContent />
+    </React.Suspense>
+  );
+}
+
+function NewTransactionContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const dispatch = useAppDispatch();
   const { addToast } = useToast();
   const currentUser = useAppSelector((s) => s.auth.user);
@@ -34,6 +48,13 @@ export default function NewTransactionPage() {
   const [agencies, setAgencies] = React.useState<Agency[]>([]);
   const [branches, setBranches] = React.useState<Branch[]>([]);
   const [loading, setLoading] = React.useState<boolean>(true);
+
+  // The list page links here with `?direction=INWARD` or `?direction=OUTWARD`
+  // so the form opens pre-set to that direction. Default to INWARD when
+  // the param is missing or malformed.
+  const directionParam = searchParams?.get("direction");
+  const defaultDirection: TransactionDirection =
+    directionParam === "OUTWARD" ? "OUTWARD" : "INWARD";
 
   React.useEffect(() => {
     let cancelled = false;
@@ -177,7 +198,11 @@ export default function NewTransactionPage() {
       </div>
 
       <PageHeader
-        title="New Transaction Entry"
+        title={
+          defaultDirection === "INWARD"
+            ? "New Inward Transaction"
+            : "New Outward Transaction"
+        }
         description="Record a new inward or outward payment. All fields marked with * are required."
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },
@@ -199,6 +224,7 @@ export default function NewTransactionPage() {
             email: currentUser.email,
           }}
           isSubmitting={isSubmitting}
+          defaultDirection={defaultDirection}
           onContextChange={handleContextChange}
           onSubmit={handleSubmit}
         />

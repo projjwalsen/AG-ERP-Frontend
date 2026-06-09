@@ -5,6 +5,7 @@ import purchasesReducer from "./purchasesSlice";
 import salesReducer from "./salesSlice";
 import transactionsReducer from "./transactionsSlice";
 import inventoryReducer from "./inventorySlice";
+import settingsReducer from "./settingsSlice";
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +15,7 @@ export const store = configureStore({
     sales: salesReducer,
     transactions: transactionsReducer,
     inventory: inventoryReducer,
+    settings: settingsReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

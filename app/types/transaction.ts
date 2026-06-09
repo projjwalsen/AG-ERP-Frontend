@@ -10,7 +10,40 @@ import type { User } from "./api";
 export type TransactionDirection = "INWARD" | "OUTWARD";
 export type TransactionStatus = "PENDING" | "APPROVED" | "REJECTED";
 export type TransactionPaymentType = "NORMAL" | "THIRD_PARTY";
+/**
+ * Legacy ONLINE / OFFLINE bucket kept only for display in read paths where
+ * the server hasn't migrated to `paymentThrough` yet. New payloads should
+ * send `paymentThrough` instead.
+ */
 export type PaymentMode = "ONLINE" | "OFFLINE";
+
+/**
+ * New payment-instrument enum the backend expects on create/update.
+ * Rules:
+ *   - NEFT | RTGS | UPI        → transactionRefNo  is required
+ *   - CHEQUE | DD              → referenceNo       is required
+ *   - CASH                     → neither is required
+ *   - 3rd Party agency         → no paymentThrough at all (treated as CASH)
+ */
+export type PaymentThrough = "CASH" | "CHEQUE" | "DD" | "NEFT" | "RTGS" | "UPI";
+
+export const PAYMENT_THROUGH_OPTIONS: { value: PaymentThrough; label: string }[] = [
+  { value: "CASH", label: "Cash" },
+  { value: "CHEQUE", label: "Cheque" },
+  { value: "DD", label: "DD (Demand Draft)" },
+  { value: "NEFT", label: "NEFT" },
+  { value: "RTGS", label: "RTGS" },
+  { value: "UPI", label: "UPI" },
+];
+
+/** Which reference field is required for a given payment-through value. */
+export function requiredReferenceField(
+  pt: PaymentThrough
+): "transactionRefNo" | "referenceNo" | null {
+  if (pt === "NEFT" || pt === "RTGS" || pt === "UPI") return "transactionRefNo";
+  if (pt === "CHEQUE" || pt === "DD") return "referenceNo";
+  return null; // CASH — neither
+}
 
 export interface Branch {
   id: string;
@@ -51,7 +84,23 @@ export interface Transaction {
   thirdPartyAgencyId: string | null;
   amount: number;
   paymentMode: PaymentMode;
+  /**
+   * New field — instrument-level payment (CASH / CHEQUE / DD / NEFT /
+   * RTGS / UPI). May be absent on rows that predate the migration;
+   * consumers should fall back to `paymentMode` (ONLINE / OFFLINE) for
+   * display.
+   */
+  paymentThrough?: PaymentThrough | null;
+  /**
+   * Bank UTR/IMPS for NEFT / RTGS / UPI. Populated by the create form
+   * only when `paymentThrough` is in that set.
+   */
   transactionRefNo: string | null;
+  /**
+   * Cheque or DD instrument number. Populated by the create form only
+   * when `paymentThrough` is CHEQUE or DD.
+   */
+  referenceNo?: string | null;
   remarks: string | null;
   createdById: string;
   approvedById?: string | null;
@@ -115,8 +164,26 @@ export interface CreateTransactionPayload {
   paymentType: TransactionPaymentType;
   thirdPartyAgencyId?: string;
   amount: number;
+  /**
+   * Required field — instrument-level enum (CASH / CHEQUE / DD / NEFT /
+   * RTGS / UPI). Decides which reference field below is required.
+   */
+  paymentThrough: PaymentThrough;
+  /**
+   * Channel-level dropdown (ONLINE / OFFLINE). Sent alongside
+   * `paymentThrough`; not used for validation.
+   */
   paymentMode: PaymentMode;
+  /**
+   * Bank UTR / IMPS / UPI reference — populated for NEFT / RTGS / UPI
+   * (and labelled "Transaction No" in the UI).
+   */
   transactionRefNo?: string;
+  /**
+   * Cheque or DD instrument number — populated for CHEQUE / DD
+   * (and labelled "Reference No" in the UI).
+   */
+  referenceNo?: string;
   remarks?: string;
 }
 
@@ -128,8 +195,10 @@ export interface UpdateTransactionPayload {
   paymentType?: TransactionPaymentType;
   thirdPartyAgencyId?: string;
   amount?: number;
+  paymentThrough?: PaymentThrough;
   paymentMode?: PaymentMode;
   transactionRefNo?: string;
+  referenceNo?: string;
   remarks?: string;
 }
 

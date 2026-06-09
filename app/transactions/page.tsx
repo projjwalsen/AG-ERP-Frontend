@@ -15,10 +15,12 @@ import {
   AlertCircle,
   Lock,
 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/layout";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { formatCurrency } from "@/lib/utils";
@@ -123,8 +125,82 @@ function FilterSelect({
   );
 }
 
-// ============== MAIN PAGE ==============
+// ============== TOP-LEVEL PAGE WRAPPER ==============
 export default function TransactionsListPage() {
+  // `useSearchParams` requires a Suspense boundary during static rendering.
+  return (
+    <React.Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <TransactionsListContent />
+    </React.Suspense>
+  );
+}
+
+// ============== CONTENT (uses URL search params) ==============
+function TransactionsListContent() {
+  // Allow other pages (e.g. new-transaction) to land back on a specific
+  // tab via ?tab=outward. Defaults to "inward" otherwise.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const tabFromUrl = searchParams?.get("tab");
+  const defaultTab = tabFromUrl === "outward" ? "outward" : "inward";
+
+  const handleTabChange = (value: string) => {
+    const params = new URLSearchParams(Array.from(searchParams?.entries() ?? []));
+    if (value === "inward") {
+      params.delete("tab");
+    } else {
+      params.set("tab", value);
+    }
+    const query = params.toString();
+    router.replace(query ? `/transactions?${query}` : "/transactions", {
+      scroll: false,
+    });
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 space-y-5">
+      <PageHeader
+        title="Transaction Management"
+        description="Manage inward, outward, suspense, and authentication workflows"
+        breadcrumbs={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Transactions" },
+        ]}
+      />
+
+      <Tabs value={defaultTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 max-w-md bg-gray-100">
+          <TabsTrigger value="inward" className="flex items-center gap-2">
+            <ArrowDownToLine className="h-4 w-4" />
+            Inward
+          </TabsTrigger>
+          <TabsTrigger value="outward" className="flex items-center gap-2">
+            <ArrowUpFromLine className="h-4 w-4" />
+            Outward
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="inward">
+          <DirectionTab direction="INWARD" />
+        </TabsContent>
+        <TabsContent value="outward">
+          <DirectionTab direction="OUTWARD" />
+        </TabsContent>
+      </Tabs>
+
+      <ToastContainer />
+    </div>
+  );
+}
+
+// ============== PER-DIRECTION TAB ==============
+/**
+ * One self-contained list view per direction. The page header / tabs at the
+ * top are shared; everything below is duplicated per tab so each tab shows
+ * the full Inward or Outward workflow at a glance — mirroring how
+ * `purchase-sales/page.tsx` renders Purchase and Sales as siblings.
+ */
+function DirectionTab({ direction }: { direction: TransactionDirection }) {
   const dispatch = useAppDispatch();
   const { addToast } = useToast();
 
@@ -137,18 +213,13 @@ export default function TransactionsListPage() {
 
   const canView = hasModulePermission(permissions, "TRANSACTION", "VIEW");
   const canWrite = hasModulePermission(permissions, "TRANSACTION", "WRITE");
-  const canApprove = hasModulePermission(
-    permissions,
-    "TRANSACTION",
-    "APPROVE"
-  );
+  const canApprove = hasModulePermission(permissions, "TRANSACTION", "APPROVE");
 
   const [agencies, setAgencies] = React.useState<Agency[]>([]);
   const [branches, setBranches] = React.useState<Branch[]>([]);
 
   const [search, setSearch] = React.useState<string>("");
   const [branchFilter, setBranchFilter] = React.useState<string>("");
-  const [directionFilter, setDirectionFilter] = React.useState<string>("");
   const [paymentModeFilter, setPaymentModeFilter] = React.useState<string>("");
   const [statusFilter, setStatusFilter] = React.useState<string>("");
   const [dateFrom, setDateFrom] = React.useState<string>("");
@@ -179,37 +250,31 @@ export default function TransactionsListPage() {
     };
   }, []);
 
-  // Fetch transactions. Filters that the backend supports are pushed; the
-  // rest (paymentMode, dates) are applied client-side below.
+  // Push the direction + backend-supported filters to the API. The
+  // direction is always pinned so each tab only sees its own rows.
   const fetchTransactions = React.useCallback(() => {
     const params: Parameters<typeof fetchAllTransactions>[0] = {
       page: currentPage,
       limit: pageSize,
+      direction,
     };
     if (search.trim()) params.search = search.trim();
     if (branchFilter) params.branchId = branchFilter;
-    if (directionFilter)
-      params.direction = directionFilter as TransactionDirection;
     if (statusFilter) params.status = statusFilter as TransactionStatus;
     dispatch(fetchAllTransactions(params));
-  }, [dispatch, currentPage, search, branchFilter, directionFilter, statusFilter]);
+  }, [dispatch, currentPage, search, branchFilter, statusFilter, direction]);
 
-  // Re-fetch on mount and when filters change.
   React.useEffect(() => {
     fetchTransactions();
   }, [fetchTransactions]);
 
-  // Side effect: also fetch the total count of pending transactions for the
-  // "Pending Authentication" stat card. Done via the dedicated
-  // `fetchPendingTotal` thunk, which only writes the meta.total slot and
-  // does NOT clobber `state.transactions` (the previous behaviour wiped the
-  // visible list with the one-row pending response).
+  // The pending-total counter is global, not per direction — fetch it
+  // once per tab mount so the badge in the action row stays current.
   React.useEffect(() => {
     if (!canView) return;
     dispatch(fetchPendingTotal());
-  }, [dispatch, canView, pagination?.total]);
+  }, [dispatch, canView]);
 
-  // Surface the slice error as a toast.
   React.useEffect(() => {
     if (error) addToast(error, "error");
   }, [error, addToast]);
@@ -217,8 +282,13 @@ export default function TransactionsListPage() {
   // Client-side filters the backend doesn't expose.
   const filtered = React.useMemo(() => {
     let list = [...transactions];
+    // Hard-filter by direction as a defence-in-depth measure in case the
+    // backend returns stale rows from before the direction param was sent.
+    list = list.filter((t) => t.direction === direction);
     if (paymentModeFilter)
-      list = list.filter((t) => t.paymentMode === (paymentModeFilter as PaymentMode));
+      list = list.filter(
+        (t) => t.paymentMode === (paymentModeFilter as PaymentMode)
+      );
     if (dateFrom) {
       const from = new Date(dateFrom).getTime();
       list = list.filter((t) => new Date(t.createdAt).getTime() >= from);
@@ -228,12 +298,11 @@ export default function TransactionsListPage() {
       list = list.filter((t) => new Date(t.createdAt).getTime() <= to);
     }
     return list;
-  }, [transactions, paymentModeFilter, dateFrom, dateTo]);
+  }, [transactions, paymentModeFilter, dateFrom, dateTo, direction]);
 
   const totalPages = pagination?.totalPages ?? 1;
   const total = pagination?.total ?? 0;
 
-  // Derive stat counts from the current in-memory list (page-accurate only).
   const totalAmount = transactions.reduce((s, t) => s + t.amount, 0);
   const pendingAmount = transactions
     .filter((t) => t.status === "PENDING")
@@ -241,9 +310,19 @@ export default function TransactionsListPage() {
   const suspenseAmount = transactions
     .filter((t) => t.suspenseAccount)
     .reduce((s, t) => s + t.amount, 0);
-  const inwardCount = transactions.filter((t) => t.direction === "INWARD").length;
-  const outwardCount = transactions.filter((t) => t.direction === "OUTWARD").length;
   const suspenseCount = transactions.filter((t) => t.suspenseAccount).length;
+  const directionCount = transactions.filter((t) => t.direction === direction)
+    .length;
+
+  const isInward = direction === "INWARD";
+  const DirectionIcon = isInward ? ArrowDownToLine : ArrowUpFromLine;
+  const directionLabel = isInward ? "Inward" : "Outward";
+  const directionColor = isInward
+    ? { iconBg: "bg-emerald-50", iconColor: "text-emerald-600" }
+    : { iconBg: "bg-violet-50", iconColor: "text-violet-600" };
+  const newButtonLabel = isInward
+    ? "New Inward Transaction"
+    : "New Outward Transaction";
 
   const handleView = (txn: Transaction) => {
     if (typeof window !== "undefined") {
@@ -264,7 +343,6 @@ export default function TransactionsListPage() {
   const clearFilters = () => {
     setSearch("");
     setBranchFilter("");
-    setDirectionFilter("");
     setPaymentModeFilter("");
     setStatusFilter("");
     setDateFrom("");
@@ -274,94 +352,83 @@ export default function TransactionsListPage() {
   const hasFilters =
     !!search ||
     !!branchFilter ||
-    !!directionFilter ||
     !!paymentModeFilter ||
     !!statusFilter ||
     !!dateFrom ||
     !!dateTo;
 
-  // No permission to view the page at all — render a no-permission card
-  // and stop here. We still let the page render the breadcrumbs/back link
-  // for context (handled by the AppLayout sidebar).
   if (!canView) {
     return (
-      <div className="space-y-5">
-        <PageHeader
-          title="Transactions"
-          description="Inward, outward, suspense, and authentication workflows"
-          breadcrumbs={[
-            { label: "Dashboard", href: "/dashboard" },
-            { label: "Transactions" },
-          ]}
-        />
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-12 text-center">
-            <div className="mx-auto w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center mb-3">
-              <Lock className="h-6 w-6 text-amber-600" />
-            </div>
-            <p className="text-sm font-medium text-gray-900">
-              You do not have permission to view transactions
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              Ask your administrator to grant the{" "}
-              <code className="font-mono text-[11px]">TRANSACTION:VIEW</code>{" "}
-              permission.
-            </p>
-          </CardContent>
-        </Card>
-        <ToastContainer />
-      </div>
+      <Card className="border-0 shadow-sm">
+        <CardContent className="p-12 text-center">
+          <div className="mx-auto w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center mb-3">
+            <Lock className="h-6 w-6 text-amber-600" />
+          </div>
+          <p className="text-sm font-medium text-gray-900">
+            You do not have permission to view transactions
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Ask your administrator to grant the{" "}
+            <code className="font-mono text-[11px]">TRANSACTION:VIEW</code>{" "}
+            permission.
+          </p>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="Transaction Management"
-        description="Manage inward, outward, suspense, and authentication workflows"
-        breadcrumbs={[
-          { label: "Dashboard", href: "/dashboard" },
-          { label: "Transactions" },
-        ]}
-        actions={
-          <>
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={fetchTransactions}
-            >
-              <RefreshCcw className="h-4 w-4" />
-              Refresh
-            </Button>
-            {canApprove && (
-              <Link href="/transactions/pending">
-                <Button variant="outline" className="gap-2">
-                  <Clock className="h-4 w-4" />
-                  Pending Queue
-                  {(pendingTotal ?? 0) > 0 && (
-                    <span className="ml-1 inline-flex items-center justify-center px-1.5 h-5 min-w-5 text-[10px] font-semibold rounded-full bg-amber-100 text-amber-700">
-                      {pendingTotal}
-                    </span>
-                  )}
-                </Button>
-              </Link>
-            )}
-            {canWrite && (
-              <Link href="/transactions/new">
-                <Button className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  New Transaction
-                </Button>
-              </Link>
-            )}
-          </>
-        }
-      />
+      {/* Per-tab action row */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <DirectionIcon className="h-5 w-5" />
+            {directionLabel} Transactions
+          </h2>
+          <p className="text-sm text-gray-500">
+            {isInward
+              ? "Receipts from clients — money coming in"
+              : "Payments to vendors — money going out"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={fetchTransactions}
+          >
+            <RefreshCcw className="h-4 w-4" />
+            Refresh
+          </Button>
+          {canApprove && (
+            <Link href="/transactions/pending">
+              <Button variant="outline" className="gap-2">
+                <Clock className="h-4 w-4" />
+                Pending Queue
+                {(pendingTotal ?? 0) > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center px-1.5 h-5 min-w-5 text-[10px] font-semibold rounded-full bg-amber-100 text-amber-700">
+                    {pendingTotal}
+                  </span>
+                )}
+              </Button>
+            </Link>
+          )}
+          {canWrite && (
+            <Link href={`/transactions/new?direction=${direction}`}>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                {newButtonLabel}
+              </Button>
+            </Link>
+          )}
+        </div>
+      </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard
-          title="Total Transactions"
+          title={`${directionLabel} Total`}
           value={total}
           hint={`${formatCurrency(totalAmount)} on this page`}
           icon={Receipt}
@@ -382,20 +449,12 @@ export default function TransactionsListPage() {
           }
         />
         <StatCard
-          title="Inward Payments"
-          value={inwardCount}
+          title={`${directionLabel} Count`}
+          value={directionCount}
           hint="On this page"
-          icon={ArrowDownToLine}
-          iconBg="bg-emerald-50"
-          iconColor="text-emerald-600"
-        />
-        <StatCard
-          title="Outward Payments"
-          value={outwardCount}
-          hint="On this page"
-          icon={ArrowUpFromLine}
-          iconBg="bg-violet-50"
-          iconColor="text-violet-600"
+          icon={DirectionIcon}
+          iconBg={directionColor.iconBg}
+          iconColor={directionColor.iconColor}
         />
         <StatCard
           title="Suspense Entries"
@@ -414,7 +473,7 @@ export default function TransactionsListPage() {
             <div className="relative flex-1 min-w-[220px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
-                placeholder="Search by transaction no, ref no, agency, or user…"
+                placeholder={`Search ${directionLabel.toLowerCase()} transactions…`}
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
@@ -432,19 +491,6 @@ export default function TransactionsListPage() {
               placeholder="All Branches"
               options={branches.map((b) => ({ label: b.name, value: b.id }))}
               className="w-44"
-            />
-            <FilterSelect
-              value={directionFilter}
-              onChange={(v) => {
-                setDirectionFilter(v);
-                setCurrentPage(1);
-              }}
-              placeholder="All Types"
-              options={[
-                { label: "Inward", value: "INWARD" },
-                { label: "Outward", value: "OUTWARD" },
-              ]}
-              className="w-36"
             />
             <FilterSelect
               value={paymentModeFilter}
@@ -539,7 +585,8 @@ export default function TransactionsListPage() {
             </div>
             <div>
               <p className="text-sm font-medium text-gray-900">
-                {total} transaction{total !== 1 ? "s" : ""} on the server
+                {total} {directionLabel.toLowerCase()} transaction
+                {total !== 1 ? "s" : ""} on the server
               </p>
               <p className="text-xs text-gray-500 mt-0.5">
                 Showing {filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
@@ -552,8 +599,6 @@ export default function TransactionsListPage() {
           </div>
         </CardContent>
       </Card>
-
-      <ToastContainer />
     </div>
   );
 }

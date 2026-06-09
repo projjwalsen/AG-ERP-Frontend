@@ -554,24 +554,42 @@ export default function TransactionDetailsPage() {
               {formatCurrency(txn.amount).replace("₹", "")}
             </p>
             <p className="text-xs text-blue-700 mt-1">
-              {txn.paymentMode === "ONLINE" ? "Online Transfer" : "Offline"} •
-              {" "}
-              {txn.transactionRefNo
-                ? txn.transactionRefNo
-                : "no reference provided"}
+              {txn.paymentThrough
+                ? txn.paymentThrough
+                : txn.paymentMode === "ONLINE"
+                ? "Online Transfer"
+                : "Offline"}{" "}
+              •{" "}
+              {txn.transactionRefNo ||
+                txn.referenceNo ||
+                "no reference provided"}
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <InfoRow
-              label="Payment Mode"
-              value={txn.paymentMode === "ONLINE" ? "Online" : "Offline"}
+              label="Payment Through"
+              value={
+                txn.paymentThrough
+                  ? txn.paymentThrough
+                  : txn.paymentMode === "ONLINE"
+                  ? "Online"
+                  : "Offline"
+              }
               icon={txn.paymentMode === "ONLINE" ? Banknote : Wallet}
             />
             {txn.transactionRefNo && (
               <InfoRow
-                label="Transaction Reference"
+                label="Transaction No"
                 value={txn.transactionRefNo}
+                icon={Hash}
+                mono
+              />
+            )}
+            {txn.referenceNo && (
+              <InfoRow
+                label="Reference No"
+                value={txn.referenceNo}
                 icon={Hash}
                 mono
               />

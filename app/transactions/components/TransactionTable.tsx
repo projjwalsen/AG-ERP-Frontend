@@ -102,7 +102,7 @@ export function TransactionTable({
                   Ref No
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Payment Mode
+                  Payment Through
                 </th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">
                   Amount
@@ -160,16 +160,25 @@ export function TransactionTable({
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm font-mono text-gray-700">
-                      {txn.transactionRefNo || "-"}
+                      {txn.transactionRefNo || txn.referenceNo || "-"}
                     </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-1 text-sm text-gray-700">
-                        {txn.paymentMode === "ONLINE" ? (
-                          <Banknote className="h-3.5 w-3.5 text-green-600" />
+                        {txn.paymentThrough ? (
+                          <>
+                            <Banknote className="h-3.5 w-3.5 text-green-600" />
+                            {txn.paymentThrough}
+                          </>
                         ) : (
-                          <Wallet className="h-3.5 w-3.5 text-blue-600" />
+                          <>
+                            {txn.paymentMode === "ONLINE" ? (
+                              <Banknote className="h-3.5 w-3.5 text-green-600" />
+                            ) : (
+                              <Wallet className="h-3.5 w-3.5 text-blue-600" />
+                            )}
+                            {txn.paymentMode === "ONLINE" ? "Online" : "Offline"}
+                          </>
                         )}
-                        {txn.paymentMode === "ONLINE" ? "Online" : "Offline"}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
