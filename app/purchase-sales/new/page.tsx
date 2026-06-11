@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { DataSelect, type DataSelectOption } from "@/components/ui/data-select";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { useAppDispatch } from "@/app/store/hooks";
 import { createPurchase } from "@/app/store/purchasesSlice";
@@ -241,35 +242,43 @@ export default function NewPurchasePage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="branch">Branch *</Label>
-                <select
+                <DataSelect
                   id="branch"
                   value={formData.branchId}
-                  onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  onChange={(v) => setFormData({ ...formData, branchId: v })}
+                  placeholder="Select Branch"
                   required
-                >
-                  <option value="">Select Branch</option>
-                  {branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>{branch.name}</option>
-                  ))}
-                </select>
+                  searchable
+                  clearable
+                  options={branches.map<DataSelectOption>((branch) => ({
+                    value: branch.id,
+                    label: branch.name,
+                    description: [branch.code, branch.city, branch.state].filter(Boolean).join(" • "),
+                  }))}
+                />
               </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="agency">Vendor *</Label>
-              <select
+              <DataSelect
                 id="agency"
                 value={formData.agencyId}
-                onChange={(e) => setFormData({ ...formData, agencyId: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                onChange={(v) => setFormData({ ...formData, agencyId: v })}
+                placeholder="Select Vendor"
                 required
-              >
-                <option value="">Select Vendor</option>
-                {agencies.map((agency) => (
-                  <option key={agency.id} value={agency.id}>{agency.name}</option>
-                ))}
-              </select>
+                searchable
+                clearable
+                panelClassName="w-[420px]"
+                options={agencies.map<DataSelectOption>((agency) => ({
+                  value: agency.id,
+                  label: agency.name,
+                  description: [agency.contactPerson, agency.email, agency.gstin]
+                    .filter(Boolean)
+                    .join(" • "),
+                  badge: agency.type,
+                }))}
+              />
             </div>
 
             {/* Products Section */}
@@ -293,14 +302,13 @@ export default function NewPurchasePage() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 border-b">
                     <tr>
-                      <th className="px-4 py-3 text-left font-semibold text-nowrap">Product</th>
+                      <th className="px-4 py-3 text-left font-semibold text-nowrap min-w-[360px]">Product</th>
                       <th className="px-4 py-3 text-left font-semibold text-nowrap">Batch No</th>
                       <th className="px-4 py-3 text-right font-semibold text-nowrap">Qty</th>
                       <th className="px-4 py-3 text-left font-semibold text-nowrap">Unit</th>
                       <th className="px-4 py-3 text-right font-semibold text-nowrap">Price</th>
                       <th className="px-4 py-3 text-right font-semibold text-nowrap">Amount</th>
                       <th className="px-4 py-3 text-right font-semibold text-nowrap">GST %</th>
-                      <th className="px-4 py-3 text-right font-semibold text-nowrap">GST Amt</th>
                       <th className="px-4 py-3 text-right font-semibold text-nowrap">Total w/ GST</th>
                       <th className="px-4 py-3 text-center font-semibold text-nowrap">Action</th>
                     </tr>
@@ -313,20 +321,22 @@ export default function NewPurchasePage() {
 
                       return (
                         <tr key={item.id} className="border-b hover:bg-gray-50">
-                          <td className="px-4 py-3">
-                            <select
+                          <td className="px-2 py-3 min-w-[360px]">
+                            <DataSelect
                               value={item.productId}
-                              onChange={(e) => handleItemChange(item.id, "productId", e.target.value)}
-                              className="w-full border border-gray-200 rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                              onChange={(v) => handleItemChange(item.id, "productId", v)}
+                              placeholder="Select Product"
                               required
-                            >
-                              <option value="">Select Product</option>
-                              {products.map((product) => (
-                                <option key={product.id} value={product.id}>
-                                  {product.name} ({product.sku})
-                                </option>
-                              ))}
-                            </select>
+                              searchable
+                              triggerClassName="h-10 px-2 text-base"
+                              panelClassName="w-[640px]"
+                              options={products.map<DataSelectOption>((product) => ({
+                                value: product.id,
+                                label: product.name,
+                                description: product.sku ? `SKU: ${product.sku}` : undefined,
+                                badge: product.baseUnit,
+                              }))}
+                            />
                           </td>
                           <td className="px-4 py-3">
                             <Input
@@ -349,15 +359,17 @@ export default function NewPurchasePage() {
                             />
                           </td>
                           <td className="px-4 py-3">
-                            <select
+                            <DataSelect
                               value={item.unit}
-                              onChange={(e) => handleItemChange(item.id, "unit", e.target.value)}
-                              className="w-full border border-gray-200 rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                              onChange={(v) => handleItemChange(item.id, "unit", v)}
                               required
-                            >
-                              <option value="KG">KG</option>
-                              <option value="LTR">LTR</option>
-                            </select>
+                              triggerClassName="h-9 px-2"
+                              panelClassName="w-[140px]"
+                              options={[
+                                { value: "KG", label: "KG" },
+                                { value: "LTR", label: "LTR" },
+                              ]}
+                            />
                           </td>
                           <td className="px-4 py-3">
                             <Input
@@ -375,9 +387,6 @@ export default function NewPurchasePage() {
                           </td>
                           <td className="px-4 py-3 text-right font-semibold text-gray-600">
                             {item.gst ? `${item.gst}%` : "N/A"}
-                          </td>
-                          <td className="px-4 py-3 text-right font-semibold text-gray-600 text-nowrap">
-                            ₹ {gstAmount.toFixed(2)}
                           </td>
                           <td className="px-4 py-3 text-right font-semibold text-green-600 text-nowrap">
                             ₹ {totalWithGST.toFixed(2)}

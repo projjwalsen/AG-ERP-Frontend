@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +49,10 @@ interface DataSelectProps {
  *   2. Each option can show a description and a badge for context.
  *   3. Optional search box filters the list as the user types.
  *   4. Keyboard navigation (ArrowUp/Down/Enter/Esc) is supported.
+ *
+ * The panel is rendered into document.body via a portal so it can never be
+ * clipped by an ancestor that has `overflow:hidden` or `overflow:auto` (e.g.
+ * the `overflow-x-auto` wrapper around the items table).
  */
 export const DataSelect = React.forwardRef<HTMLButtonElement, DataSelectProps>(
   function DataSelect(
@@ -74,11 +79,17 @@ export const DataSelect = React.forwardRef<HTMLButtonElement, DataSelectProps>(
     const [open, setOpen] = React.useState(false);
     const [query, setQuery] = React.useState("");
     const [activeIndex, setActiveIndex] = React.useState(0);
+    const [panelPos, setPanelPos] = React.useState<{
+      top: number;
+      left: number;
+      width: number;
+    } | null>(null);
     const triggerRef = React.useRef<HTMLButtonElement | null>(null);
     const panelRef = React.useRef<HTMLDivElement | null>(null);
     const searchRef = React.useRef<HTMLInputElement | null>(null);
+    const wrapperRef = React.useRef<HTMLDivElement | null>(null);
 
-    const setRefs = React.useCallback(
+    const setTriggerRefs = React.useCallback(
       (node: HTMLButtonElement | null) => {
         triggerRef.current = node;
         if (typeof ref === "function") ref(node);
@@ -117,13 +128,43 @@ export const DataSelect = React.forwardRef<HTMLButtonElement, DataSelectProps>(
       if (!open) setQuery("");
     }, [open, searchable]);
 
+    // Compute portal position from the trigger's bounding rect, then keep
+    // it in sync with scroll/resize while open. Using a portal + fixed
+    // positioning lets the panel escape any overflow-clipping ancestor.
+    React.useEffect(() => {
+      if (!open) {
+        setPanelPos(null);
+        return;
+      }
+
+      const update = () => {
+        const node = triggerRef.current;
+        if (!node) return;
+        const rect = node.getBoundingClientRect();
+        setPanelPos({
+          top: rect.bottom + 4, // mt-1
+          left: rect.left,
+          width: rect.width,
+        });
+      };
+
+      update();
+
+      window.addEventListener("resize", update);
+      window.addEventListener("scroll", update, true);
+      return () => {
+        window.removeEventListener("resize", update);
+        window.removeEventListener("scroll", update, true);
+      };
+    }, [open]);
+
     // Close on outside click.
     React.useEffect(() => {
       if (!open) return;
       const handler = (e: MouseEvent) => {
         const target = e.target as Node;
         if (
-          triggerRef.current?.contains(target) ||
+          wrapperRef.current?.contains(target) ||
           panelRef.current?.contains(target)
         ) {
           return;
@@ -174,10 +215,100 @@ export const DataSelect = React.forwardRef<HTMLButtonElement, DataSelectProps>(
       onChange("");
     };
 
+    const panel = open && panelPos && typeof document !== "undefined" ? (
+      createPortal(
+        <div
+          ref={panelRef}
+          role="listbox"
+          tabIndex={-1}
+          onKeyDown={handleListKeyDown}
+          style={{
+            position: "fixed",
+            top: panelPos.top,
+            left: panelPos.left,
+            width: panelMinWidth
+              ? Math.max(panelPos.width, panelMinWidth)
+              : panelPos.width,
+            zIndex: 9999,
+          }}
+          className={cn(
+            "max-h-80 overflow-auto border border-gray-200 bg-white shadow-lg",
+            panelClassName
+          )}
+        >
+          {searchable && (
+            <div className="sticky top-0 z-[10000] bg-white border-b border-gray-100 p-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search…"
+                  className="w-full h-8 pl-8 pr-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+            </div>
+          )}
+
+          {filtered.length === 0 && (
+            <div className="px-3 py-6 text-center text-xs text-gray-500">
+              No matches found
+            </div>
+          )}
+
+          {filtered.map((option, idx) => {
+            const isSelected = option.value === value;
+            const isActive = idx === activeIndex;
+            return (
+              <div
+                key={option.value}
+                role="option"
+                aria-selected={isSelected}
+                aria-disabled={option.disabled || undefined}
+                onMouseEnter={() => setActiveIndex(idx)}
+                onClick={() => choose(option)}
+                className={cn(
+                  "flex items-start gap-2 px-3 py-2 cursor-pointer text-sm",
+                  isActive && "bg-green-50",
+                  option.disabled && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                <span className="mt-0.5 shrink-0">
+                  {isSelected ? (
+                    <Check className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <span className="block h-4 w-4" />
+                  )}
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-gray-900 break-words">
+                    {option.label}
+                  </span>
+                  {option.description && (
+                    <span className="block text-[11px] text-gray-500 mt-0.5 break-words">
+                      {option.description}
+                    </span>
+                  )}
+                </span>
+                {option.badge && (
+                  <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                    {option.badge}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>,
+        document.body
+      )
+    ) : null;
+
     return (
-      <div className={cn("relative", className)}>
+      <div ref={wrapperRef} className={cn("relative", className)}>
         <button
-          ref={setRefs}
+          ref={setTriggerRefs}
           type="button"
           id={id}
           name={name}
@@ -230,88 +361,7 @@ export const DataSelect = React.forwardRef<HTMLButtonElement, DataSelectProps>(
           <p className="mt-1 text-xs text-red-500">{error}</p>
         )}
 
-        {open && (
-          <div
-            ref={panelRef}
-            role="listbox"
-            tabIndex={-1}
-            onKeyDown={handleListKeyDown}
-            style={
-              panelMinWidth
-                ? { minWidth: panelMinWidth }
-                : undefined
-            }
-            className={cn(
-              "absolute z-[9999] mt-1 left-0 max-h-80 overflow-auto border border-gray-200 bg-white shadow-lg",
-              panelClassName
-            )}
-          >
-            {searchable && (
-              <div className="sticky top-0 z-[10000] bg-white border-b border-gray-100 p-2">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                  <input
-                    ref={searchRef}
-                    type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search…"
-                    className="w-full h-8 pl-8 pr-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  />
-                </div>
-              </div>
-            )}
-
-            {filtered.length === 0 && (
-              <div className="px-3 py-6 text-center text-xs text-gray-500">
-                No matches found
-              </div>
-            )}
-
-            {filtered.map((option, idx) => {
-              const isSelected = option.value === value;
-              const isActive = idx === activeIndex;
-              return (
-                <div
-                  key={option.value}
-                  role="option"
-                  aria-selected={isSelected}
-                  aria-disabled={option.disabled || undefined}
-                  onMouseEnter={() => setActiveIndex(idx)}
-                  onClick={() => choose(option)}
-                  className={cn(
-                    "flex items-start gap-2 px-3 py-2 cursor-pointer text-sm",
-                    isActive && "bg-green-50",
-                    option.disabled && "opacity-50 cursor-not-allowed"
-                  )}
-                >
-                  <span className="mt-0.5 shrink-0">
-                    {isSelected ? (
-                      <Check className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <span className="block h-4 w-4" />
-                    )}
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-gray-900 break-words">
-                      {option.label}
-                    </span>
-                    {option.description && (
-                      <span className="block text-[11px] text-gray-500 mt-0.5 break-words">
-                        {option.description}
-                      </span>
-                    )}
-                  </span>
-                  {option.badge && (
-                    <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
-                      {option.badge}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {panel}
       </div>
     );
   }

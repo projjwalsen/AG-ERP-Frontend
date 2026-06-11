@@ -369,14 +369,13 @@ export default function NewSalePage() {
                 <table className="w-full text-sm min-w-[1180px]">
                   <thead className="bg-gray-100 border-b">
                     <tr>
-                      <th className="px-4 py-3 text-left font-semibold w-[260px]">Product</th>
+                      <th className="px-4 py-3 text-left font-semibold w-[400px]">Product</th>
                       <th className="px-4 py-3 text-left font-semibold w-[280px]">Batch (Available Qty)</th>
                       <th className="px-4 py-3 text-right font-semibold w-[110px]">Qty</th>
                       <th className="px-4 py-3 text-left font-semibold w-[100px]">Unit</th>
                       <th className="px-4 py-3 text-right font-semibold w-[130px]">Price</th>
                       <th className="px-4 py-3 text-right font-semibold w-[120px]">Amount</th>
                       <th className="px-4 py-3 text-right font-semibold text-nowrap w-[80px]">GST %</th>
-                      <th className="px-4 py-3 text-right font-semibold text-nowrap w-[110px]">GST Amt</th>
                       <th className="px-4 py-3 text-right font-semibold text-nowrap w-[130px]">Total w/ GST</th>
                       <th className="px-4 py-3 text-center font-semibold w-[80px]">Action</th>
                     </tr>
@@ -396,8 +395,8 @@ export default function NewSalePage() {
                               placeholder="Select Product"
                               required
                               searchable
-                              triggerClassName="h-9 px-2"
-                              panelClassName="w-[360px]"
+                              triggerClassName="h-10 px-2 text-base"
+                              panelClassName="w-[640px]"
                               options={products.map<DataSelectOption>((product) => ({
                                 value: product.id,
                                 label: product.name,
@@ -478,9 +477,6 @@ export default function NewSalePage() {
                           </td>
                           <td className="px-4 py-3 text-right font-semibold text-gray-600">
                             {item.gst ? `${item.gst}%` : "N/A"}
-                          </td>
-                          <td className="px-4 py-3 text-right font-semibold text-gray-600 text-nowrap">
-                            ₹ {gstAmount.toFixed(2)}
                           </td>
                           <td className="px-4 py-3 text-right font-semibold text-green-600 text-nowrap">
                             ₹ {totalWithGST.toFixed(2)}
