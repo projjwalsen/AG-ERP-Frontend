@@ -141,24 +141,32 @@ export function AuthenticationModal({
     });
   }, [open, transaction]);
 
-  // Tell the parent to (re)fetch outstanding whenever the manager picks
-  // a different agency. Both `edit` and `transaction` are nullable
-  // state, so the effect must guard at the top — running the hook
-  // unconditionally (above the early return) keeps React's hook order
-  // stable across renders.
+  // Tell the parent to (re)fetch outstanding whenever the agency in scope
+  // changes — either because the manager picked a new one for a SUSPENSE
+  // reconciliation, or because the modal was opened against a different
+  // non-suspense transaction (where the agency is `transaction.agencyId`).
+  // Both `edit` and `transaction` are nullable state, so the effect must
+  // guard at the top — running the hook unconditionally (above the early
+  // return) keeps React's hook order stable across renders.
   const lastCtxKey = React.useRef<string>("");
   React.useEffect(() => {
     if (!edit) return;
     if (!transaction) return;
-    if (!transaction.suspenseAccount) return;
-    if (!edit.agencyId) return;
-    const key = [edit.agencyId, transaction.branchId, transaction.direction].join(
+    // For suspense, only fire once the manager has actually picked an
+    // agency. For non-suspense, the agency is fixed at the transaction
+    // row level — read it directly from `transaction.agencyId` so the
+    // strip is populated immediately when the modal opens.
+    const agencyId = transaction.suspenseAccount
+      ? edit.agencyId
+      : (transaction.agencyId ?? "");
+    if (!agencyId) return;
+    const key = [agencyId, transaction.branchId, transaction.direction].join(
       "|"
     );
     if (key === lastCtxKey.current) return;
     lastCtxKey.current = key;
     onContextChange({
-      agencyId: edit.agencyId,
+      agencyId,
       branchId: transaction.branchId,
       direction: transaction.direction,
     });
