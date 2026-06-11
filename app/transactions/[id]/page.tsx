@@ -276,7 +276,7 @@ export default function TransactionDetailsPage() {
         ]}
         actions={
           <>
-            <Button variant="outline" className="gap-2">
+            {/* <Button variant="outline" className="gap-2">
               <Printer className="h-4 w-4" />
               Print
             </Button>
@@ -289,7 +289,7 @@ export default function TransactionDetailsPage() {
                 <Edit className="h-4 w-4" />
                 Edit
               </Button>
-            )}
+            )} */}
             {isPending && canApprove && (
               <Link href="/transactions/pending">
                 <Button
@@ -721,10 +721,10 @@ export default function TransactionDetailsPage() {
             <Link href="/transactions">
               <Button variant="outline">Back to List</Button>
             </Link>
-            <Button variant="outline" className="gap-2">
+            {/* <Button variant="outline" className="gap-2">
               <Printer className="h-4 w-4" />
               Print Voucher
-            </Button>
+            </Button> */}
             {isPending && canApprove && (
               <Link href="/transactions/pending">
                 <Button className="gap-2">

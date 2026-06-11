@@ -20,6 +20,7 @@ import { hasModulePermission } from "@/lib/usePermissions";
 import {
   fetchOutstanding,
   createTransaction,
+  clearThirdPartyOutstanding,
 } from "@/app/store/transactionsSlice";
 import { TransactionForm } from "../components/TransactionForm";
 import { Lock } from "lucide-react";
@@ -41,6 +42,9 @@ function NewTransactionContent() {
   const { addToast } = useToast();
   const currentUser = useAppSelector((s) => s.auth.user);
   const outstanding = useAppSelector((s) => s.transactions.outstanding);
+  const thirdPartyOutstanding = useAppSelector(
+    (s) => s.transactions.thirdPartyOutstanding
+  );
   const isSubmitting = useAppSelector((s) => s.transactions.isSubmitting);
   const permissions = useAppSelector((s) => s.auth.permissions);
   const canWrite = hasModulePermission(permissions, "TRANSACTION", "WRITE");
@@ -88,26 +92,79 @@ function NewTransactionContent() {
   }, [addToast]);
 
   /**
+   * Tracks the 3rd-party id we last kicked off a fetch for, so we can clear
+   * `state.thirdPartyOutstanding` when the user picks a *different*
+   * counter-party (or toggles 3rd-party off). Without this, the balance
+   * strip would briefly render the previous counter-party's figures while
+   * the new `/outstanding` call is in flight.
+   */
+  const lastFetchedThirdPartyId = React.useRef<string | null>(null);
+
+  /**
    * The form is a controlled-component island. It owns its local state but
    * reports the latest agency/branch/direction up via this callback, so we
    * can refetch the outstanding balance on the right inputs.
+   *
+   * `thirdPartyAgencyId` is optional. When the form has a 3rd party picked,
+   * it forwards that id here so we can re-query `/outstanding` for the
+   * counter-party — its own sales/purchase outstanding is what the 3rd-party
+   * balance strip should display, not the primary's. Without a 3rd party
+   * id, the 3rd-party slot is cleared so the strip falls back to zero.
    */
   const handleContextChange = React.useCallback(
     (ctx: {
       agencyId?: string;
       branchId?: string;
       direction?: TransactionDirection;
+      thirdPartyAgencyId?: string;
     }) => {
-      if (!ctx.agencyId || !ctx.branchId || !ctx.direction) return;
-      dispatch(
-        fetchOutstanding({
-          agencyId: ctx.agencyId,
-          branchId: ctx.branchId,
-          direction: ctx.direction,
-        })
-      ).catch(() => {
-        // Outstanding is a non-critical preview; the form still works.
-      });
+      if (!ctx.branchId || !ctx.direction) return;
+
+      // Primary agency: only meaningful when the primary itself is set
+      // (i.e. a real agency, not Suspense Account).
+      if (ctx.agencyId) {
+        dispatch(
+          fetchOutstanding({
+            agencyId: ctx.agencyId,
+            branchId: ctx.branchId,
+            direction: ctx.direction,
+          })
+        ).catch(() => {
+          // Outstanding is a non-critical preview; the form still works.
+        });
+      }
+
+      // 3rd party counter-party. Three cases:
+      //   1. form reports a 3rd party that we haven't fetched yet
+      //      → dispatch the lookup.
+      //   2. form reports a 3rd party that DIFFERS from the last fetched
+      //      → clear the stale slot first (so the strip doesn't render the
+      //      old counter-party's figures during the in-flight call), then
+      //      dispatch the new lookup.
+      //   3. form reports 3rd-party as undefined (user toggled it off)
+      //      → clear the slot.
+      if (ctx.thirdPartyAgencyId) {
+        if (
+          lastFetchedThirdPartyId.current !== null &&
+          lastFetchedThirdPartyId.current !== ctx.thirdPartyAgencyId
+        ) {
+          dispatch(clearThirdPartyOutstanding());
+        }
+        lastFetchedThirdPartyId.current = ctx.thirdPartyAgencyId;
+        dispatch(
+          fetchOutstanding({
+            agencyId: ctx.thirdPartyAgencyId,
+            branchId: ctx.branchId,
+            direction: ctx.direction,
+            target: "thirdParty",
+          })
+        ).catch(() => {
+          // Same non-critical-preview stance as above.
+        });
+      } else if (lastFetchedThirdPartyId.current !== null) {
+        dispatch(clearThirdPartyOutstanding());
+        lastFetchedThirdPartyId.current = null;
+      }
     },
     [dispatch]
   );
@@ -218,6 +275,7 @@ function NewTransactionContent() {
           branches={branches}
           agencies={agencies}
           outstanding={outstanding}
+          thirdPartyOutstanding={thirdPartyOutstanding}
           currentUser={{
             id: currentUser.id,
             name: currentUser.name,

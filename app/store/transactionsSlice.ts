@@ -17,7 +17,20 @@ import {
 export interface TransactionsState {
   transactions: Transaction[];
   currentTransaction: Transaction | null;
+  /**
+   * Outstanding for the *primary* agency (the one selected in the top
+   * "Agency" field). Drives the primary AgencyBalanceStrip in the
+   * new-transaction form and the authentication modal.
+   */
   outstanding: AgencyOutstanding | null;
+  /**
+   * Outstanding for the *3rd party* agency (the counter-party on a
+   * third-party transaction). Kept in a separate slot so its
+   * AgencyBalanceStrip shows the counter-party's own sales/purchase
+   * outstanding instead of the primary's. The same `/outstanding`
+   * endpoint is hit — only the resolved `agencyId` differs.
+   */
+  thirdPartyOutstanding: AgencyOutstanding | null;
   /**
    * Server-side count of PENDING transactions, kept in a separate slot so the
    * list page can render the "Pending Authentication" stat card without
@@ -35,6 +48,7 @@ const initialState: TransactionsState = {
   transactions: [],
   currentTransaction: null,
   outstanding: null,
+  thirdPartyOutstanding: null,
   pendingTotal: null,
   isLoading: false,
   isSubmitting: false,
@@ -229,9 +243,19 @@ export const rejectTransaction = createAsyncThunk<
 });
 
 // GET /api/transactions/outstanding
+/**
+ * Target slot for the fetched outstanding. `"primary"` writes to
+ * `state.outstanding` (the default for top-of-form lookups), `"thirdParty"`
+ * writes to `state.thirdPartyOutstanding` (the counter-party on a
+ * third-party transaction). The same `/outstanding` endpoint is hit in
+ * both cases — only the resolved `agencyId` and the slot the result lands
+ * in differ.
+ */
+export type OutstandingTarget = "primary" | "thirdParty";
+
 export const fetchOutstanding = createAsyncThunk<
   AgencyOutstanding,
-  GetOutstandingParams,
+  GetOutstandingParams & { target?: OutstandingTarget },
   { rejectValue: string }
 >("transactions/fetchOutstanding", async (params, { rejectWithValue }) => {
   try {
@@ -262,10 +286,14 @@ const transactionsSlice = createSlice({
     clearOutstanding: (state) => {
       state.outstanding = null;
     },
+    clearThirdPartyOutstanding: (state) => {
+      state.thirdPartyOutstanding = null;
+    },
     resetTransactionsState: (state) => {
       state.transactions = [];
       state.currentTransaction = null;
       state.outstanding = null;
+      state.thirdPartyOutstanding = null;
       state.isLoading = false;
       state.isSubmitting = false;
       state.error = null;
@@ -419,7 +447,14 @@ const transactionsSlice = createSlice({
         state.error = null;
       })
       .addCase(fetchOutstanding.fulfilled, (state, action) => {
-        state.outstanding = castOutstanding(action.payload);
+        const cast = castOutstanding(action.payload);
+        // Route the result to the right slot. `"primary"` is the default —
+        // a 3rd-party refetch explicitly opts in via `meta.arg.target`.
+        if (action.meta.arg.target === "thirdParty") {
+          state.thirdPartyOutstanding = cast;
+        } else {
+          state.outstanding = cast;
+        }
       })
       .addCase(fetchOutstanding.rejected, (state, action) => {
         state.error = action.payload || "Failed to fetch outstanding";
@@ -431,6 +466,7 @@ export const {
   clearTransactionsError,
   clearCurrentTransaction,
   clearOutstanding,
+  clearThirdPartyOutstanding,
   resetTransactionsState,
 } = transactionsSlice.actions;
 

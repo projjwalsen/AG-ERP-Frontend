@@ -47,7 +47,18 @@ export interface TransactionFormUser {
 interface TransactionFormProps {
   branches: Branch[];
   agencies: Agency[];
+  /**
+   * Outstanding for the *primary* agency (sales / purchase buckets from
+   * `/transactions/outstanding`). Drives the primary AgencyBalanceStrip.
+   */
   outstanding: AgencyOutstanding | null;
+  /**
+   * Outstanding for the *3rd party* counter-party, fetched independently
+   * against the same endpoint with the 3rd party's id. The 3rd-party
+   * balance strip reads this — never `outstanding` — so the figure shown
+   * belongs to the counter-party, not the primary.
+   */
+  thirdPartyOutstanding: AgencyOutstanding | null;
   currentUser: TransactionFormUser;
   defaultBranchId?: string;
   /**
@@ -62,6 +73,7 @@ interface TransactionFormProps {
     agencyId?: string;
     branchId?: string;
     direction?: TransactionDirection;
+    thirdPartyAgencyId?: string;
   }) => void;
 }
 
@@ -77,6 +89,7 @@ export function TransactionForm({
   branches,
   agencies,
   outstanding,
+  thirdPartyOutstanding,
   currentUser,
   defaultBranchId,
   defaultDirection = "INWARD",
@@ -148,18 +161,36 @@ export function TransactionForm({
   }, [isThirdParty]);
 
   // Report the current selection up to the page so it can refetch outstanding.
+  // The key includes the 3rd-party id so a change there (even with the same
+  // primary agency) is reported — without that, the page would not know to
+  // hit `/outstanding` for the counter-party.
   const lastReportedKey = React.useRef<string>("");
   React.useEffect(() => {
     if (!onContextChange) return;
-    const key = [branchId, agencyId, type].join("|");
+    const reportedThirdPartyId = isThirdParty ? thirdPartyAgencyId : "";
+    const key = [branchId, agencyId, type, reportedThirdPartyId].join("|");
     if (key === lastReportedKey.current) return;
     lastReportedKey.current = key;
     onContextChange({
       branchId: branchId || undefined,
       agencyId: isSuspense ? undefined : realAgencyId || undefined,
       direction: type,
+      // Only forward the 3rd-party id when 3rd-party mode is on. When the
+      // user toggles 3rd-party off, sending an empty string tells the page
+      // to drop the previous fetch (the reducer keeps the stale value
+      // otherwise, so the strip would briefly show the old counter-party).
+      thirdPartyAgencyId: isThirdParty ? reportedThirdPartyId : undefined,
     });
-  }, [branchId, agencyId, type, isSuspense, realAgencyId, onContextChange]);
+  }, [
+    branchId,
+    agencyId,
+    type,
+    isSuspense,
+    realAgencyId,
+    isThirdParty,
+    thirdPartyAgencyId,
+    onContextChange,
+  ]);
 
   // The backend's `/transactions/outstanding` endpoint returns two buckets:
   //   - salesOutstanding    → what the agency owes us (DUE Amount)
@@ -168,6 +199,16 @@ export function TransactionForm({
   // to surface (primary vs 3rd party), not which bucket feeds it.
   const dueAmount = outstanding ? outstanding.salesOutstanding : 0;
   const pendingAmount = outstanding ? outstanding.purchaseOutstanding : 0;
+
+  // 3rd-party balance comes from its own outstanding slot, fetched against
+  // the *counter-party* id — never the primary's. Until the counter-party
+  // is picked (or the response is still in flight) the strip renders 0.
+  const thirdPartyDueAmount = thirdPartyOutstanding
+    ? thirdPartyOutstanding.salesOutstanding
+    : 0;
+  const thirdPartyPendingAmount = thirdPartyOutstanding
+    ? thirdPartyOutstanding.purchaseOutstanding
+    : 0;
 
   // Which reference field is required (or none) for the current
   // paymentThrough. 3rd party skips the payment block entirely.
@@ -404,8 +445,8 @@ export function TransactionForm({
                     metric={thirdPartyMetric(type)}
                     amount={
                       thirdPartyMetric(type) === "DUE"
-                        ? dueAmount
-                        : pendingAmount
+                        ? thirdPartyDueAmount
+                        : thirdPartyPendingAmount
                     }
                   />
                 )}
