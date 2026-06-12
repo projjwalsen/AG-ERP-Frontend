@@ -30,6 +30,7 @@ import { branchApi } from "@/app/services/branch.service";
 import { agencyApi } from "@/app/services/agency.service";
 import {
   approveTransaction,
+  clearThirdPartyOutstanding,
   fetchAllTransactions,
   fetchOutstanding,
   rejectTransaction,
@@ -94,6 +95,9 @@ export default function PendingAuthenticationPage() {
   const isSubmitting = useAppSelector((s) => s.transactions.isSubmitting);
   const error = useAppSelector((s) => s.transactions.error);
   const outstanding = useAppSelector((s) => s.transactions.outstanding);
+  const thirdPartyOutstanding = useAppSelector(
+    (s) => s.transactions.thirdPartyOutstanding
+  );
   const permissions = useAppSelector((s) => s.auth.permissions);
 
   const canView = hasModulePermission(permissions, "TRANSACTION", "VIEW");
@@ -112,6 +116,25 @@ export default function PendingAuthenticationPage() {
   const [authOpen, setAuthOpen] = React.useState<boolean>(false);
   const [rejectOpen, setRejectOpen] = React.useState<boolean>(false);
   const [activeTxn, setActiveTxn] = React.useState<Transaction | null>(null);
+
+  /**
+   * Tracks the 3rd-party id we last kicked off a fetch for, so we can
+   * clear `state.thirdPartyOutstanding` when the manager picks a different
+   * counter-party (or the row's `thirdPartyAgencyId` changes because the
+   * modal was reopened against a different transaction). Without this the
+   * strip would briefly render the previous counter-party's figures while
+   * the new `/outstanding` call is in flight.
+   */
+  const lastFetchedThirdPartyId = React.useRef<string | null>(null);
+
+  // Whenever the modal closes (or the user moves to a different voucher),
+  // reset the 3rd-party cache key so the next open does a fresh fetch.
+  React.useEffect(() => {
+    if (!authOpen) {
+      lastFetchedThirdPartyId.current = null;
+      dispatch(clearThirdPartyOutstanding());
+    }
+  }, [authOpen, dispatch]);
 
   // Load branches and agencies on mount. Agencies are only needed when
   // authenticating a suspense transaction, but we fetch them once up
@@ -589,10 +612,12 @@ export default function PendingAuthenticationPage() {
         transaction={activeTxn}
         agencies={agencies}
         outstanding={outstanding}
+        thirdPartyOutstanding={thirdPartyOutstanding}
         onContextChange={(ctx) => {
-          // Re-fetch the outstanding figures for the agency the
-          // manager just picked. The modal uses the result to render
-          // DUE / Amount Receivable strips under the selection.
+          // Primary agency: re-fetch the outstanding figures for the
+          // agency the manager just picked. The modal uses the result
+          // to render DUE / Amount Receivable strips under the
+          // selection.
           dispatch(
             fetchOutstanding({
               agencyId: ctx.agencyId,
@@ -602,6 +627,33 @@ export default function PendingAuthenticationPage() {
           ).catch(() => {
             // Non-critical preview; the modal still works.
           });
+
+          // 3rd-party counter-party: same endpoint, different agencyId,
+          // routed to the `thirdPartyOutstanding` slot so the modal's
+          // 3rd-party strip shows the counter-party's own figures
+          // instead of the primary's.
+          if (ctx.thirdPartyAgencyId) {
+            if (
+              lastFetchedThirdPartyId.current !== null &&
+              lastFetchedThirdPartyId.current !== ctx.thirdPartyAgencyId
+            ) {
+              dispatch(clearThirdPartyOutstanding());
+            }
+            lastFetchedThirdPartyId.current = ctx.thirdPartyAgencyId;
+            dispatch(
+              fetchOutstanding({
+                agencyId: ctx.thirdPartyAgencyId,
+                branchId: ctx.branchId,
+                direction: ctx.direction,
+                target: "thirdParty",
+              })
+            ).catch(() => {
+              // Non-critical preview.
+            });
+          } else if (lastFetchedThirdPartyId.current !== null) {
+            dispatch(clearThirdPartyOutstanding());
+            lastFetchedThirdPartyId.current = null;
+          }
         }}
         onConfirm={handleAuthenticate}
         loading={isSubmitting}

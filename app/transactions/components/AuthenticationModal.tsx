@@ -68,20 +68,34 @@ interface AuthenticationModalProps {
    */
   agencies: Agency[];
   /**
-   * Live outstanding figures for the currently picked agency. The parent
-   * fetches them and feeds the result back. The modal uses them to render
-   * the DUE / Amount Receivable strips under the agency selection.
+   * Live outstanding figures for the **primary** agency. The parent fetches
+   * them and feeds the result back. The modal uses them to render the DUE /
+   * Amount Receivable strip under the primary-agency selection.
    */
   outstanding: AgencyOutstanding | null;
+  /**
+   * Live outstanding figures for the **3rd-party** counter-party (only
+   * meaningful when the manager has picked a 3rd party on a THIRD_PARTY
+   * transaction). The parent is responsible for fetching against the
+   * 3rd-party agency id and routing the result here. If omitted, the
+   * 3rd-party strip silently falls back to 0.
+   */
+  thirdPartyOutstanding?: AgencyOutstanding | null;
   /**
    * Fired when the manager picks an agency, switches payment type, etc.
    * The parent uses this to call `fetchOutstanding` and update the
    * `outstanding` prop. Debouncing is the parent's responsibility.
+   *
+   * `thirdPartyAgencyId` is included when the manager picked a 3rd-party
+   * counter-party so the parent can fire a *second* fetch (routed to the
+   * `thirdPartyOutstanding` slot) against the counter-party's own id —
+   * otherwise the 3rd-party strip would just show the primary's numbers.
    */
   onContextChange: (ctx: {
     agencyId: string;
     branchId: string;
     direction: TransactionDirection;
+    thirdPartyAgencyId?: string;
   }) => void;
   /**
    * Called on the final "Yes, Authenticate" click.
@@ -107,6 +121,7 @@ export function AuthenticationModal({
   transaction,
   agencies,
   outstanding,
+  thirdPartyOutstanding,
   onContextChange,
   onConfirm,
   loading,
@@ -145,6 +160,9 @@ export function AuthenticationModal({
   // changes — either because the manager picked a new one for a SUSPENSE
   // reconciliation, or because the modal was opened against a different
   // non-suspense transaction (where the agency is `transaction.agencyId`).
+  // The 3rd-party counter-party is forwarded too so the parent can fire
+  // a *second* fetch against the counter-party's own id — otherwise the
+  // 3rd-party strip would just show the primary's numbers.
   // Both `edit` and `transaction` are nullable state, so the effect must
   // guard at the top — running the hook unconditionally (above the early
   // return) keeps React's hook order stable across renders.
@@ -160,15 +178,24 @@ export function AuthenticationModal({
       ? edit.agencyId
       : (transaction.agencyId ?? "");
     if (!agencyId) return;
-    const key = [agencyId, transaction.branchId, transaction.direction].join(
-      "|"
-    );
+    // Resolve the 3rd-party id the same way: from the live edit state
+    // (manager-driven 3rd-party picker) when one is set, otherwise fall
+    // back to the row-level thirdPartyAgencyId.
+    const thirdPartyAgencyId =
+      edit.thirdPartyAgencyId ?? transaction.thirdPartyAgencyId ?? undefined;
+    const key = [
+      agencyId,
+      transaction.branchId,
+      transaction.direction,
+      thirdPartyAgencyId ?? "",
+    ].join("|");
     if (key === lastCtxKey.current) return;
     lastCtxKey.current = key;
     onContextChange({
       agencyId,
       branchId: transaction.branchId,
       direction: transaction.direction,
+      thirdPartyAgencyId,
     });
   }, [edit, transaction, onContextChange]);
 
@@ -215,6 +242,26 @@ export function AuthenticationModal({
     ? Number(
         outstanding.amountReceivable ??
           (outstanding as { purchaseOutstanding?: number }).purchaseOutstanding ??
+          0
+      )
+    : 0;
+
+  // 3rd-party counter-party: its own outstanding slot, fetched against
+  // the *counter-party* id — never the primary's. Until the counter-party
+  // is picked (or the response is still in flight) the strip renders 0.
+  const thirdPartyDueAmount = thirdPartyOutstanding
+    ? Number(
+        thirdPartyOutstanding.amountDue ??
+          (thirdPartyOutstanding as { salesOutstanding?: number })
+            .salesOutstanding ??
+          0
+      )
+    : 0;
+  const thirdPartyPendingAmount = thirdPartyOutstanding
+    ? Number(
+        thirdPartyOutstanding.amountReceivable ??
+          (thirdPartyOutstanding as { purchaseOutstanding?: number })
+            .purchaseOutstanding ??
           0
       )
     : 0;
@@ -418,9 +465,12 @@ export function AuthenticationModal({
                     )}
 
                     {/* Direction-aware DUE/Receivable strip under the
-                        primary agency, exactly like the new-transaction
-                        form. Hidden until an agency is selected. */}
-                    {selectedAgency && !isThirdParty && (
+                        primary agency. Single metric, picked by
+                        `primaryMetric(direction)`. Visible whenever an
+                        agency is selected — including on 3rd-party
+                        flows, so the manager always sees the primary
+                        counter-party's relevant figure. */}
+                    {selectedAgency && (
                       <AgencyBalanceStrip
                         metric={primaryMetric(direction)}
                         amount={
@@ -516,8 +566,8 @@ export function AuthenticationModal({
                             metric={thirdPartyMetric(direction)}
                             amount={
                               thirdPartyMetric(direction) === "DUE"
-                                ? dueAmount
-                                : pendingAmount
+                                ? thirdPartyDueAmount
+                                : thirdPartyPendingAmount
                             }
                           />
                         )}
