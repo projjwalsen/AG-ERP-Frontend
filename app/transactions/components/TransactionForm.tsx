@@ -193,21 +193,45 @@ export function TransactionForm({
   ]);
 
   // The backend's `/transactions/outstanding` endpoint returns two buckets:
-  //   - salesOutstanding    → what the agency owes us (DUE Amount)
-  //   - purchaseOutstanding → what we owe the agency (Amount Receivable)
+  //   - amountDue       → what the agency owes us (DUE Amount)
+  //   - amountReceivable → what we owe the agency (Amount Receivable)
   // The mapping is fixed; the form's direction only decides *which* strip
   // to surface (primary vs 3rd party), not which bucket feeds it.
-  const dueAmount = outstanding ? outstanding.salesOutstanding : 0;
-  const pendingAmount = outstanding ? outstanding.purchaseOutstanding : 0;
+  // Legacy responses used `salesOutstanding` / `purchaseOutstanding` —
+  // kept as a fallback for older backend versions.
+  const dueAmount = outstanding
+    ? Number(
+        outstanding.amountDue ??
+          (outstanding as { salesOutstanding?: number }).salesOutstanding ??
+          0
+      )
+    : 0;
+  const pendingAmount = outstanding
+    ? Number(
+        outstanding.amountReceivable ??
+          (outstanding as { purchaseOutstanding?: number }).purchaseOutstanding ??
+          0
+      )
+    : 0;
 
   // 3rd-party balance comes from its own outstanding slot, fetched against
   // the *counter-party* id — never the primary's. Until the counter-party
   // is picked (or the response is still in flight) the strip renders 0.
   const thirdPartyDueAmount = thirdPartyOutstanding
-    ? thirdPartyOutstanding.salesOutstanding
+    ? Number(
+        thirdPartyOutstanding.amountDue ??
+          (thirdPartyOutstanding as { salesOutstanding?: number })
+            .salesOutstanding ??
+          0
+      )
     : 0;
   const thirdPartyPendingAmount = thirdPartyOutstanding
-    ? thirdPartyOutstanding.purchaseOutstanding
+    ? Number(
+        thirdPartyOutstanding.amountReceivable ??
+          (thirdPartyOutstanding as { purchaseOutstanding?: number })
+            .purchaseOutstanding ??
+          0
+      )
     : 0;
 
   // Which reference field is required (or none) for the current

@@ -125,19 +125,44 @@ export interface TransactionResponse {
 }
 
 export interface AgencyOutstanding {
-  direction: TransactionDirection;
-  salesOutstanding: number;
-  purchaseOutstanding: number;
-  netOutstanding: number;
+  direction?: TransactionDirection;
+  /**
+   * What the agency owes us (DUE Amount) — sales-side outstanding.
+   * Sourced from the backend's `amountDue` field.
+   */
+  amountDue: number;
+  /**
+   * What we owe the agency (Amount Receivable) — purchase-side outstanding.
+   * Sourced from the backend's `amountReceivable` field.
+   */
+  amountReceivable: number;
+  /**
+   * Optional net outstanding (amountDue - amountReceivable). Surfaced by
+   * older backend versions; the form falls back to 0 when missing.
+   */
+  netOutstanding?: number;
+  /**
+   * Legacy fields — kept optional so existing code that referenced
+   * them doesn't immediately break, but the canonical source is now
+   * `amountDue` / `amountReceivable`. Remove once all consumers are
+   * migrated.
+   * @deprecated use amountDue instead
+   */
+  salesOutstanding?: number;
+  /**
+   * @deprecated use amountReceivable instead
+   */
+  purchaseOutstanding?: number;
   /**
    * Optional pending (Amount Receivable) bucket — surfaced by the backend
-   * for the new transaction form. When absent, the form falls back to 0.
+   * for the new transaction form. When absent, the form falls back to
+   * `amountReceivable`.
    */
   pendingAmount?: number;
   /**
    * Optional explicit due/outstanding bucket — the form labels this as
-   * "DUE Amount" in the agency card. Falls back to the direction-specific
-   * sales/purchase outstanding when not provided.
+   * "DUE Amount" in the agency card. Falls back to `amountDue` when not
+   * provided.
    */
   dueAmount?: number;
 }

@@ -80,10 +80,18 @@ function castTransactions(list: Transaction[]): Transaction[] {
 }
 
 function castOutstanding(o: AgencyOutstanding): AgencyOutstanding {
+  // The backend now returns `amountDue` and `amountReceivable` (sales/
+  // purchase outstanding respectively) directly. Older responses used
+  // `salesOutstanding` / `purchaseOutstanding` — fall back to those
+  // for compatibility, then normalize Decimals to numbers.
   return {
     ...o,
-    salesOutstanding: toNumber(o.salesOutstanding as unknown),
-    purchaseOutstanding: toNumber(o.purchaseOutstanding as unknown),
+    amountDue: toNumber(
+      (o.amountDue as unknown) ?? (o.salesOutstanding as unknown) ?? 0
+    ),
+    amountReceivable: toNumber(
+      (o.amountReceivable as unknown) ?? (o.purchaseOutstanding as unknown) ?? 0
+    ),
     netOutstanding: toNumber(o.netOutstanding as unknown),
   };
 }

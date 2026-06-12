@@ -200,8 +200,24 @@ export function AuthenticationModal({
 
   // Outstanding figures — pull the same two buckets the new-transaction
   // form reads from `/transactions/outstanding`.
-  const dueAmount = outstanding ? outstanding.salesOutstanding : 0;
-  const pendingAmount = outstanding ? outstanding.purchaseOutstanding : 0;
+  // The backend now returns `amountDue` (sales outstanding) and
+  // `amountReceivable` (purchase outstanding) — read those first, and
+  // fall back to the legacy `salesOutstanding` / `purchaseOutstanding`
+  // keys for older responses.
+  const dueAmount = outstanding
+    ? Number(
+        outstanding.amountDue ??
+          (outstanding as { salesOutstanding?: number }).salesOutstanding ??
+          0
+      )
+    : 0;
+  const pendingAmount = outstanding
+    ? Number(
+        outstanding.amountReceivable ??
+          (outstanding as { purchaseOutstanding?: number }).purchaseOutstanding ??
+          0
+      )
+    : 0;
 
   // ------- form-level validation -------
   const errors = (() => {
