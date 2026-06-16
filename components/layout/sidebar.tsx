@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, Building2, Briefcase, Package,
   ShoppingCart, FileText, History, Settings, ChevronLeft, Shield,
   Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu, CreditCard,
-  ChevronRight,
+  ChevronRight, BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -220,6 +220,7 @@ const buildSidebarItems = (): SidebarItem[] => [
   { title: "Agency Management", href: "/agencies", icon: Briefcase, module: "AGENCY" },
   { title: "Product Management", href: "/inventory", icon: Package, module: "PRODUCT" },
   { title: "Purchase & Sales", href: "/purchase-sales", icon: ShoppingCart, module: "PURCHASE" },
+  
   {
     title: "Transactions",
     href: "/transactions",
@@ -227,6 +228,7 @@ const buildSidebarItems = (): SidebarItem[] => [
     module: "PAYMENT",
   },
   { title: "Inventory Management", href: "/inventory-management", icon: Package, module: "PRODUCT" },
+  { title: "Ledger", href: "/ledger", icon: BookOpen, module: "LEDGER" },
   // { title: "Reports", href: "/reports", icon: FileText, module: "REPORT" },
   // { title: "Audit Logs", href: "/audit-logs", icon: History, module: "AUDIT" },
   { title: "Settings", href: "/settings", icon: Settings, module: null },
@@ -388,13 +390,15 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <ScrollArea className="flex-1 px-3 py-3">
             <nav className="space-y-0.5">
               {sidebarItems.map((item) => {
-                // Transactions module is always shown (UI-only build).
-                const isTransactionEntry = item.href === "/transactions";
+                // Transactions and Ledger are always shown (UI-only build —
+                // permission check still happens inside the page itself).
+                const isAlwaysVisibleEntry =
+                  item.href === "/transactions" || item.href === "/ledger";
 
                 // Skip items that require module permission and user doesn't have access.
                 if (
                   item.module &&
-                  !isTransactionEntry &&
+                  !isAlwaysVisibleEntry &&
                   !showAllWhenNoPermissions &&
                   !hasModuleAccess(permissions, item.module)
                 ) {
