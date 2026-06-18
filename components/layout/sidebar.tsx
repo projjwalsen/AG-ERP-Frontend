@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, Building2, Briefcase, Package,
   ShoppingCart, FileText, History, Settings, ChevronLeft, Shield,
   Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu, CreditCard,
-  ChevronRight, BookOpen,
+  ChevronRight, BookOpen, Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -228,7 +228,16 @@ const buildSidebarItems = (): SidebarItem[] => [
     module: "PAYMENT",
   },
   { title: "Inventory Management", href: "/inventory-management", icon: Package, module: "PRODUCT" },
-  { title: "Ledger", href: "/ledger", icon: BookOpen, module: "LEDGER" },
+  {
+    title: "Ledger",
+    href: "/ledger",
+    icon: BookOpen,
+    module: "LEDGER",
+    children: [
+      { title: "Product Ledger", href: "/ledger", icon: BookOpen },
+      { title: "Financial Ledger", href: "/ledger/financial", icon: Wallet },
+    ],
+  },
   // { title: "Reports", href: "/reports", icon: FileText, module: "REPORT" },
   // { title: "Audit Logs", href: "/audit-logs", icon: History, module: "AUDIT" },
   { title: "Settings", href: "/settings", icon: Settings, module: null },

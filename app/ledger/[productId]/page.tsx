@@ -2,45 +2,48 @@
 
 import * as React from "react";
 import {
-  ArrowLeft, BookOpen, Package, AlertTriangle, RefreshCw, Search,
-  TrendingUp, TrendingDown, Building2, Hash, Calendar, FileText,
+  ArrowLeft, BookOpen, AlertTriangle, RefreshCw, Package, Calendar, Building2, Hash,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { fetchProductLedgerById, clearCurrentDetail } from "@/app/store/ledgerSlice";
 import { ProductLedgerEntry, ProductLedgerMovementType } from "@/app/types/ledger";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { formatDate, formatDateTime, formatCurrency } from "@/lib/utils";
 import { useParams, useRouter } from "next/navigation";
+import { branchApi } from "@/app/services/branch.service";
+import { Branch } from "@/app/types/branch";
 
-const movementTypeColors: Record<string, { bg: string; text: string }> = {
-  OPENING_BALANCE: { bg: "bg-blue-100", text: "text-blue-700" },
-  PURCHASE: { bg: "bg-green-100", text: "text-green-700" },
-  SALE: { bg: "bg-amber-100", text: "text-amber-700" },
-  ADJUSTMENT_IN: { bg: "bg-emerald-100", text: "text-emerald-700" },
-  ADJUSTMENT_OUT: { bg: "bg-orange-100", text: "text-orange-700" },
-  RETURN_IN: { bg: "bg-teal-100", text: "text-teal-700" },
-  RETURN_OUT: { bg: "bg-pink-100", text: "text-pink-700" },
-  DAMAGE: { bg: "bg-red-100", text: "text-red-700" },
-  TRANSFER_IN: { bg: "bg-indigo-100", text: "text-indigo-700" },
-  TRANSFER_OUT: { bg: "bg-purple-100", text: "text-purple-700" },
-};
+// Movement types that represent stock IN (Credit) — "Received from {agency}"
+const CREDIT_MOVEMENTS: ProductLedgerMovementType[] = [
+  "PURCHASE",
+  "RETURN_IN",
+  "ADJUSTMENT_IN",
+  "TRANSFER_IN",
+  "OPENING_BALANCE",
+];
 
-const movementTypeLabels: Record<string, string> = {
-  OPENING_BALANCE: "Opening Balance",
-  PURCHASE: "Purchase",
-  SALE: "Sale",
-  ADJUSTMENT_IN: "Adjustment In",
-  ADJUSTMENT_OUT: "Adjustment Out",
-  RETURN_IN: "Return In",
-  RETURN_OUT: "Return Out",
-  DAMAGE: "Damage",
-  TRANSFER_IN: "Transfer In",
-  TRANSFER_OUT: "Transfer Out",
-};
+// Movement types that represent stock OUT (Debit) — "Issued to {agency}"
+const DEBIT_MOVEMENTS: ProductLedgerMovementType[] = [
+  "SALE",
+  "RETURN_OUT",
+  "ADJUSTMENT_OUT",
+  "DAMAGE",
+  "TRANSFER_OUT",
+];
+
+function isCreditMovement(m: ProductLedgerMovementType): boolean {
+  return CREDIT_MOVEMENTS.includes(m);
+}
+
+function formatQty(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+}
 
 export default function ProductLedgerDetailPage() {
   return (
@@ -56,64 +59,89 @@ function ProductLedgerDetailContent() {
   const router = useRouter();
   const { addToast } = useToast();
   const dispatch = useAppDispatch();
+  const { user } = useAppSelector((state) => state.auth);
   const { currentDetail, isDetailLoading, detailError } = useAppSelector((state) => state.ledger);
 
-  const [searchTerm, setSearchTerm] = React.useState("");
-  const [movementTypeFilter, setMovementTypeFilter] = React.useState<string>("");
+  // Filter state
+  const [branchId, setBranchId] = React.useState<string>("");
+  const [startDate, setStartDate] = React.useState<string>("");
+  const [endDate, setEndDate] = React.useState<string>("");
   const [currentPage, setCurrentPage] = React.useState(1);
+  const [branches, setBranches] = React.useState<Branch[]>([]);
+
+  const isAllBranchAccess = user?.branchAccessType === "ALL";
+  const isFixedBranch = user?.branchAccessType === "SELECTED" && !!user?.branchId;
+
+  // For fixed-branch users, lock to their branch
+  const effectiveBranchId = React.useMemo(() => {
+    if (isFixedBranch) return user!.branchId!;
+    return branchId || undefined;
+  }, [isFixedBranch, branchId, user]);
+
+  // Load branches for ALL-access users
+  React.useEffect(() => {
+    if (!isAllBranchAccess) return;
+    let active = true;
+    branchApi
+      .getActive()
+      .then((res) => {
+        if (!active) return;
+        if (res.success && res.data?.branches) {
+          setBranches(res.data.branches);
+        }
+      })
+      .catch(() => {
+        /* swallow — branch dropdown simply stays empty */
+      });
+    return () => {
+      active = false;
+    };
+  }, [isAllBranchAccess]);
+
+  const fetchDetail = React.useCallback(
+    async (page: number) => {
+      if (!productId) return;
+      try {
+        const params: any = { productId, page, limit: 25 };
+        if (effectiveBranchId) params.branchId = effectiveBranchId;
+        if (startDate) params.startDate = startDate;
+        if (endDate) params.endDate = endDate;
+        await dispatch(fetchProductLedgerById(params)).unwrap();
+      } catch (err: any) {
+        addToast(err || "Failed to fetch product ledger details", "error");
+      }
+    },
+    [productId, effectiveBranchId, startDate, endDate, dispatch, addToast]
+  );
 
   React.useEffect(() => {
     if (productId) {
-      fetchDetail(currentPage, movementTypeFilter);
+      fetchDetail(currentPage);
     }
     return () => {
       dispatch(clearCurrentDetail());
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productId, movementTypeFilter]);
+  }, [productId, effectiveBranchId, startDate, endDate, fetchDetail, dispatch]);
 
   React.useEffect(() => {
     if (productId) {
-      fetchDetail(currentPage, movementTypeFilter);
+      fetchDetail(currentPage);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage]);
+  }, [currentPage, productId, fetchDetail]);
 
-  const fetchDetail = async (
-    page: number,
-    movementType?: string
-  ) => {
-    if (!productId) return;
-    try {
-      const params: any = { productId, page, limit: 10 };
-      if (movementType) params.movementType = movementType as ProductLedgerMovementType;
-      await dispatch(fetchProductLedgerById(params)).unwrap();
-    } catch (err: any) {
-      addToast(err || "Failed to fetch product ledger details", "error");
-    }
+  const resetFilters = () => {
+    setBranchId("");
+    setStartDate("");
+    setEndDate("");
+    setCurrentPage(1);
   };
-
-  const filteredMovements = React.useMemo(() => {
-    if (!currentDetail?.movements?.entries) return [];
-    if (!searchTerm) return currentDetail.movements.entries;
-    const term = searchTerm.toLowerCase();
-    return currentDetail.movements.entries.filter(
-      (m) =>
-        m.invoiceNo?.toLowerCase().includes(term) ||
-        m.batchNo?.toLowerCase().includes(term) ||
-        m.branch?.name?.toLowerCase().includes(term) ||
-        m.agency?.name?.toLowerCase().includes(term) ||
-        m.remarks?.toLowerCase().includes(term) ||
-        (movementTypeLabels[m.movementType] || "").toLowerCase().includes(term)
-    );
-  }, [currentDetail, searchTerm]);
 
   if (isDetailLoading && !currentDetail) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="space-y-4">
           <Skeleton className="h-10 w-48" />
-          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-14 w-full" />
           <Skeleton className="h-64 w-full" />
         </div>
         <ToastContainer />
@@ -139,7 +167,7 @@ function ProductLedgerDetailContent() {
             <AlertTriangle className="h-12 w-12 text-red-400 mx-auto mb-3" />
             <h3 className="text-base font-semibold text-gray-900 mb-1">Failed to load ledger</h3>
             <p className="text-sm text-gray-500 mb-4">{detailError}</p>
-            <Button onClick={() => fetchDetail(currentPage, movementTypeFilter)}>
+            <Button onClick={() => fetchDetail(currentPage)}>
               Try Again
             </Button>
           </CardContent>
@@ -155,9 +183,11 @@ function ProductLedgerDetailContent() {
 
   const { product, ledger, stock, branchStock, movements } = currentDetail;
   const meta = movements?.meta;
+  const entries = movements?.entries ?? [];
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Header */}
       <div className="mb-6">
         <Button
           variant="ghost"
@@ -175,7 +205,7 @@ function ProductLedgerDetailContent() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{product.name || "Product"}</h1>
               <p className="text-sm text-gray-500">
-                {product.sku || "—"} · Ledger {ledger?.code || "—"}
+                <span className="font-mono">{product.sku || "—"}</span> · Product Ledger
               </p>
             </div>
           </div>
@@ -183,7 +213,7 @@ function ProductLedgerDetailContent() {
             variant="outline"
             size="sm"
             className="gap-2"
-            onClick={() => fetchDetail(currentPage, movementTypeFilter)}
+            onClick={() => fetchDetail(currentPage)}
           >
             <RefreshCw className="h-4 w-4" />
             Refresh
@@ -308,32 +338,70 @@ function ProductLedgerDetailContent() {
       )}
 
       {/* Filters */}
-      <div className="flex items-center gap-4 bg-white p-4 rounded-lg border border-gray-200 mb-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="Search movements..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
+      <div className="bg-white p-4 rounded-lg border border-gray-200 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Branch</label>
+            {isAllBranchAccess ? (
+              <Select
+                value={branchId || "__all__"}
+                onValueChange={(value) => {
+                  setBranchId(value === "__all__" ? "" : value);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Branches" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Branches</SelectItem>
+                  {branches.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.name} ({b.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-2 text-sm rounded-md border border-gray-200 bg-gray-50 text-gray-700">
+                <Building2 className="h-3.5 w-3.5 text-gray-500" />
+                <span className="truncate">{user?.branchId ?? "Your branch"}</span>
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Start Date</label>
+            <Input
+              type="date"
+              value={startDate}
+              max={endDate || undefined}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setCurrentPage(1);
+              }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 uppercase mb-1">End Date</label>
+            <Input
+              type="date"
+              value={endDate}
+              min={startDate || undefined}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setCurrentPage(1);
+              }}
+            />
+          </div>
+          <div className="flex items-end">
+            <Button variant="outline" size="sm" onClick={resetFilters} className="w-full">
+              Reset Filters
+            </Button>
+          </div>
         </div>
-        <select
-          value={movementTypeFilter}
-          onChange={(e) => {
-            setMovementTypeFilter(e.target.value);
-            setCurrentPage(1);
-          }}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-        >
-          <option value="">All Movement Types</option>
-          {Object.entries(movementTypeLabels).map(([key, label]) => (
-            <option key={key} value={key}>{label}</option>
-          ))}
-        </select>
       </div>
 
-      {/* Movements table */}
+      {/* Movements table — exactly 8 columns */}
       {isDetailLoading ? (
         <Card>
           <CardContent className="p-0">
@@ -344,7 +412,7 @@ function ProductLedgerDetailContent() {
             </div>
           </CardContent>
         </Card>
-      ) : filteredMovements.length > 0 ? (
+      ) : entries.length > 0 ? (
         <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -352,21 +420,33 @@ function ProductLedgerDetailContent() {
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Date</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Type</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Direction</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">Qty (KG)</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">Qty (LTR)</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Branch</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Party</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Invoice</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Batch</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">Unit Cost</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                      Received From / Issued To<br />
+                      
+                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                      Delivery Note / Issued No<br />
+                      
+                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Batch No</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                      Expiry Date<br />
+                      
+                    </th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                      Quantity Received<br />
+                      
+                    </th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                      Quantity Issued<br />
+                      
+                    </th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">Stock Balance</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredMovements.map((m) => (
-                    <MovementRow key={m.id} movement={m} />
+                  {entries.map((m, idx) => (
+                    <MovementTableRow key={m.id ?? `opening-${idx}`} movement={m} />
                   ))}
                 </tbody>
               </table>
@@ -406,7 +486,7 @@ function ProductLedgerDetailContent() {
       ) : (
         <Card>
           <CardContent className="p-12 text-center">
-            <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+            <Package className="h-12 w-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500">No movement history found</p>
           </CardContent>
         </Card>
@@ -417,67 +497,73 @@ function ProductLedgerDetailContent() {
   );
 }
 
-function MovementRow({ movement }: { movement: ProductLedgerEntry }) {
-  const directionColor =
-    movement.direction === "DEBIT"
-      ? "text-green-600 bg-green-100"
-      : "text-amber-600 bg-amber-100";
-  const DirectionIcon = movement.direction === "DEBIT" ? TrendingUp : TrendingDown;
-  const typeColor =
-    movementTypeColors[movement.movementType] || { bg: "bg-gray-100", text: "text-gray-700" };
+function MovementTableRow({ movement }: { movement: ProductLedgerEntry }) {
+  const agencyName = movement.agency?.name;
+  const verb =
+    movement.direction === "CREDIT"
+      ? "Received from"
+      : movement.direction === "DEBIT"
+      ? "Issued to"
+      : null;
+
+  // For Opening Stock rows where direction is null and movementType is OPENING/OPENING_BALANCE
+  let partyCell: React.ReactNode;
+  if (movement.movementType === "OPENING" as unknown as ProductLedgerMovementType || (movement.id === null && movement.direction === null)) {
+    partyCell = <span className="text-gray-400 text-xs italic">Opening Stock</span>;
+  } else if (agencyName && verb) {
+    partyCell = (
+      <div>
+        <span className="text-xs text-gray-500">{verb}</span>
+        <p className="text-sm font-medium text-gray-900">{agencyName}</p>
+      </div>
+    );
+  } else if (agencyName) {
+    partyCell = <span className="text-sm font-medium text-gray-900">{agencyName}</span>;
+  } else {
+    partyCell = <span className="text-gray-400">—</span>;
+  }
+
+  // Credit/Debit columns
+  const isCredit = movement.direction === "CREDIT";
+  const isDebit = movement.direction === "DEBIT";
+
+  const creditQty = isCredit
+    ? movement.unit === "LTR" && movement.quantityLTR
+      ? formatQty(movement.quantityLTR)
+      : formatQty(movement.quantityKG)
+    : "—";
+
+  const debitQty = isDebit
+    ? movement.unit === "LTR" && movement.quantityLTR
+      ? formatQty(movement.quantityLTR)
+      : formatQty(movement.quantityKG)
+    : "—";
 
   return (
     <tr className="hover:bg-gray-50">
       <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-        {formatDateTime(movement.entryDate)}
+        {movement.id ? formatDate(movement.entryDate) : formatDate(movement.entryDate)}
+        <p className="text-[10px] text-gray-400">{formatDateTime(movement.entryDate).split(",").pop()?.trim()}</p>
       </td>
-      <td className="px-4 py-3">
-        <span
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${typeColor.bg} ${typeColor.text}`}
-        >
-          {movementTypeLabels[movement.movementType] || movement.movementType}
-        </span>
+      <td className="px-4 py-3">{partyCell}</td>
+      <td className="px-4 py-3 text-sm font-mono text-gray-700">
+        {movement.invoiceNo || <span className="text-gray-400">—</span>}
       </td>
-      <td className="px-4 py-3">
-        <span
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${directionColor}`}
-        >
-          <DirectionIcon className="h-3 w-3" />
-          {movement.direction}
-        </span>
+      <td className="px-4 py-3 text-sm font-mono text-gray-700">
+        {movement.batchNo || <span className="text-gray-400">—</span>}
       </td>
-      <td className="px-4 py-3 text-right text-sm font-medium">
-        {movement.quantityKG.toLocaleString(undefined, { maximumFractionDigits: 3 })}
+      <td className="px-4 py-3 text-sm text-gray-400 italic">
+        —
       </td>
-      <td className="px-4 py-3 text-right text-sm">
-        {movement.quantityLTR
-          ? movement.quantityLTR.toLocaleString(undefined, { maximumFractionDigits: 3 })
-          : "-"}
+      <td className="px-4 py-3 text-right text-sm font-medium text-green-700 whitespace-nowrap">
+        {creditQty}
       </td>
-      <td className="px-4 py-3 text-sm">
-        {movement.branch ? (
-          <div>
-            <div className="font-medium">{movement.branch.name}</div>
-            <div className="text-xs text-gray-400 font-mono">{movement.branch.code}</div>
-          </div>
-        ) : (
-          <span className="text-gray-400">-</span>
-        )}
+      <td className="px-4 py-3 text-right text-sm font-medium text-amber-700 whitespace-nowrap">
+        {debitQty}
       </td>
-      <td className="px-4 py-3 text-sm">
-        {movement.agency ? movement.agency.name : <span className="text-gray-400">-</span>}
-      </td>
-      <td className="px-4 py-3 text-sm font-mono text-gray-600">
-        {movement.invoiceNo || <span className="text-gray-400">-</span>}
-      </td>
-      <td className="px-4 py-3 text-sm font-mono text-gray-600">
-        {movement.batchNo || <span className="text-gray-400">-</span>}
-      </td>
-      <td className="px-4 py-3 text-right text-sm">
-        {movement.unitCost ? formatCurrency(movement.unitCost) : <span className="text-gray-400">-</span>}
-      </td>
-      <td className="px-4 py-3 text-right text-sm font-semibold text-green-600">
-        {movement.totalCost ? formatCurrency(movement.totalCost) : <span className="text-gray-400">-</span>}
+      <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 whitespace-nowrap">
+        {formatQty(movement.runningStockKG)}
+        <span className="ml-1 text-[10px] text-gray-400 font-normal">{movement.unit || "KG"}</span>
       </td>
     </tr>
   );

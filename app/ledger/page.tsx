@@ -2,22 +2,20 @@
 
 import * as React from "react";
 import {
-  BookOpen, Wallet, Search, RefreshCw, Eye, Package, AlertTriangle, Hourglass, Coins,
+  BookOpen, Search, RefreshCw, Eye, Package, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { fetchAllProductLedgers } from "@/app/store/ledgerSlice";
 import { ProductLedgerListItem } from "@/app/types/ledger";
 import { formatCurrency } from "@/lib/utils";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export default function LedgerPage() {
-  // `useSearchParams` requires a Suspense boundary during static rendering.
   return (
     <React.Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
       <LedgerContent />
@@ -26,59 +24,6 @@ export default function LedgerPage() {
 }
 
 function LedgerContent() {
-  const searchParams = useSearchParams();
-  const tabFromUrl = searchParams?.get("tab");
-  const defaultTab = tabFromUrl === "financial" ? "financial" : "product";
-  const router = useRouter();
-
-  const handleTabChange = (value: string) => {
-    const params = new URLSearchParams(Array.from(searchParams?.entries() ?? []));
-    if (value === "product") {
-      params.delete("tab");
-    } else {
-      params.set("tab", value);
-    }
-    const query = params.toString();
-    router.replace(query ? `/ledger?${query}` : "/ledger", { scroll: false });
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Ledger</h1>
-        <p className="text-gray-500 mt-1">
-          View product stock movements and financial ledgers
-        </p>
-      </div>
-
-      <Tabs value={defaultTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md mb-6 bg-gray-100">
-          <TabsTrigger value="product" className="flex items-center gap-2">
-            <BookOpen className="h-4 w-4" />
-            Product Ledger
-          </TabsTrigger>
-          <TabsTrigger value="financial" className="flex items-center gap-2">
-            <Wallet className="h-4 w-4" />
-            Financial Ledger
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="product">
-          <ProductLedgerTab />
-        </TabsContent>
-
-        <TabsContent value="financial">
-          <FinancialLedgerTab />
-        </TabsContent>
-      </Tabs>
-
-      <ToastContainer />
-    </div>
-  );
-}
-
-// ============== PRODUCT LEDGER TAB ==============
-function ProductLedgerTab() {
   const router = useRouter();
   const { addToast } = useToast();
   const dispatch = useAppDispatch();
@@ -112,13 +57,18 @@ function ProductLedgerTab() {
   }, [ledgers, searchTerm]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Product Ledgers</h2>
-          <p className="text-sm text-gray-500">
-            Track stock movement, opening balance and current stock per product
-          </p>
+    <div className="min-h-screen bg-gray-50">
+      <div className="mb-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-100 rounded-lg">
+            <BookOpen className="h-5 w-5 text-blue-600" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Product Ledger</h1>
+            <p className="text-gray-500 mt-1">
+              Track stock movement, opening balance and current stock per product
+            </p>
+          </div>
         </div>
       </div>
 
@@ -217,6 +167,8 @@ function ProductLedgerTab() {
           </CardContent>
         </Card>
       )}
+
+      <ToastContainer />
     </div>
   );
 }
@@ -297,36 +249,5 @@ function LedgerRow({
         )}
       </td>
     </tr>
-  );
-}
-
-// ============== FINANCIAL LEDGER TAB (UPCOMING) ==============
-function FinancialLedgerTab() {
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Financial Ledger</h2>
-          <p className="text-sm text-gray-500">Track monetary flows and account balances</p>
-        </div>
-      </div>
-
-      <Card>
-        <CardContent className="p-12 text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-4">
-            <Hourglass className="h-8 w-8 text-amber-600" />
-          </div>
-          <h3 className="text-base font-semibold text-gray-900 mb-1">Coming Soon</h3>
-          <p className="text-sm text-gray-500 max-w-md mx-auto">
-            The financial ledger is currently under development. It will surface receivables,
-            payables and account-level movements here.
-          </p>
-          <div className="mt-4 inline-flex items-center gap-1 text-xs text-gray-400">
-            <Coins className="h-3 w-3" />
-            Financial Ledger module
-          </div>
-        </CardContent>
-      </Card>
-    </div>
   );
 }

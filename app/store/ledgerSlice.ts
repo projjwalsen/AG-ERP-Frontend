@@ -1,13 +1,28 @@
+// Product Ledger + Financial Ledger Redux Slice
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { ledgerApi } from "../services/ledger.service";
+import {
+  ledgerApi,
+  GetFinancialLedgersParams,
+  GetLedgerStatementParams,
+} from "../services/ledger.service";
 import {
   ProductLedgerListItem,
   ProductLedgerListResponse,
   ProductLedgerDetail,
   ProductLedgerMovementType,
+  LedgerGroupMaster,
+  LedgerView,
+  LedgerViewRow,
+  FinancialLedgerDetail,
+  FinancialLedgerStatementResponse,
+  BranchLedgerDetailResponse,
+  AgencyLedgerDetailResponse,
+  SuspenseLedgerDetailResponse,
+  SuspenseTransactionRow,
 } from "../types/ledger";
 
 export interface LedgerState {
+  // ===== Product Ledger =====
   ledgers: ProductLedgerListItem[];
   isListLoading: boolean;
   listError: string | null;
@@ -23,6 +38,51 @@ export interface LedgerState {
   currentDetail: ProductLedgerDetail | null;
   isDetailLoading: boolean;
   detailError: string | null;
+
+  // ===== Financial Ledger =====
+  ledgerGroups: LedgerGroupMaster[];
+  isGroupsLoading: boolean;
+  groupsError: string | null;
+
+  // ===== Financial Ledger List (per-view: BRANCH / AGENCY / SUSPENSE) =====
+  financialLedgers: LedgerViewRow[];
+  financialView: LedgerView | null;
+  // For SUSPENSE view, the backend returns branches with their transactions
+  // (or a flat transactions list per branch). Store separately so the table
+  // can render branch rows with a count + View Details affordance.
+  suspenseData: {
+    summary: { totalTransactions: number; totalInward: number; totalOutward: number } | null;
+    transactions: SuspenseTransactionRow[];
+  } | null;
+  isFinancialListLoading: boolean;
+  financialListError: string | null;
+  financialPagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  } | null;
+
+  currentFinancialLedger: FinancialLedgerDetail | null;
+  isFinancialDetailLoading: boolean;
+  financialDetailError: string | null;
+
+  currentFinancialStatement: FinancialLedgerStatementResponse | null;
+  isStatementLoading: boolean;
+  statementError: string | null;
+
+  // ===== Branch / Agency / Suspense Details =====
+  currentBranchDetail: BranchLedgerDetailResponse | null;
+  isBranchDetailLoading: boolean;
+  branchDetailError: string | null;
+
+  currentAgencyDetail: AgencyLedgerDetailResponse | null;
+  isAgencyDetailLoading: boolean;
+  agencyDetailError: string | null;
+
+  currentSuspenseDetail: SuspenseLedgerDetailResponse | null;
+  isSuspenseDetailLoading: boolean;
+  suspenseDetailError: string | null;
 }
 
 const initialState: LedgerState = {
@@ -33,7 +93,33 @@ const initialState: LedgerState = {
   currentDetail: null,
   isDetailLoading: false,
   detailError: null,
+  ledgerGroups: [],
+  isGroupsLoading: false,
+  groupsError: null,
+  financialLedgers: [],
+  financialView: null,
+  suspenseData: null,
+  isFinancialListLoading: false,
+  financialListError: null,
+  financialPagination: null,
+  currentFinancialLedger: null,
+  isFinancialDetailLoading: false,
+  financialDetailError: null,
+  currentFinancialStatement: null,
+  isStatementLoading: false,
+  statementError: null,
+  currentBranchDetail: null,
+  isBranchDetailLoading: false,
+  branchDetailError: null,
+  currentAgencyDetail: null,
+  isAgencyDetailLoading: false,
+  agencyDetailError: null,
+  currentSuspenseDetail: null,
+  isSuspenseDetailLoading: false,
+  suspenseDetailError: null,
 };
+
+// ============== PRODUCT LEDGER THUNKS ==============
 
 // GET /api/product-ledger
 export const fetchAllProductLedgers = createAsyncThunk<
@@ -56,7 +142,15 @@ export const fetchAllProductLedgers = createAsyncThunk<
 // GET /api/product-ledger/:productId/detail
 export const fetchProductLedgerById = createAsyncThunk<
   ProductLedgerDetail,
-  { productId: string; page?: number; limit?: number; movementType?: ProductLedgerMovementType; branchId?: string },
+  {
+    productId: string;
+    page?: number;
+    limit?: number;
+    movementType?: ProductLedgerMovementType;
+    branchId?: string;
+    startDate?: string;
+    endDate?: string;
+  },
   { rejectValue: string }
 >("ledger/fetchById", async (params, { rejectWithValue }) => {
   try {
@@ -67,6 +161,144 @@ export const fetchProductLedgerById = createAsyncThunk<
     return rejectWithValue(response.message || "Failed to fetch product ledger details");
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to fetch product ledger details";
+    return rejectWithValue(message);
+  }
+});
+
+// ============== FINANCIAL LEDGER THUNKS ==============
+
+// GET /api/ledgers/groups
+export const fetchLedgerGroups = createAsyncThunk<
+  LedgerGroupMaster[],
+  void,
+  { rejectValue: string }
+>("ledger/fetchGroups", async (_, { rejectWithValue }) => {
+  try {
+    const response = await ledgerApi.getGroups();
+    if (response.success && response.data) {
+      return response.data;
+    }
+    return rejectWithValue(response.message || "Failed to fetch ledger groups");
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to fetch ledger groups";
+    return rejectWithValue(message);
+  }
+});
+
+// GET /api/ledgers/get-all?view=BRANCH|AGENCY|SUSPENSE
+export const fetchAllFinancialLedgers = createAsyncThunk<
+  {
+    rows: LedgerViewRow[];
+    total: number;
+    view: LedgerView;
+    suspense: { summary: any; transactions: SuspenseTransactionRow[] } | null;
+  },
+  GetFinancialLedgersParams,
+  { rejectValue: string }
+>("ledger/fetchAllFinancial", async (params, { rejectWithValue }) => {
+  try {
+    const response = await ledgerApi.getAllLedgers(params);
+    if (response.success && response.data) {
+      return {
+        rows: response.data.rows,
+        total: response.data.total,
+        view: params.view,
+        suspense: response.data.suspense ?? null,
+      };
+    }
+    return rejectWithValue(response.message || "Failed to fetch ledgers");
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to fetch ledgers";
+    return rejectWithValue(message);
+  }
+});
+
+// GET /api/ledgers/:ledgerId
+export const fetchFinancialLedgerById = createAsyncThunk<
+  FinancialLedgerDetail,
+  string,
+  { rejectValue: string }
+>("ledger/fetchFinancialById", async (ledgerId, { rejectWithValue }) => {
+  try {
+    const response = await ledgerApi.getFinancialLedgerById(ledgerId);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    return rejectWithValue(response.message || "Failed to fetch ledger details");
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to fetch ledger details";
+    return rejectWithValue(message);
+  }
+});
+
+// GET /api/ledgers/:ledgerId/statement
+export const fetchLedgerStatement = createAsyncThunk<
+  FinancialLedgerStatementResponse,
+  { ledgerId: string; params?: GetLedgerStatementParams },
+  { rejectValue: string }
+>("ledger/fetchStatement", async ({ ledgerId, params }, { rejectWithValue }) => {
+  try {
+    const response = await ledgerApi.getLedgerStatement(ledgerId, params);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    return rejectWithValue(response.message || "Failed to fetch ledger statement");
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to fetch ledger statement";
+    return rejectWithValue(message);
+  }
+});
+
+// GET /api/ledgers/branch/:branchId - Branch-wise detail after View Details
+export const fetchLedgerByBranchId = createAsyncThunk<
+  BranchLedgerDetailResponse,
+  { branchId: string; category?: "ACCOUNTING_LEDGER" | "CASH" | "GST" | "DEBTORS" | "CREDITORS" },
+  { rejectValue: string }
+>("ledger/fetchByBranchId", async ({ branchId, category }, { rejectWithValue }) => {
+  try {
+    const response = await ledgerApi.getLedgerByBranchId(branchId, category);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    return rejectWithValue(response.message || "Failed to fetch branch ledgers");
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to fetch branch ledgers";
+    return rejectWithValue(message);
+  }
+});
+
+// GET /api/ledgers/agency/:agencyId - Agency-wise detail after View Details
+export const fetchLedgerByAgencyId = createAsyncThunk<
+  AgencyLedgerDetailResponse,
+  { agencyId: string; category?: "ACCOUNTING_LEDGER" | "CASH" | "DEBTORS" | "CREDITORS" },
+  { rejectValue: string }
+>("ledger/fetchByAgencyId", async ({ agencyId, category }, { rejectWithValue }) => {
+  try {
+    const response = await ledgerApi.getLedgerByAgencyId(agencyId, category);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    return rejectWithValue(response.message || "Failed to fetch agency ledgers");
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to fetch agency ledgers";
+    return rejectWithValue(message);
+  }
+});
+
+// GET /api/ledgers/suspense/:branchId - Suspense transactions after View Details
+export const fetchLedgerBySuspenseId = createAsyncThunk<
+  SuspenseLedgerDetailResponse,
+  { branchId: string; category?: "ACCOUNTING_LEDGER" | "CASH" },
+  { rejectValue: string }
+>("ledger/fetchBySuspenseId", async ({ branchId, category }, { rejectWithValue }) => {
+  try {
+    const response = await ledgerApi.getLedgerBySuspenseId(branchId, category);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    return rejectWithValue(response.message || "Failed to fetch suspense ledgers");
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to fetch suspense ledgers";
     return rejectWithValue(message);
   }
 });
@@ -83,11 +315,23 @@ const ledgerSlice = createSlice({
       state.currentDetail = null;
       state.detailError = null;
     },
+    clearFinancialCurrentDetail: (state) => {
+      state.currentFinancialLedger = null;
+      state.financialDetailError = null;
+      state.currentFinancialStatement = null;
+      state.statementError = null;
+      state.currentBranchDetail = null;
+      state.branchDetailError = null;
+      state.currentAgencyDetail = null;
+      state.agencyDetailError = null;
+      state.currentSuspenseDetail = null;
+      state.suspenseDetailError = null;
+    },
     resetLedgerState: () => initialState,
   },
   extraReducers: (builder) => {
     builder
-      // fetchAllProductLedgers
+      // ===== Product Ledger =====
       .addCase(fetchAllProductLedgers.pending, (state) => {
         state.isListLoading = true;
         state.listError = null;
@@ -103,7 +347,6 @@ const ledgerSlice = createSlice({
         state.isListLoading = false;
         state.listError = action.payload || "Failed to fetch product ledgers";
       })
-      // fetchProductLedgerById
       .addCase(fetchProductLedgerById.pending, (state) => {
         state.isDetailLoading = true;
         state.detailError = null;
@@ -115,9 +358,113 @@ const ledgerSlice = createSlice({
       .addCase(fetchProductLedgerById.rejected, (state, action) => {
         state.isDetailLoading = false;
         state.detailError = action.payload || "Failed to fetch product ledger details";
+      })
+      // ===== Ledger Groups =====
+      .addCase(fetchLedgerGroups.pending, (state) => {
+        state.isGroupsLoading = true;
+        state.groupsError = null;
+      })
+      .addCase(fetchLedgerGroups.fulfilled, (state, action) => {
+        state.isGroupsLoading = false;
+        state.ledgerGroups = action.payload || [];
+      })
+      .addCase(fetchLedgerGroups.rejected, (state, action) => {
+        state.isGroupsLoading = false;
+        state.groupsError = action.payload || "Failed to fetch ledger groups";
+      })
+      // ===== Financial Ledger List =====
+      .addCase(fetchAllFinancialLedgers.pending, (state) => {
+        state.isFinancialListLoading = true;
+        state.financialListError = null;
+      })
+      .addCase(fetchAllFinancialLedgers.fulfilled, (state, action) => {
+        state.isFinancialListLoading = false;
+        state.financialLedgers = action.payload.rows || [];
+        state.financialView = action.payload.view;
+        state.suspenseData = action.payload.suspense;
+        state.financialPagination = {
+          total: action.payload.total,
+          page: 1,
+          limit: action.payload.total || 25,
+          totalPages: 1,
+        };
+      })
+      .addCase(fetchAllFinancialLedgers.rejected, (state, action) => {
+        state.isFinancialListLoading = false;
+        state.financialListError = action.payload || "Failed to fetch ledgers";
+      })
+      // ===== Financial Ledger Detail =====
+      .addCase(fetchFinancialLedgerById.pending, (state) => {
+        state.isFinancialDetailLoading = true;
+        state.financialDetailError = null;
+      })
+      .addCase(fetchFinancialLedgerById.fulfilled, (state, action) => {
+        state.isFinancialDetailLoading = false;
+        state.currentFinancialLedger = action.payload;
+      })
+      .addCase(fetchFinancialLedgerById.rejected, (state, action) => {
+        state.isFinancialDetailLoading = false;
+        state.financialDetailError = action.payload || "Failed to fetch ledger details";
+      })
+      // ===== Ledger Statement =====
+      .addCase(fetchLedgerStatement.pending, (state) => {
+        state.isStatementLoading = true;
+        state.statementError = null;
+      })
+      .addCase(fetchLedgerStatement.fulfilled, (state, action) => {
+        state.isStatementLoading = false;
+        state.currentFinancialStatement = action.payload;
+      })
+      .addCase(fetchLedgerStatement.rejected, (state, action) => {
+        state.isStatementLoading = false;
+        state.statementError = action.payload || "Failed to fetch ledger statement";
+      })
+      // ===== Branch Detail =====
+      .addCase(fetchLedgerByBranchId.pending, (state) => {
+        state.isBranchDetailLoading = true;
+        state.branchDetailError = null;
+      })
+      .addCase(fetchLedgerByBranchId.fulfilled, (state, action) => {
+        state.isBranchDetailLoading = false;
+        state.currentBranchDetail = action.payload;
+      })
+      .addCase(fetchLedgerByBranchId.rejected, (state, action) => {
+        state.isBranchDetailLoading = false;
+        state.branchDetailError = action.payload || "Failed to fetch branch ledgers";
+      })
+      // ===== Agency Detail =====
+      .addCase(fetchLedgerByAgencyId.pending, (state) => {
+        state.isAgencyDetailLoading = true;
+        state.agencyDetailError = null;
+      })
+      .addCase(fetchLedgerByAgencyId.fulfilled, (state, action) => {
+        state.isAgencyDetailLoading = false;
+        state.currentAgencyDetail = action.payload;
+      })
+      .addCase(fetchLedgerByAgencyId.rejected, (state, action) => {
+        state.isAgencyDetailLoading = false;
+        state.agencyDetailError = action.payload || "Failed to fetch agency ledgers";
+      })
+      // ===== Suspense Detail =====
+      .addCase(fetchLedgerBySuspenseId.pending, (state) => {
+        state.isSuspenseDetailLoading = true;
+        state.suspenseDetailError = null;
+      })
+      .addCase(fetchLedgerBySuspenseId.fulfilled, (state, action) => {
+        state.isSuspenseDetailLoading = false;
+        state.currentSuspenseDetail = action.payload;
+      })
+      .addCase(fetchLedgerBySuspenseId.rejected, (state, action) => {
+        state.isSuspenseDetailLoading = false;
+        state.suspenseDetailError = action.payload || "Failed to fetch suspense ledgers";
       });
   },
 });
 
-export const { clearLedgerError, clearCurrentDetail, resetLedgerState } = ledgerSlice.actions;
+export const {
+  clearLedgerError,
+  clearCurrentDetail,
+  clearFinancialCurrentDetail,
+  resetLedgerState,
+} = ledgerSlice.actions;
 export default ledgerSlice.reducer;
