@@ -1,5 +1,6 @@
 // Agency API Service
 import { apiFetch } from "./api";
+import { fetchBlob } from "@/lib/download";
 import { Agency, AgenciesListResponse, AgencyResponse, PaginationMeta } from "../types/agency";
 
 export interface GetAgenciesParams {
@@ -87,5 +88,20 @@ export const agencyApi = {
       method: "PATCH",
       body: { isActive },
     });
+  },
+
+  // GET /api/agencies/all?export=true
+  // Streams the full agencies list as an .xlsx file (no pagination).
+  // Returns the Blob and the filename parsed from Content-Disposition
+  // (defaults to "agencies.xlsx"). Use `downloadFile(...)` from `@/lib/download`
+  // to save it.
+  async exportExcel(params?: Omit<GetAgenciesParams, "page" | "limit">): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params?.search) queryParams.append("search", params.search);
+    if (params?.type) queryParams.append("type", params.type);
+    if (params?.branch) queryParams.append("branch", params.branch);
+
+    return fetchBlob(`api/agencies/all?${queryParams.toString()}`, "agencies.xlsx");
   },
 };

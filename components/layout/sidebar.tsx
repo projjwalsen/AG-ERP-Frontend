@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, Building2, Briefcase, Package,
   ShoppingCart, FileText, History, Settings, ChevronLeft, Shield,
   Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu, CreditCard,
-  ChevronRight, BookOpen, Wallet,
+  ChevronRight, BookOpen, Wallet, BarChart3, AlertTriangle, Receipt,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -238,8 +238,20 @@ const buildSidebarItems = (): SidebarItem[] => [
       { title: "Financial Ledger", href: "/ledger/financial", icon: Wallet },
     ],
   },
-  // { title: "Reports", href: "/reports", icon: FileText, module: "REPORT" },
   // { title: "Audit Logs", href: "/audit-logs", icon: History, module: "AUDIT" },
+  {
+    title: "Reports",
+    href: "/reports",
+    icon: BarChart3,
+    module: "REPORT",
+    children: [
+      { title: "Outstanding Report", href: "/reports/outstanding", icon: FileText },
+      { title: "Branch Day Book", href: "/reports/day-book", icon: BookOpen },
+      { title: "GSTR-1 Report", href: "/reports/gstr1", icon: Receipt },
+      { title: "GST Suspense Log", href: "/reports/gst-suspense", icon: AlertTriangle },
+      { title: "Inventory Report", href: "/reports/inventory", icon: Package },
+    ],
+  },
   { title: "Settings", href: "/settings", icon: Settings, module: null },
 ];
 
@@ -259,11 +271,18 @@ function NavItem({
   const Icon = item.icon;
   const hasChildren = !!item.children?.length;
 
-  const [open, setOpen] = React.useState<boolean>(isDescendantActive);
+  // Reports: open the submenu by default whenever the user is on the
+  // reports landing or any descendant, so all 5 submenus stay visible.
+  const initiallyOpen =
+    item.href === "/reports"
+      ? pathname === "/reports" || isDescendantActive
+      : isDescendantActive;
+
+  const [open, setOpen] = React.useState<boolean>(initiallyOpen);
 
   React.useEffect(() => {
-    if (isDescendantActive) setOpen(true);
-  }, [isDescendantActive]);
+    if (isDescendantActive || isExactActive) setOpen(true);
+  }, [isDescendantActive, isExactActive]);
 
   const linkContent = (
     <div
@@ -399,10 +418,13 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <ScrollArea className="flex-1 px-3 py-3">
             <nav className="space-y-0.5">
               {sidebarItems.map((item) => {
-                // Transactions and Ledger are always shown (UI-only build —
-                // permission check still happens inside the page itself).
+                // Transactions, Ledger, and Reports are always shown
+                // (UI-only build — permission check still happens inside
+                // the page itself).
                 const isAlwaysVisibleEntry =
-                  item.href === "/transactions" || item.href === "/ledger";
+                  item.href === "/transactions" ||
+                  item.href === "/ledger" ||
+                  item.href === "/reports";
 
                 // Skip items that require module permission and user doesn't have access.
                 if (

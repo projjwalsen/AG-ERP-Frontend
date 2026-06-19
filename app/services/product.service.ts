@@ -1,5 +1,6 @@
 // Product API Service
 import { apiFetch } from "./api";
+import { fetchBlob } from "@/lib/download";
 import { Product, ProductsListResponse, ProductResponse, PaginationMeta } from "../types/product";
 
 export interface GetProductsParams {
@@ -102,5 +103,16 @@ export const productApi = {
       method: "PATCH",
       body: { isActive },
     });
+  },
+
+  // GET /api/products/all-list?export=true
+  // Streams the full products list as an .xlsx file (no pagination).
+  async exportExcel(params?: Omit<GetProductsParams, "page" | "limit">): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params?.search) queryParams.append("search", params.search);
+    if (params?.category) queryParams.append("category", params.category);
+
+    return fetchBlob(`api/products/all-list?${queryParams.toString()}`, "products.xlsx");
   },
 };

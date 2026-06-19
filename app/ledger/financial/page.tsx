@@ -3,7 +3,7 @@
 import * as React from "react";
 import {
   Wallet, Search, Eye, Building2,
-  Briefcase, Layers,
+  Briefcase, Layers, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,7 @@ import {
   SuspenseTransactionRow,
 } from "@/app/types/ledger";
 import { formatCurrency } from "@/lib/utils";
+import { downloadFile } from "@/lib/download";
 import { useRouter } from "next/navigation";
 
 type BranchCategory = "ACCOUNTING_LEDGER" | "CASH" | "GST" | "DEBTORS" | "CREDITORS";
@@ -77,6 +78,7 @@ function FinancialLedgerContent() {
   const [activeTab, setActiveTab] = React.useState<LedgerView>("AGENCY");
   const [searchTerm, setSearchTerm] = React.useState("");
   const [currentPage, setCurrentPage] = React.useState(1);
+  const [exporting, setExporting] = React.useState(false);
 
   const fetchList = React.useCallback(
     async (view: LedgerView, page: number, search: string) => {
@@ -110,6 +112,25 @@ function FinancialLedgerContent() {
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
     setCurrentPage(1);
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await downloadFile(
+        `api/ledgers/get-all?${new URLSearchParams({
+          export: "true",
+          view: activeTab,
+          ...(searchTerm.trim() ? { search: searchTerm.trim() } : {}),
+        }).toString()}`,
+        `ledger_${activeTab.toLowerCase()}.xlsx`
+      );
+      addToast(`${activeTab} ledgers exported successfully`, "success");
+    } catch (err: any) {
+      addToast(err?.message || "Failed to export ledgers", "error");
+    } finally {
+      setExporting(false);
+    }
   };
 
   // === View Details click → modal with category selection ===
@@ -250,6 +271,16 @@ function FinancialLedgerContent() {
                 />
               </div>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 md:self-end"
+              onClick={handleExport}
+              loading={exporting}
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export
+            </Button>
           </div>
         </div>
 

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import {
-  BookOpen, Search, RefreshCw, Eye, Package, AlertTriangle,
+  BookOpen, Search, RefreshCw, Eye, Package, AlertTriangle, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { fetchAllProductLedgers } from "@/app/store/ledgerSlice";
 import { ProductLedgerListItem } from "@/app/types/ledger";
 import { formatCurrency } from "@/lib/utils";
+import { downloadFile } from "@/lib/download";
 import { useRouter } from "next/navigation";
 
 export default function LedgerPage() {
@@ -31,6 +32,7 @@ function LedgerContent() {
 
   const [searchTerm, setSearchTerm] = React.useState("");
   const [currentPage, setCurrentPage] = React.useState(1);
+  const [exporting, setExporting] = React.useState(false);
 
   React.useEffect(() => {
     fetchLedgers(currentPage);
@@ -42,6 +44,24 @@ function LedgerContent() {
       await dispatch(fetchAllProductLedgers(params)).unwrap();
     } catch (err: any) {
       addToast(err || "Failed to fetch product ledgers", "error");
+    }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await downloadFile(
+        `api/product-ledger?${new URLSearchParams({
+          export: "true",
+          ...(searchTerm ? { search: searchTerm } : {}),
+        }).toString()}`,
+        "product-ledgers.xlsx"
+      );
+      addToast("Product ledgers exported successfully", "success");
+    } catch (err: any) {
+      addToast(err?.message || "Failed to export product ledgers", "error");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -84,6 +104,16 @@ function LedgerContent() {
         </div>
         <Button variant="outline" size="sm" onClick={() => fetchLedgers(currentPage)}>
           <RefreshCw className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={handleExport}
+          loading={exporting}
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export
         </Button>
       </div>
 

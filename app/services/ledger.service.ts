@@ -1,5 +1,6 @@
 // Product Ledger API Service - matches backend API contract
 import { apiFetch } from "./api";
+import { fetchBlob } from "@/lib/download";
 import {
   ProductLedgerListResponse,
   ProductLedgerDetail,
@@ -217,5 +218,34 @@ export const ledgerApi = {
   ): Promise<{ success: boolean; message: string; data?: SuspenseLedgerDetailResponse }> {
     const query = category ? `?category=${category}` : "";
     return apiFetch<SuspenseLedgerDetailResponse>(`api/ledgers/suspense/${branchId}${query}`);
+  },
+
+  // ===== Export endpoints =====
+  // Each streams an .xlsx file with the full filtered set (no pagination).
+
+  // GET /api/product-ledger?export=true
+  async exportProductLedgers(params?: Omit<GetProductLedgersParams, "page" | "limit">): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params?.search) queryParams.append("search", params.search);
+    if (params?.category) queryParams.append("category", params.category);
+    if (params?.isLowStock !== undefined) queryParams.append("isLowStock", String(params.isLowStock));
+
+    return fetchBlob(`api/product-ledger?${queryParams.toString()}`, "product-ledgers.xlsx");
+  },
+
+  // GET /api/ledgers/get-all?export=true&view=BRANCH|AGENCY|SUSPENSE
+  // Filename comes from the backend as `ledger_<view>.xlsx` (e.g. ledger_BRANCH.xlsx).
+  async exportFinancialLedgers(params: { view: LedgerView; search?: string; branchId?: string }): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    queryParams.append("view", params.view);
+    if (params.search) queryParams.append("search", params.search);
+    if (params.branchId) queryParams.append("branchId", params.branchId);
+
+    return fetchBlob(
+      `api/ledgers/get-all?${queryParams.toString()}`,
+      `ledger_${params.view.toLowerCase()}.xlsx`
+    );
   },
 };

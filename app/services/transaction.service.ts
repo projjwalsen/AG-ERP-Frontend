@@ -1,5 +1,6 @@
 // Transaction API Service — matches AG-ERP-Backend/src/modules/transaction
 import { apiFetch } from "./api";
+import { fetchBlob } from "@/lib/download";
 import {
   Transaction,
   TransactionsListResponse,
@@ -127,6 +128,24 @@ export const transactionApi = {
       ? `api/transactions/outstanding?${query}`
       : "api/transactions/outstanding";
     return apiFetch<AgencyOutstanding>(url);
+  },
+
+  // GET /api/transactions/all?export=true
+  // Streams the full transactions list as an .xlsx file (no pagination).
+  async exportExcel(params?: Omit<GetTransactionsParams, "page" | "limit">): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params?.search) queryParams.append("search", params.search);
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.agencyId) queryParams.append("agencyId", params.agencyId);
+    if (params?.status) queryParams.append("status", params.status);
+    if (params?.direction) queryParams.append("direction", params.direction);
+    if (params?.paymentType) queryParams.append("paymentType", params.paymentType);
+    if (params?.suspenseAccount !== undefined) {
+      queryParams.append("suspenseAccount", String(params.suspenseAccount));
+    }
+
+    return fetchBlob(`api/transactions/all?${queryParams.toString()}`, "transactions.xlsx");
   },
 };
 

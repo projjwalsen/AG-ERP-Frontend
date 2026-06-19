@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Briefcase, Plus, Search, Edit, Eye, MapPin, MoreHorizontal, Phone, Mail } from "lucide-react";
+import { Briefcase, Plus, Search, Edit, Eye, MapPin, MoreHorizontal, Phone, Mail, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,7 @@ import { useAppSelector } from "@/app/store/hooks";
 import { agencyApi, UpdateAgencyPayload } from "@/app/services/agency.service";
 import { metaApi } from "@/app/services/meta.service";
 import { hasModulePermission } from "@/lib/usePermissions";
+import { downloadFile } from "@/lib/download";
 import { Agency } from "@/app/types/agency";
 import { useRouter } from "next/navigation";
 
@@ -65,6 +66,7 @@ function AgenciesTab() {
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [viewModalOpen, setViewModalOpen] = React.useState(false);
   const [selectedAgency, setSelectedAgency] = React.useState<Agency | null>(null);
+  const [exporting, setExporting] = React.useState(false);
   const { permissions } = useAppSelector((state) => state.auth);
 
   const canView = hasModulePermission(permissions, "AGENCY", "VIEW");
@@ -141,6 +143,25 @@ function AgenciesTab() {
     }
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await downloadFile(
+        `api/agencies/all?${new URLSearchParams({
+          export: "true",
+          ...(searchTerm ? { search: searchTerm } : {}),
+          ...(selectedType ? { type: selectedType } : {}),
+        }).toString()}`,
+        "agencies.xlsx"
+      );
+      addToast("Agencies exported successfully", "success");
+    } catch (err: any) {
+      addToast(err?.message || "Failed to export agencies", "error");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -190,6 +211,16 @@ function AgenciesTab() {
             Clear
           </Button>
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={handleExport}
+          loading={exporting}
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export
+        </Button>
       </div>
 
       {loading ? (

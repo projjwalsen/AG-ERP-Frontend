@@ -1,0 +1,196 @@
+// Reports API Service — matches AG-ERP-Backend/src/modules/reports
+//
+// All endpoints sit behind authMiddleware and live under /api/reports.
+// Response envelope: { success, message?, data } where `data` is the
+// report payload. Mirrors the URL shapes defined in
+// `reporting.routes.ts` exactly (no client-side path remapping).
+//
+// Each report also supports a `?export=true` query that streams an .xlsx
+// file built by the backend's `ExcelService.export` (column definitions
+// live in `AG-ERP-Backend/src/modules/exports/branch.export.ts`). The
+// `exportExcel` methods below mirror that contract.
+
+import { apiFetch } from "./api";
+import { fetchBlob } from "@/lib/download";
+import {
+  OutstandingReportResponse,
+  GetOutstandingReportParams,
+  DayBookResponse,
+  GetDayBookParams,
+  GSTR1ReportResponse,
+  GetGSTR1Params,
+  SuspenseReportResponse,
+  GetSuspenseParams,
+  InventoryReportResponse,
+  GetInventoryParams,
+} from "@/app/types/report";
+
+export const reportApi = {
+  /**
+   * GET /api/reports/outstanding-report?branchId=&type=RECEIVABLE|PAYABLE
+   */
+  async getOutstandingReport(
+    params?: GetOutstandingReportParams
+  ): Promise<{ success: boolean; message: string; data?: OutstandingReportResponse }> {
+    const queryParams = new URLSearchParams();
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.type) queryParams.append("type", params.type);
+    const query = queryParams.toString();
+    const url = query
+      ? `api/reports/outstanding-report?${query}`
+      : "api/reports/outstanding-report";
+    return apiFetch<OutstandingReportResponse>(url);
+  },
+
+  /**
+   * GET /api/reports/branch/:branchId/day-book?startDate=&endDate=
+   */
+  async getBranchDayBook(
+    params: GetDayBookParams
+  ): Promise<{ success: boolean; message: string; data?: DayBookResponse }> {
+    const queryParams = new URLSearchParams();
+    if (params.startDate) queryParams.append("startDate", params.startDate);
+    if (params.endDate) queryParams.append("endDate", params.endDate);
+    const query = queryParams.toString();
+    const url = query
+      ? `api/reports/branch/${params.branchId}/day-book?${query}`
+      : `api/reports/branch/${params.branchId}/day-book`;
+    return apiFetch<DayBookResponse>(url);
+  },
+
+  /**
+   * GET /api/reports/gstr1?branchId=&startDate=&endDate=
+   */
+  async getGSTR1Report(
+    params?: GetGSTR1Params
+  ): Promise<{ success: boolean; message: string; data?: GSTR1ReportResponse }> {
+    const queryParams = new URLSearchParams();
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    const query = queryParams.toString();
+    const url = query ? `api/reports/gstr1?${query}` : "api/reports/gstr1";
+    return apiFetch<GSTR1ReportResponse>(url);
+  },
+
+  /**
+   * GET /api/reports/gst-suspense-log?branchId=&startDate=&endDate=
+   */
+  async getGSTSuspenseLog(
+    params?: GetSuspenseParams
+  ): Promise<{ success: boolean; message: string; data?: SuspenseReportResponse }> {
+    const queryParams = new URLSearchParams();
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    const query = queryParams.toString();
+    const url = query
+      ? `api/reports/gst-suspense-log?${query}`
+      : "api/reports/gst-suspense-log";
+    return apiFetch<SuspenseReportResponse>(url);
+  },
+
+  /**
+   * GET /api/reports/stock-inventory?branchId=&productId=&startDate=&endDate=
+   */
+  async getStockInventoryReport(
+    params?: GetInventoryParams
+  ): Promise<{ success: boolean; message: string; data?: InventoryReportResponse }> {
+    const queryParams = new URLSearchParams();
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.productId) queryParams.append("productId", params.productId);
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    const query = queryParams.toString();
+    const url = query
+      ? `api/reports/stock-inventory?${query}`
+      : "api/reports/stock-inventory";
+    return apiFetch<InventoryReportResponse>(url);
+  },
+
+  // ===================================================================
+  // EXCEL EXPORTS
+  //
+  // Each endpoint accepts `?export=true`; the backend's
+  // `ExcelService.export` streams an .xlsx file with column definitions
+  // from `branch.export.ts`. The `defaultName` is the fallback filename
+  // if the server doesn't return a Content-Disposition header.
+  // ===================================================================
+
+  /** GET /api/reports/outstanding-report?export=true&branchId=&type= */
+  async exportOutstandingExcel(
+    params?: GetOutstandingReportParams
+  ): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.type) queryParams.append("type", params.type);
+    return fetchBlob(
+      `api/reports/outstanding-report?${queryParams.toString()}`,
+      "outstanding-report.xlsx"
+    );
+  },
+
+  /**
+   * GET /api/reports/branch/:branchId/day-book?export=true&startDate=&endDate=
+   * Note: branchId is in the path, not the query.
+   */
+  async exportDayBookExcel(
+    params: GetDayBookParams
+  ): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params.startDate) queryParams.append("startDate", params.startDate);
+    if (params.endDate) queryParams.append("endDate", params.endDate);
+    return fetchBlob(
+      `api/reports/branch/${params.branchId}/day-book?${queryParams.toString()}`,
+      "day-book.xlsx"
+    );
+  },
+
+  /** GET /api/reports/gstr1?export=true&branchId=&startDate=&endDate= */
+  async exportGSTR1Excel(
+    params?: GetGSTR1Params
+  ): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    return fetchBlob(
+      `api/reports/gstr1?${queryParams.toString()}`,
+      "gstr1-report.xlsx"
+    );
+  },
+
+  /** GET /api/reports/gst-suspense-log?export=true&branchId=&startDate=&endDate= */
+  async exportGSTSuspenseExcel(
+    params?: GetSuspenseParams
+  ): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    return fetchBlob(
+      `api/reports/gst-suspense-log?${queryParams.toString()}`,
+      "gst-suspense-log.xlsx"
+    );
+  },
+
+  /** GET /api/reports/stock-inventory?export=true&branchId=&productId=&startDate=&endDate= */
+  async exportStockInventoryExcel(
+    params?: GetInventoryParams
+  ): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.productId) queryParams.append("productId", params.productId);
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    return fetchBlob(
+      `api/reports/stock-inventory?${queryParams.toString()}`,
+      "stock-inventory.xlsx"
+    );
+  },
+};

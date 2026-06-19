@@ -25,6 +25,7 @@ import { PageHeader } from "@/components/layout";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { formatCurrency } from "@/lib/utils";
 import { hasModulePermission } from "@/lib/usePermissions";
+import { downloadFile } from "@/lib/download";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { agencyApi } from "@/app/services/agency.service";
 import { branchApi } from "@/app/services/branch.service";
@@ -226,6 +227,7 @@ function DirectionTab({ direction }: { direction: TransactionDirection }) {
   const [dateTo, setDateTo] = React.useState<string>("");
 
   const [currentPage, setCurrentPage] = React.useState<number>(1);
+  const [exporting, setExporting] = React.useState(false);
   const pageSize = 10;
 
   // Load agencies + branches for filter dropdowns on mount.
@@ -337,6 +339,30 @@ function DirectionTab({ direction }: { direction: TransactionDirection }) {
   const handlePrint = () => {
     if (typeof window !== "undefined") {
       window.print();
+    }
+  };
+
+  // Stream the filtered transactions list as an .xlsx file. Mirrors the
+  // filters applied to fetchTransactions — minus pagination, so the export
+  // contains the full matching dataset.
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await downloadFile(
+        `api/transactions/all?${new URLSearchParams({
+          export: "true",
+          direction,
+          ...(search.trim() ? { search: search.trim() } : {}),
+          ...(branchFilter ? { branchId: branchFilter } : {}),
+          ...(statusFilter ? { status: statusFilter } : {}),
+        }).toString()}`,
+        `transactions_${direction.toLowerCase()}.xlsx`
+      );
+      addToast(`${directionLabel} transactions exported successfully`, "success");
+    } catch (err: any) {
+      addToast(err?.message || "Failed to export transactions", "error");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -542,7 +568,7 @@ function DirectionTab({ direction }: { direction: TransactionDirection }) {
                 Clear
               </Button>
             )}
-            <Button variant="outline" size="sm" className="gap-1.5">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExport} loading={exporting}>
               <Download className="h-3.5 w-3.5" />
               Export
             </Button>
