@@ -19,6 +19,8 @@ import {
   AgencyLedgerDetailResponse,
   SuspenseLedgerDetailResponse,
   SuspenseTransactionRow,
+  CompanyLedgerResponse,
+  GSTLedgerResponse,
 } from "../types/ledger";
 
 export interface LedgerState {
@@ -83,6 +85,16 @@ export interface LedgerState {
   currentSuspenseDetail: SuspenseLedgerDetailResponse | null;
   isSuspenseDetailLoading: boolean;
   suspenseDetailError: string | null;
+
+  // ===== Company Ledger (whole-company consolidated statement) =====
+  currentCompanyLedger: CompanyLedgerResponse | null;
+  isCompanyLedgerLoading: boolean;
+  companyLedgerError: string | null;
+
+  // ===== GST Ledger Report =====
+  currentGSTLedger: GSTLedgerResponse | null;
+  isGSTLedgerLoading: boolean;
+  gstLedgerError: string | null;
 }
 
 const initialState: LedgerState = {
@@ -117,6 +129,14 @@ const initialState: LedgerState = {
   currentSuspenseDetail: null,
   isSuspenseDetailLoading: false,
   suspenseDetailError: null,
+
+  currentCompanyLedger: null,
+  isCompanyLedgerLoading: false,
+  companyLedgerError: null,
+
+  currentGSTLedger: null,
+  isGSTLedgerLoading: false,
+  gstLedgerError: null,
 };
 
 // ============== PRODUCT LEDGER THUNKS ==============
@@ -250,40 +270,63 @@ export const fetchLedgerStatement = createAsyncThunk<
 });
 
 // GET /api/ledgers/branch/:branchId - Branch-wise detail after View Details
+// GET /api/ledgers/branch/:branchId?category=&startDate=&endDate=
 export const fetchLedgerByBranchId = createAsyncThunk<
   BranchLedgerDetailResponse,
-  { branchId: string; category?: "ACCOUNTING_LEDGER" | "CASH" | "GST" | "DEBTORS" | "CREDITORS" },
+  {
+    branchId: string;
+    category?: "ACCOUNTING_LEDGER" | "CASH" | "GST" | "DEBTORS" | "CREDITORS";
+    startDate?: string;
+    endDate?: string;
+  },
   { rejectValue: string }
->("ledger/fetchByBranchId", async ({ branchId, category }, { rejectWithValue }) => {
-  try {
-    const response = await ledgerApi.getLedgerByBranchId(branchId, category);
-    if (response.success && response.data) {
-      return response.data;
+>(
+  "ledger/fetchByBranchId",
+  async ({ branchId, category, startDate, endDate }, { rejectWithValue }) => {
+    try {
+      const response = await ledgerApi.getLedgerByBranchId(branchId, category, {
+        startDate,
+        endDate,
+      });
+      if (response.success && response.data) {
+        return response.data;
+      }
+      return rejectWithValue(response.message || "Failed to fetch branch ledgers");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to fetch branch ledgers";
+      return rejectWithValue(message);
     }
-    return rejectWithValue(response.message || "Failed to fetch branch ledgers");
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Failed to fetch branch ledgers";
-    return rejectWithValue(message);
   }
-});
+);
 
-// GET /api/ledgers/agency/:agencyId - Agency-wise detail after View Details
+// GET /api/ledgers/agency/:agencyId?category=&startDate=&endDate=
 export const fetchLedgerByAgencyId = createAsyncThunk<
   AgencyLedgerDetailResponse,
-  { agencyId: string; category?: "ACCOUNTING_LEDGER" | "CASH" | "DEBTORS" | "CREDITORS" },
+  {
+    agencyId: string;
+    category?: "ACCOUNTING_LEDGER" | "CASH" | "DEBTORS" | "CREDITORS";
+    startDate?: string;
+    endDate?: string;
+  },
   { rejectValue: string }
->("ledger/fetchByAgencyId", async ({ agencyId, category }, { rejectWithValue }) => {
-  try {
-    const response = await ledgerApi.getLedgerByAgencyId(agencyId, category);
-    if (response.success && response.data) {
-      return response.data;
+>(
+  "ledger/fetchByAgencyId",
+  async ({ agencyId, category, startDate, endDate }, { rejectWithValue }) => {
+    try {
+      const response = await ledgerApi.getLedgerByAgencyId(agencyId, category, {
+        startDate,
+        endDate,
+      });
+      if (response.success && response.data) {
+        return response.data;
+      }
+      return rejectWithValue(response.message || "Failed to fetch agency ledgers");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to fetch agency ledgers";
+      return rejectWithValue(message);
     }
-    return rejectWithValue(response.message || "Failed to fetch agency ledgers");
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Failed to fetch agency ledgers";
-    return rejectWithValue(message);
   }
-});
+);
 
 // GET /api/ledgers/suspense/:branchId - Suspense transactions after View Details
 export const fetchLedgerBySuspenseId = createAsyncThunk<
@@ -299,6 +342,46 @@ export const fetchLedgerBySuspenseId = createAsyncThunk<
     return rejectWithValue(response.message || "Failed to fetch suspense ledgers");
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to fetch suspense ledgers";
+    return rejectWithValue(message);
+  }
+});
+
+// GET /api/ledgers/company-ledger?branchId=&startDate=&endDate=
+// Whole-company consolidated ledger. startDate/endDate are optional ISO
+// date strings (YYYY-MM-DD); the backend filters transactions on createdAt.
+export const fetchCompanyLedger = createAsyncThunk<
+  CompanyLedgerResponse,
+  { branchId?: string; startDate?: string; endDate?: string } | undefined,
+  { rejectValue: string }
+>("ledger/fetchCompanyLedger", async (params, { rejectWithValue }) => {
+  try {
+    const response = await ledgerApi.getCompanyLedger(params);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    return rejectWithValue(response.message || "Failed to fetch company ledger");
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to fetch company ledger";
+    return rejectWithValue(message);
+  }
+});
+
+// GET /api/ledgers/gst-ledger?branchId=&startDate=&endDate=
+// GST report — Input GST (purchases), Output GST (sales), and a
+// Liability Summary (output - input per tax kind).
+export const fetchGSTLedger = createAsyncThunk<
+  GSTLedgerResponse,
+  { branchId?: string; startDate?: string; endDate?: string } | undefined,
+  { rejectValue: string }
+>("ledger/fetchGSTLedger", async (params, { rejectWithValue }) => {
+  try {
+    const response = await ledgerApi.getGSTLedger(params);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    return rejectWithValue(response.message || "Failed to fetch GST ledger");
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to fetch GST ledger";
     return rejectWithValue(message);
   }
 });
@@ -326,6 +409,10 @@ const ledgerSlice = createSlice({
       state.agencyDetailError = null;
       state.currentSuspenseDetail = null;
       state.suspenseDetailError = null;
+      state.currentCompanyLedger = null;
+      state.companyLedgerError = null;
+      state.currentGSTLedger = null;
+      state.gstLedgerError = null;
     },
     resetLedgerState: () => initialState,
   },
@@ -457,6 +544,32 @@ const ledgerSlice = createSlice({
       .addCase(fetchLedgerBySuspenseId.rejected, (state, action) => {
         state.isSuspenseDetailLoading = false;
         state.suspenseDetailError = action.payload || "Failed to fetch suspense ledgers";
+      })
+      // ===== Company Ledger =====
+      .addCase(fetchCompanyLedger.pending, (state) => {
+        state.isCompanyLedgerLoading = true;
+        state.companyLedgerError = null;
+      })
+      .addCase(fetchCompanyLedger.fulfilled, (state, action) => {
+        state.isCompanyLedgerLoading = false;
+        state.currentCompanyLedger = action.payload;
+      })
+      .addCase(fetchCompanyLedger.rejected, (state, action) => {
+        state.isCompanyLedgerLoading = false;
+        state.companyLedgerError = action.payload || "Failed to fetch company ledger";
+      })
+      // ===== GST Ledger =====
+      .addCase(fetchGSTLedger.pending, (state) => {
+        state.isGSTLedgerLoading = true;
+        state.gstLedgerError = null;
+      })
+      .addCase(fetchGSTLedger.fulfilled, (state, action) => {
+        state.isGSTLedgerLoading = false;
+        state.currentGSTLedger = action.payload;
+      })
+      .addCase(fetchGSTLedger.rejected, (state, action) => {
+        state.isGSTLedgerLoading = false;
+        state.gstLedgerError = action.payload || "Failed to fetch GST ledger";
       });
   },
 });

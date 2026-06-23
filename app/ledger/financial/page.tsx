@@ -3,7 +3,8 @@
 import * as React from "react";
 import {
   Wallet, Search, Eye, Building2,
-  Briefcase, Layers, Download,
+  Briefcase, Layers, Download, Building,
+  Filter as FilterIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,11 +21,13 @@ import {
   fetchLedgerByBranchId,
   fetchLedgerByAgencyId,
   fetchLedgerBySuspenseId,
+  fetchCompanyLedger,
 } from "@/app/store/ledgerSlice";
 import {
   LedgerView,
   LedgerViewRow,
   SuspenseTransactionRow,
+  CompanyLedgerResponse,
 } from "@/app/types/ledger";
 import { formatCurrency } from "@/lib/utils";
 import { downloadFile } from "@/lib/download";
@@ -72,6 +75,9 @@ function FinancialLedgerContent() {
     isFinancialListLoading,
     financialListError,
     financialPagination,
+    currentCompanyLedger,
+    isCompanyLedgerLoading,
+    companyLedgerError,
   } = useAppSelector((state) => state.ledger);
 
   // Three tabs - AGENCY is the default
@@ -79,6 +85,38 @@ function FinancialLedgerContent() {
   const [searchTerm, setSearchTerm] = React.useState("");
   const [currentPage, setCurrentPage] = React.useState(1);
   const [exporting, setExporting] = React.useState(false);
+
+  // Company-ledger specific filter state. Same draft/applied split used on
+  // the agency/branch detail pages: the inputs mutate `draft*`, and clicking
+  // Apply commits them to the applied state which triggers the refetch.
+  const [draftStartDate, setDraftStartDate] = React.useState<string>("");
+  const [draftEndDate, setDraftEndDate] = React.useState<string>("");
+  const [startDate, setStartDate] = React.useState<string>("");
+  const [endDate, setEndDate] = React.useState<string>("");
+
+  // ===== Company-ledger fetch =====
+  const fetchCompany = React.useCallback(
+    async (sd: string, ed: string) => {
+      try {
+        await dispatch(
+          fetchCompanyLedger({
+            ...(sd ? { startDate: sd } : {}),
+            ...(ed ? { endDate: ed } : {}),
+          })
+        ).unwrap();
+      } catch (err: any) {
+        addToast(err || "Failed to fetch company ledger", "error");
+      }
+    },
+    [dispatch, addToast]
+  );
+
+  // Refetch company ledger whenever its filters change.
+  React.useEffect(() => {
+    if (activeTab === "COMPANY") {
+      fetchCompany(startDate, endDate);
+    }
+  }, [activeTab, startDate, endDate, fetchCompany]);
 
   const fetchList = React.useCallback(
     async (view: LedgerView, page: number, search: string) => {
@@ -131,6 +169,43 @@ function FinancialLedgerContent() {
     } finally {
       setExporting(false);
     }
+  };
+
+  // Company-ledger export: streams the same data the user is currently
+  // looking at (honours the startDate/endDate filters) as an .xlsx file.
+  const handleCompanyExport = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      params.append("export", "true");
+      if (startDate) params.append("startDate", startDate);
+      if (endDate) params.append("endDate", endDate);
+      await downloadFile(
+        `api/ledgers/company-ledger?${params.toString()}`,
+        `company_ledger_${(currentCompanyLedger?.company?.name || "company")
+          .toString()
+          .replace(/\s+/g, "_")}.xlsx`
+      );
+      addToast("Company ledger exported successfully", "success");
+    } catch (err: any) {
+      addToast(err?.message || "Failed to export company ledger", "error");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Apply: commit draft dates to the applied state, triggering refetch.
+  const applyCompanyFilters = () => {
+    setStartDate(draftStartDate);
+    setEndDate(draftEndDate);
+  };
+
+  // Reset: clear both draft and applied state in one go.
+  const resetCompanyFilters = () => {
+    setDraftStartDate("");
+    setDraftEndDate("");
+    setStartDate("");
+    setEndDate("");
   };
 
   // === View Details click → modal with category selection ===
@@ -248,40 +323,98 @@ function FinancialLedgerContent() {
             <Layers className="h-4 w-4" />
             Suspense
           </TabsTrigger>
+          <TabsTrigger
+            value="COMPANY"
+            className="data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 px-4 py-2 rounded-md flex items-center gap-2"
+          >
+            <Building className="h-4 w-4" />
+            Company
+          </TabsTrigger>
         </TabsList>
 
-        {/* Shared search bar */}
+        {/* Shared search bar (or date filter for the COMPANY tab) */}
         <div className="bg-white p-4 rounded-lg border border-gray-200 mb-4">
-          <div className="flex flex-col md:flex-row md:items-center gap-3">
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Search</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          {activeTab === "COMPANY" ? (
+            <div className="flex flex-col md:flex-row md:items-end gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Start Date</label>
                 <Input
-                  placeholder={
-                    activeTab === "AGENCY"
-                      ? "Search agencies by name..."
-                      : activeTab === "BRANCH"
-                      ? "Search branches by name or code..."
-                      : "Search suspense ledgers..."
-                  }
-                  value={searchTerm}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                  className="pl-10"
+                  type="date"
+                  value={draftStartDate}
+                  max={draftEndDate || undefined}
+                  onChange={(e) => setDraftStartDate(e.target.value)}
                 />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">End Date</label>
+                <Input
+                  type="date"
+                  value={draftEndDate}
+                  min={draftStartDate || undefined}
+                  onChange={(e) => setDraftEndDate(e.target.value)}
+                />
+              </div>
+              <div className="flex items-end gap-2">
+                <Button
+                  size="sm"
+                  onClick={applyCompanyFilters}
+                  className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+                >
+                  <FilterIcon className="h-3.5 w-3.5" />
+                  Apply
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={resetCompanyFilters}
+                  className="gap-1.5"
+                >
+                  Reset
+                </Button>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 md:ml-auto"
+                onClick={handleCompanyExport}
+                loading={exporting}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export
+              </Button>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 md:self-end"
-              onClick={handleExport}
-              loading={exporting}
-            >
-              <Download className="h-3.5 w-3.5" />
-              Export
-            </Button>
-          </div>
+          ) : (
+            <div className="flex flex-col md:flex-row md:items-center gap-3">
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder={
+                      activeTab === "AGENCY"
+                        ? "Search agencies by name..."
+                        : activeTab === "BRANCH"
+                        ? "Search branches by name or code..."
+                        : "Search suspense ledgers..."
+                    }
+                    value={searchTerm}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 md:self-end"
+                onClick={handleExport}
+                loading={exporting}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export
+              </Button>
+            </div>
+          )}
         </div>
 
         <TabsContent value="AGENCY" className="mt-0">
@@ -317,6 +450,14 @@ function FinancialLedgerContent() {
             isLoading={isFinancialListLoading}
             error={financialListError}
             onViewDetails={(row) => openCategoryModal(row, "SUSPENSE")}
+          />
+        </TabsContent>
+
+        <TabsContent value="COMPANY" className="mt-0">
+          <CompanyLedgerTab
+            data={currentCompanyLedger}
+            isLoading={isCompanyLedgerLoading}
+            error={companyLedgerError}
           />
         </TabsContent>
       </Tabs>
@@ -734,6 +875,162 @@ function SuspenseTabContent({
               </tbody>
             </table>
           </div>
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+// ============================================================
+// Company ledger tab — whole-company consolidated statement
+// driven by startDate/endDate filters. Uses the income/expense
+// entry shape (serialNo, date, description, income, expense, balance).
+// ============================================================
+function CompanyLedgerTab({
+  data,
+  isLoading,
+  error,
+}: {
+  data: CompanyLedgerResponse | null;
+  isLoading: boolean;
+  error: string | null;
+}) {
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="p-12 text-center">
+          <p className="text-red-600">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-0">
+          <div className="space-y-3 p-4">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!data) {
+    return (
+      <Card>
+        <CardContent className="p-12 text-center">
+          <p className="text-gray-500">Apply a date filter to load the company ledger</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { company, summary, entries } = data;
+
+  return (
+    <>
+      {/* Company header + summary cards */}
+      <div className="mb-3 flex items-center gap-3">
+        <div className="p-2 bg-emerald-100 rounded-lg">
+          <Building className="h-5 w-5 text-emerald-700" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">
+            {company?.name || "Company Ledger"}
+          </h2>
+          <p className="text-xs text-gray-500">Consolidated company statement</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-gray-500 uppercase">Total Transactions</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{entries?.length ?? 0}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-gray-500 uppercase">Total Income</p>
+            <p className="text-xl font-bold text-green-700 mt-1">
+              {formatCurrency(Number(summary?.totalIncome ?? 0))}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-gray-500 uppercase">Total Expense</p>
+            <p className="text-xl font-bold text-amber-700 mt-1">
+              {formatCurrency(Number(summary?.totalExpense ?? 0))}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-gray-500 uppercase">Closing Balance</p>
+            <p className="text-xl font-bold text-gray-900 mt-1">
+              {formatCurrency(Number(summary?.closingBalance ?? 0))}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          {!entries || entries.length === 0 ? (
+            <div className="p-12 text-center">
+              <Building className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500">No transactions for the selected period</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">#</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Date</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Branch</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Description</th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">Income</th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">Expense</th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">Balance</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {entries.map((e) => (
+                    <tr key={`${e.serialNo}-${e.date}-${e.branch ?? ""}`} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm text-gray-500">{e.serialNo}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{e.date}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {e.branch ? (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            <Building2 className="h-3 w-3 mr-1 inline" />
+                            {e.branch}
+                          </Badge>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{e.description}</td>
+                      <td className="px-4 py-3 text-right text-sm font-medium text-green-700">
+                        {e.income ? formatCurrency(e.income) : <span className="text-gray-400">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-medium text-amber-700">
+                        {e.expense ? formatCurrency(e.expense) : <span className="text-gray-400">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
+                        {formatCurrency(e.balance)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </>

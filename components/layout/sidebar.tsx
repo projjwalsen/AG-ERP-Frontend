@@ -9,6 +9,7 @@ import {
   ShoppingCart, FileText, History, Settings, ChevronLeft, Shield,
   Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu, CreditCard,
   ChevronRight, BookOpen, Wallet, BarChart3, AlertTriangle, Receipt,
+  Calculator,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -249,6 +250,7 @@ const buildSidebarItems = (): SidebarItem[] => [
       { title: "Branch Day Book", href: "/reports/day-book", icon: BookOpen },
       { title: "GSTR-1 Report", href: "/reports/gstr1", icon: Receipt },
       { title: "GST Suspense Log", href: "/reports/gst-suspense", icon: AlertTriangle },
+      { title: "GST Ledger", href: "/reports/gst-ledger", icon: Calculator },
       { title: "Inventory Report", href: "/reports/inventory", icon: Package },
     ],
   },

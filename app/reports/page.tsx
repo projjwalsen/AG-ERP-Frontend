@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Package,
   FileSpreadsheet,
+  Scale,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,15 @@ const REPORT_CARDS: ReportCardData[] = [
     icon: Package,
     iconBg: "bg-rose-50",
     iconColor: "text-rose-600",
+  },
+  {
+    title: "GST Ledger",
+    description:
+      "Input GST, Output GST and net liability summary per tax kind (CGST / SGST / IGST) for a selected period.",
+    href: "/reports/gst-ledger",
+    icon: Scale,
+    iconBg: "bg-cyan-50",
+    iconColor: "text-cyan-600",
   },
 ];
 

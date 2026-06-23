@@ -15,6 +15,8 @@ import {
   BranchLedgerDetailResponse,
   AgencyLedgerDetailResponse,
   SuspenseLedgerDetailResponse,
+  CompanyLedgerResponse,
+  GSTLedgerResponse,
 } from "../types/ledger";
 
 export interface GetProductLedgersParams {
@@ -193,22 +195,39 @@ export const ledgerApi = {
     return apiFetch<FinancialLedgerStatementResponse>(url);
   },
 
-  // GET /api/ledgers/branch/:branchId - Branch-wise detail (after View Details)
+  // GET /api/ledgers/branch/:branchId?category=&startDate=&endDate=
+  // Branch-wise detail (after View Details). startDate/endDate (YYYY-MM-DD)
+  // filter the underlying transactions by `createdAt` server-side.
   async getLedgerByBranchId(
     branchId: string,
-    category?: "ACCOUNTING_LEDGER" | "CASH" | "GST" | "DEBTORS" | "CREDITORS"
+    category?: "ACCOUNTING_LEDGER" | "CASH" | "GST" | "DEBTORS" | "CREDITORS",
+    filters?: { startDate?: string; endDate?: string }
   ): Promise<{ success: boolean; message: string; data?: BranchLedgerDetailResponse }> {
-    const query = category ? `?category=${category}` : "";
-    return apiFetch<BranchLedgerDetailResponse>(`api/ledgers/branch/${branchId}${query}`);
+    const params = new URLSearchParams();
+    if (category) params.append("category", category);
+    if (filters?.startDate) params.append("startDate", filters.startDate);
+    if (filters?.endDate) params.append("endDate", filters.endDate);
+    const qs = params.toString();
+    return apiFetch<BranchLedgerDetailResponse>(
+      `api/ledgers/branch/${branchId}${qs ? `?${qs}` : ""}`
+    );
   },
 
-  // GET /api/ledgers/agency/:agencyId - Agency-wise detail (after View Details)
+  // GET /api/ledgers/agency/:agencyId?category=&startDate=&endDate=
+  // Agency-wise detail (after View Details).
   async getLedgerByAgencyId(
     agencyId: string,
-    category?: "ACCOUNTING_LEDGER" | "CASH" | "DEBTORS" | "CREDITORS"
+    category?: "ACCOUNTING_LEDGER" | "CASH" | "DEBTORS" | "CREDITORS",
+    filters?: { startDate?: string; endDate?: string }
   ): Promise<{ success: boolean; message: string; data?: AgencyLedgerDetailResponse }> {
-    const query = category ? `?category=${category}` : "";
-    return apiFetch<AgencyLedgerDetailResponse>(`api/ledgers/agency/${agencyId}${query}`);
+    const params = new URLSearchParams();
+    if (category) params.append("category", category);
+    if (filters?.startDate) params.append("startDate", filters.startDate);
+    if (filters?.endDate) params.append("endDate", filters.endDate);
+    const qs = params.toString();
+    return apiFetch<AgencyLedgerDetailResponse>(
+      `api/ledgers/agency/${agencyId}${qs ? `?${qs}` : ""}`
+    );
   },
 
   // GET /api/ledgers/suspense/:branchId - Suspense transactions for a branch
@@ -218,6 +237,72 @@ export const ledgerApi = {
   ): Promise<{ success: boolean; message: string; data?: SuspenseLedgerDetailResponse }> {
     const query = category ? `?category=${category}` : "";
     return apiFetch<SuspenseLedgerDetailResponse>(`api/ledgers/suspense/${branchId}${query}`);
+  },
+
+  // GET /api/ledgers/company-ledger?branchId=&startDate=&endDate=
+  // Whole-company consolidated ledger. Backend applies branch-access
+  // filtering by user role (ALL access users can scope by branchId,
+  // SELECTED access users are locked to their own branch).
+  async getCompanyLedger(params?: {
+    branchId?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<{ success: boolean; message: string; data?: CompanyLedgerResponse }> {
+    const query = new URLSearchParams();
+    if (params?.branchId) query.append("branchId", params.branchId);
+    if (params?.startDate) query.append("startDate", params.startDate);
+    if (params?.endDate) query.append("endDate", params.endDate);
+    const qs = query.toString();
+    return apiFetch<CompanyLedgerResponse>(`api/ledgers/company-ledger${qs ? `?${qs}` : ""}`);
+  },
+
+  // GET /api/ledgers/company-ledger?export=true&... — stream .xlsx
+  async exportCompanyLedger(params?: {
+    branchId?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<{ blob: Blob; filename: string }> {
+    const query = new URLSearchParams();
+    query.append("export", "true");
+    if (params?.branchId) query.append("branchId", params.branchId);
+    if (params?.startDate) query.append("startDate", params.startDate);
+    if (params?.endDate) query.append("endDate", params.endDate);
+    return fetchBlob(
+      `api/ledgers/company-ledger?${query.toString()}`,
+      "company_ledger.xlsx"
+    );
+  },
+
+  // GET /api/ledgers/gst-ledger?branchId=&startDate=&endDate=
+  // GST report broken into Input GST, Output GST, and a Liability Summary.
+  async getGSTLedger(params?: {
+    branchId?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<{ success: boolean; message: string; data?: GSTLedgerResponse }> {
+    const query = new URLSearchParams();
+    if (params?.branchId) query.append("branchId", params.branchId);
+    if (params?.startDate) query.append("startDate", params.startDate);
+    if (params?.endDate) query.append("endDate", params.endDate);
+    const qs = query.toString();
+    return apiFetch<GSTLedgerResponse>(`api/ledgers/gst-ledger${qs ? `?${qs}` : ""}`);
+  },
+
+  // GET /api/ledgers/gst-ledger?export=true&... — stream .xlsx
+  async exportGSTLedger(params?: {
+    branchId?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<{ blob: Blob; filename: string }> {
+    const query = new URLSearchParams();
+    query.append("export", "true");
+    if (params?.branchId) query.append("branchId", params.branchId);
+    if (params?.startDate) query.append("startDate", params.startDate);
+    if (params?.endDate) query.append("endDate", params.endDate);
+    return fetchBlob(
+      `api/ledgers/gst-ledger?${query.toString()}`,
+      "gst_ledger.xlsx"
+    );
   },
 
   // ===== Export endpoints =====

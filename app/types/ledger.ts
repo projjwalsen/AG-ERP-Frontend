@@ -129,7 +129,79 @@ export type FinancialLedgerNature = "DEBIT" | "CREDIT";
 
 export type BalanceType = "DR" | "CR";
 
-export type LedgerView = "BRANCH" | "AGENCY" | "SUSPENSE";
+export type LedgerView = "BRANCH" | "AGENCY" | "SUSPENSE" | "COMPANY";
+
+// ====== Company Ledger (whole-company consolidated statement) ======
+
+export interface CompanyLedgerEntry {
+  serialNo: number;
+  // Backend sends dates as pre-formatted IST strings (e.g. "22-Jun-2026").
+  // Some payloads may send an ISO timestamp — renderer handles both.
+  date: string;
+  // Branch name attached to this entry (optional; some summary rows omit it).
+  branch?: string | null;
+  description: string;
+  income: number;
+  expense: number;
+  balance: number;
+}
+
+export interface CompanyLedgerResponse {
+  company: { name: string };
+  summary: {
+    totalIncome: number;
+    totalExpense: number;
+    closingBalance: number;
+  };
+  entries: CompanyLedgerEntry[];
+}
+
+// ====== GST Ledger Report (backend: /api/ledgers/gst-ledger) ======
+
+export interface GSTLedgerEntry {
+  date: string;
+  particulars: string;
+  voucherNo: string;
+  taxableValue: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  totalGST: number;
+}
+
+export interface GSTLedgerTotals {
+  taxableValue: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  totalGST: number;
+}
+
+export interface GSTLedgerGroup {
+  entries: GSTLedgerEntry[];
+  totals: GSTLedgerTotals;
+}
+
+export interface GSTLiabilityRow {
+  output: number;
+  input: number;
+  payable: number;
+}
+
+export interface GSTLiabilitySummary {
+  cgst: GSTLiabilityRow;
+  sgst: GSTLiabilityRow;
+  igst: GSTLiabilityRow;
+  total: GSTLiabilityRow;
+}
+
+export interface GSTLedgerResponse {
+  company: { name: string };
+  period: { startDate?: string | null; endDate?: string | null };
+  inputGSTLedger: GSTLedgerGroup;
+  outputGSTLedger: GSTLedgerGroup;
+  liabilitySummary: GSTLiabilitySummary;
+}
 
 export interface LedgerGroupMaster {
   id: string;
@@ -274,16 +346,23 @@ export interface SuspenseLedgerDetailResponse {
 // ====== Branch / Agency details (from getLedgerByBranchId / getLedgerByAgencyId) ======
 
 export interface BranchLedgerDetailResponse {
-  branch: { id: string; code: string; name: string };
+  branch: { id: string; code: string; name: string; amountReceivable?: number; amountPayable?: number };
   category?: string;
   summary?: Record<string, number | string | null>;
-  // Backend returns transaction entries (not FinancialLedgerListItem).
-  // Shape: { date, transactionNo, transactionRefNo, agency, paymentMode,
-  //         paymentType, direction, inward, outward, runningBalance, remarks }
-  entries?: AgencyLedgerEntry[];
-  // Cash-category branch entries use a different shape — no paymentMode etc.
-  cashEntries?: AgencyCashEntry[];
-  // Kept for backward compatibility with any older payloads.
+  // ===== Category-specific payload =====
+  // ACCOUNTING_LEDGER: voucher-style entries.
+  entries?: AgencyVoucherEntry[];
+  // ACCOUNTING_LEDGER: income/expense style (branches currently return this).
+  incomeExpenseEntries?: BranchLedgerEntry[];
+  // CASH (voucher-style).
+  cashEntries?: AgencyCashVoucherEntry[];
+  // CASH (older transactional shape).
+  cashTransactionEntries?: AgencyCashEntry[];
+  // CREDITORS / DEBTORS: grouped by ledger.
+  data?: AgencyPartyLedgerGroup[];
+  // GST: backend returns the list of GST ledgers (CGST/SGST/IGST)
+  // directly under `ledgers` with summary keys
+  // { totalGSTLedgers, totalDebit, totalCredit, totalBalance, createdAt, updatedAt }.
   ledgers?: FinancialLedgerListItem[];
 }
 
@@ -310,12 +389,18 @@ export interface AgencyLedgerDetailResponse {
   };
   category?: string;
   summary?: Record<string, number | string | null>;
-  // Backend returns transaction entries (not FinancialLedgerListItem).
-  // Shape: { date, transactionNo, transactionRefNo, direction, paymentMode,
-  //         paymentType, agency, inward, outward, runningBalance, remarks }
-  entries?: AgencyLedgerEntry[];
-  // Cash-category entries use a different shape — no paymentMode etc.
-  cashEntries?: AgencyCashEntry[];
+  // ===== Category-specific payload =====
+  // ACCOUNTING_LEDGER: voucher-style entries.
+  //   entries: AgencyVoucherEntry[] = { date, voucherNo, particular, debit, credit, balance }
+  //   summary: { openingBalance, totalPurchases, totalPayments, closingBalance }
+  entries?: AgencyVoucherEntry[];
+  // CASH (voucher-style): { date, voucherNo, particular, debit, credit, balance }
+  cashEntries?: AgencyCashVoucherEntry[];
+  // CASH (older transactional shape): { date, transactionNo, branch, relatedParty,
+  //   direction, receipt, payment, narration }
+  cashTransactionEntries?: AgencyCashEntry[];
+  // CREDITORS / DEBTORS: grouped by ledger (typically one group per agency/branch).
+  data?: AgencyPartyLedgerGroup[];
   // Kept for backward compatibility with any older payloads.
   ledgers?: FinancialLedgerListItem[];
 }
@@ -348,6 +433,78 @@ export interface AgencyCashEntry {
   receipt?: number;
   payment?: number;
   narration?: string | null;
+}
+
+// Accounting-ledger entries (category=ACCOUNTING_LEDGER).
+// Voucher-style statement: { date, voucherNo, particular, debit, credit, balance }.
+// CREDITORS / DEBTORS responses come back richer (with id, voucherType,
+// invoiceNo, counterLedgers[], runningBalance, balanceType, narration,
+// sourceDocument) — see `AgencyPartyStatementEntry` for the extended shape
+// used inside `AgencyPartyLedgerGroup.entries`.
+export interface AgencyVoucherEntry {
+  date: string | null;
+  voucherNo: string;
+  particular: string;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+
+// Richer statement entry used inside CREDITORS / DEBTORS grouped responses
+// (AgencyPartyLedgerGroup.entries). Extends the basic voucher fields with
+// the metadata the backend returns on each ledger entry.
+export interface AgencyPartyStatementEntry extends AgencyVoucherEntry {
+  id?: string | null;
+  voucherId?: string | null;
+  voucherType?: string | null;
+  invoiceNo?: string | null;
+  sourceId?: string | null;
+  sourceDocument?: {
+    sourceId?: string;
+    voucherType?: string;
+    voucherNo?: string;
+  };
+  counterLedgers?: Array<{ id: string; code: string; name: string }>;
+  runningBalance?: number;
+  balanceType?: "DR" | "CR";
+  narration?: string | null;
+}
+
+// Branch income/expense entries (category=ACCOUNTING_LEDGER for branches).
+// { serialNo, date, description, income, expense, balance }
+export interface BranchLedgerEntry {
+  serialNo: number;
+  date: string;
+  description: string;
+  income: number;
+  expense: number;
+  balance: number;
+}
+
+// Cash ledger entries — voucher-style shape.
+// { date, voucherNo, particular, debit, credit, balance }
+export interface AgencyCashVoucherEntry {
+  date: string;
+  voucherNo: string;
+  particular: string;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+
+// Sundry Debtors / Creditors grouped response.
+// { data: [{ ledger: {id, code, name}, entries: AgencyPartyStatementEntry[], summary: ... }] }
+export interface AgencyPartyLedgerGroup {
+  ledger: { id: string; code: string; name: string };
+  entries: AgencyPartyStatementEntry[];
+  summary: {
+    openingBalance: number;
+    openingBalanceType: "DR" | "CR";
+    totalDebit: number;
+    totalCredit: number;
+    closingBalance: number;
+    closingBalanceType: "DR" | "CR";
+  };
 }
 
 export interface FinancialLedgerDetail {
