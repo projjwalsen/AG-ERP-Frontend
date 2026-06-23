@@ -10,7 +10,6 @@ import {
   TrendingUp,
   Layers,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import {
   ReportLayout,
@@ -116,23 +115,21 @@ export default function GSTR1ReportPage() {
   const columns: ColumnDef<GSTR1Row>[] = React.useMemo(
     () => [
       {
-        accessorKey: "classification",
-        header: "Type",
-        cell: ({ row }) => {
-          const c = row.original.classification;
-          return (
-            <Badge
-              variant={c === "B2B" ? "info" : "warning"}
-              className={
-                c === "B2B"
-                  ? "bg-blue-50 text-blue-700"
-                  : "bg-amber-50 text-amber-700"
-              }
-            >
-              {c}
-            </Badge>
-          );
-        },
+        accessorKey: "branchName",
+        header: "Branch",
+        cell: ({ row }) => (
+          <div className="flex items-center gap-1 text-gray-700">
+            <Building2 className="h-3.5 w-3.5 text-gray-400" />
+            <span>
+              {row.original.branchName ?? "-"}
+              {row.original.branchGst && (
+                <span className="block text-[11px] font-mono text-gray-500">
+                  {row.original.branchGst}
+                </span>
+              )}
+            </span>
+          </div>
+        ),
       },
       {
         accessorKey: "customer_gstin",

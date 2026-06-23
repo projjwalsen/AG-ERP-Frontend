@@ -41,6 +41,7 @@ export interface SalesItem {
   unit: ProductUnit;
   sellingPrice?: string;
   createdAt: string;
+  totalAmount: number;
 }
 
 export interface SalesUser {

@@ -94,6 +94,8 @@ export interface ProductLedgerDetail {
   stock: {
     globalStockKG: number;
     globalStockLTR: number;
+    openingStockKG?: number;
+    closingStockKG?: number;
     isLowStock: boolean;
   };
   branchStock: ProductLedgerBranchStock[];
@@ -181,8 +183,11 @@ export interface BranchViewRow {
   openingBalance: number;
   totalDebit?: number;
   totalCredit?: number;
+  totalReceivable?: number;
+  totalPayable?: number;
   balanceAmount?: number;
   closingBalance: number;
+  balanceType?: "RECEIVABLE" | "PAYABLE" | "DR" | "CR";
   ledgerCount?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -195,8 +200,11 @@ export interface AgencyViewRow {
   openingBalance: number;
   totalDebit?: number;
   totalCredit?: number;
+  totalReceivable?: number;
+  totalPayable?: number;
   balanceAmount?: number;
   closingBalance: number;
+  balanceType?: "RECEIVABLE" | "PAYABLE" | "DR" | "CR";
   ledgerCount?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -269,7 +277,14 @@ export interface BranchLedgerDetailResponse {
   branch: { id: string; code: string; name: string };
   category?: string;
   summary?: Record<string, number | string | null>;
-  ledgers: FinancialLedgerListItem[];
+  // Backend returns transaction entries (not FinancialLedgerListItem).
+  // Shape: { date, transactionNo, transactionRefNo, agency, paymentMode,
+  //         paymentType, direction, inward, outward, runningBalance, remarks }
+  entries?: AgencyLedgerEntry[];
+  // Cash-category branch entries use a different shape — no paymentMode etc.
+  cashEntries?: AgencyCashEntry[];
+  // Kept for backward compatibility with any older payloads.
+  ledgers?: FinancialLedgerListItem[];
 }
 
 export interface AgencyLedgerDetailResponse {
@@ -295,7 +310,44 @@ export interface AgencyLedgerDetailResponse {
   };
   category?: string;
   summary?: Record<string, number | string | null>;
-  ledgers: FinancialLedgerListItem[];
+  // Backend returns transaction entries (not FinancialLedgerListItem).
+  // Shape: { date, transactionNo, transactionRefNo, direction, paymentMode,
+  //         paymentType, agency, inward, outward, runningBalance, remarks }
+  entries?: AgencyLedgerEntry[];
+  // Cash-category entries use a different shape — no paymentMode etc.
+  cashEntries?: AgencyCashEntry[];
+  // Kept for backward compatibility with any older payloads.
+  ledgers?: FinancialLedgerListItem[];
+}
+
+export interface AgencyLedgerEntry {
+  date: string;
+  transactionNo: string;
+  transactionRefNo?: string | null;
+  direction: "INWARD" | "OUTWARD";
+  paymentMode?: string;
+  paymentType?: string;
+  agency?: string | null;
+  inward?: number;
+  outward?: number;
+  runningBalance?: number;
+  remarks?: string | null;
+}
+
+// Cash-category entries (category=CASH). Different shape — no
+// paymentMode/paymentType/inward/outward/runningBalance/remarks, instead
+// carries branch, relatedParty, receipt, payment, narration.
+export interface AgencyCashEntry {
+  date: string;
+  transactionNo: string;
+  transactionRefNo?: string | null;
+  branch?: string | null;
+  agency?: string | null;
+  relatedParty?: string | null;
+  direction: "INWARD" | "OUTWARD";
+  receipt?: number;
+  payment?: number;
+  narration?: string | null;
 }
 
 export interface FinancialLedgerDetail {

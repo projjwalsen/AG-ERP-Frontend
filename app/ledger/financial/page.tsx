@@ -35,7 +35,7 @@ type AgencyCategory = "ACCOUNTING_LEDGER" | "CASH" | "DEBTORS" | "CREDITORS";
 type SuspenseCategory = "ACCOUNTING_LEDGER" | "CASH";
 
 const BRANCH_CATEGORIES: { value: BranchCategory; label: string }[] = [
-  { value: "ACCOUNTING_LEDGER", label: "All Ledgers" },
+  { value: "ACCOUNTING_LEDGER", label: "Accounting Ledgers" },
   { value: "CASH", label: "Cash & Bank" },
   { value: "GST", label: "GST" },
   { value: "DEBTORS", label: "Sundry Debtors" },
@@ -43,7 +43,7 @@ const BRANCH_CATEGORIES: { value: BranchCategory; label: string }[] = [
 ];
 
 const AGENCY_CATEGORIES: { value: AgencyCategory; label: string }[] = [
-  { value: "ACCOUNTING_LEDGER", label: "All Ledgers" },
+  { value: "ACCOUNTING_LEDGER", label: "Accounting Ledgers" },
   { value: "CASH", label: "Cash & Bank" },
   { value: "DEBTORS", label: "Sundry Debtors" },
   { value: "CREDITORS", label: "Sundry Creditors" },
@@ -420,14 +420,19 @@ function LedgerTable({
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
                   {view === "AGENCY" ? "Agency Name" : "Branch Name"}
                 </th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Opening Balance
-                </th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Balance Amount
-                </th>
+
+                {(view === "AGENCY" || view === "BRANCH") && (
+                  <>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                      Total Receivable
+                    </th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                      Total Payable
+                    </th>
+                  </>
+                )}
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  GST No of Branch
+                  GST No
                 </th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">
                   Closing Balance
@@ -496,9 +501,16 @@ function LedgerRow({
   const name = (row as any).name ?? "";
   const code = (row as any).code;
   const gstin = (row as any).gstin ?? null;
-  const openingBalance = (row as any).openingBalance ?? 0;
-  const balanceAmount = (row as any).balanceAmount ?? (row as any).closingBalance ?? 0;
+
   const closingBalance = (row as any).closingBalance ?? 0;
+  const totalReceivable = (row as any).totalReceivable ?? 0;
+  const totalPayable = (row as any).totalPayable ?? 0;
+  const balanceType = (row as any).balanceType as
+    | "RECEIVABLE"
+    | "PAYABLE"
+    | "DR"
+    | "CR"
+    | undefined;
 
   return (
     <tr className="hover:bg-gray-50">
@@ -517,12 +529,17 @@ function LedgerRow({
           </div>
         </div>
       </td>
-      <td className="px-4 py-3 text-right text-sm text-gray-600">
-        {formatCurrency(Number(openingBalance) || 0)}
-      </td>
-      <td className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-        {formatCurrency(Number(balanceAmount) || 0)}
-      </td>
+
+      {(view === "AGENCY" || view === "BRANCH") && (
+        <>
+          <td className="px-4 py-3 text-right text-sm font-medium text-green-700">
+            {formatCurrency(Number(totalReceivable) || 0)}
+          </td>
+          <td className="px-4 py-3 text-right text-sm font-medium text-amber-700">
+            {formatCurrency(Number(totalPayable) || 0)}
+          </td>
+        </>
+      )}
       <td className="px-4 py-3 text-sm text-gray-600">
         {gstin ? (
           <span className="font-mono text-xs">{gstin}</span>
@@ -531,7 +548,17 @@ function LedgerRow({
         )}
       </td>
       <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
-        {formatCurrency(Number(closingBalance) || 0)}
+        <div className="flex flex-col items-end gap-0.5">
+          <span>{formatCurrency(Number(closingBalance) || 0)}</span>
+          {(view === "AGENCY" || view === "BRANCH") && balanceType && (
+            <Badge
+              variant={balanceType === "RECEIVABLE" ? "success" : "warning"}
+              className="text-[10px] px-1.5 py-0"
+            >
+              {balanceType}
+            </Badge>
+          )}
+        </div>
       </td>
       <td className="px-4 py-3">
         <Button

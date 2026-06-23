@@ -85,9 +85,11 @@ export interface DayBookEntry {
   transactionRef: string | null;
   inRoutedVia: boolean;
   secondaryAgencyName: string | null;
-  cashInFlowReceipt: number;
+  debit: number;
+  credit: number;
   remarks: string | null;
   allocations: DayBookAllocation[];
+  runningBalance: number | null;
 }
 
 export interface DayBookSummary {
@@ -125,6 +127,8 @@ export interface GetDayBookParams {
 
 export interface GSTR1Row {
   classification: GSTRClassification;
+  branchName?: string | null;
+  branchGst?: string | null;
   customer_gstin: string | null;
   invoice_number: string;
   invoice_date: string | Date;

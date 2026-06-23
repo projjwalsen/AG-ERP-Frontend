@@ -90,7 +90,7 @@ export default function NewProductPage() {
         <p className="text-gray-500 mt-1">Create a new product for inventory management</p>
       </div>
 
-      <Card className="max-w-2xl">
+      <Card className="max-w-full">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Package className="h-5 w-5 text-purple-600" />

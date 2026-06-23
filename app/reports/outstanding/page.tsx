@@ -127,18 +127,6 @@ export default function OutstandingReportPage() {
         ),
       },
       {
-        accessorKey: "agency_type",
-        header: "Type",
-        cell: ({ row }) =>
-          row.original.agency_type ? (
-            <Badge variant="outline" className="capitalize">
-              {row.original.agency_type}
-            </Badge>
-          ) : (
-            <span className="text-gray-400">-</span>
-          ),
-      },
-      {
         accessorKey: "branch",
         header: "Branch",
         cell: ({ row }) =>
@@ -150,33 +138,6 @@ export default function OutstandingReportPage() {
           ) : (
             <span className="text-gray-400">-</span>
           ),
-      },
-      {
-        accessorKey: "openingBalance",
-        header: "Opening",
-        cell: ({ row }) => (
-          <span className="tabular-nums">
-            {formatCurrency(Number(row.original.openingBalance) || 0)}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "debit",
-        header: "Debit",
-        cell: ({ row }) => (
-          <span className="tabular-nums text-emerald-700">
-            {formatCurrency(Number(row.original.debit) || 0)}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "credit",
-        header: "Credit",
-        cell: ({ row }) => (
-          <span className="tabular-nums text-rose-700">
-            {formatCurrency(Number(row.original.credit) || 0)}
-          </span>
-        ),
       },
       {
         accessorKey: "total_outstanding",

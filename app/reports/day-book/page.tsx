@@ -11,6 +11,7 @@ import {
   ArrowLeftRight,
   TrendingUp,
   FileText,
+  Building2,
 } from "lucide-react";
 import {
   Dialog,
@@ -150,13 +151,6 @@ export default function DayBookReportPage() {
   const columns: ColumnDef<DayBookEntry>[] = React.useMemo(
     () => [
       {
-        accessorKey: "serialNo",
-        header: "#",
-        cell: ({ row }) => (
-          <span className="text-gray-500">{row.original.serialNo}</span>
-        ),
-      },
-      {
         accessorKey: "voucherId",
         header: "Voucher",
         cell: ({ row }) => (
@@ -166,17 +160,19 @@ export default function DayBookReportPage() {
         ),
       },
       {
-        accessorKey: "transactionDate",
-        header: "Date",
-        cell: ({ row }) => (
-          <span className="text-gray-700">
-            {new Date(row.original.transactionDate).toLocaleDateString("en-IN", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-            })}
-          </span>
-        ),
+        id: "branch",
+        header: "Branch",
+        cell: ({ row }) => {
+          // Branch context comes from the top-level day-book response
+          // (one branch per page), not from each row.
+          void row;
+          return (
+            <div className="flex items-center gap-1 text-gray-700">
+              <Building2 className="h-3.5 w-3.5 text-gray-400" />
+              {data?.branch?.name ?? "—"}
+            </div>
+          );
+        },
       },
       {
         accessorKey: "primaryAgencyName",
@@ -196,50 +192,56 @@ export default function DayBookReportPage() {
         ),
       },
       {
-        accessorKey: "paymentMode",
-        header: "Mode",
-        cell: ({ row }) =>
-          row.original.paymentMode ? (
-            <Badge variant="outline">{row.original.paymentMode}</Badge>
-          ) : (
-            <span className="text-gray-400">-</span>
-          ),
+        accessorKey: "transactionDate",
+        header: "Date",
+        cell: ({ row }) => (
+          <span className="text-gray-700">
+            {new Date(row.original.transactionDate).toLocaleDateString("en-IN", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })}
+          </span>
+        ),
       },
       {
-        accessorKey: "paymentType",
-        header: "Type",
-        cell: ({ row }) =>
-          row.original.paymentType ? (
-            <span className="text-gray-700">{row.original.paymentType}</span>
-          ) : (
-            <span className="text-gray-400">-</span>
-          ),
-      },
-      {
-        accessorKey: "transactionRef",
-        header: "Reference",
-        cell: ({ row }) =>
-          row.original.transactionRef ? (
-            <span className="font-mono text-xs text-gray-700">
-              {row.original.transactionRef}
-            </span>
-          ) : (
-            <span className="text-gray-400">-</span>
-          ),
-      },
-      {
-        accessorKey: "cashInFlowReceipt",
-        header: "Amount",
+        accessorKey: "credit",
+        header: "Credit",
         cell: ({ row }) => (
           <span
             className={cn(
               "tabular-nums font-semibold",
-              row.original.cashInFlowReceipt > 0
+              (row.original.credit ?? 0) > 0
                 ? "text-emerald-700"
-                : "text-gray-500"
+                : "text-gray-400"
             )}
           >
-            {formatCurrency(row.original.cashInFlowReceipt)}
+            {formatCurrency(row.original.credit ?? 0)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "debit",
+        header: "Debit",
+        cell: ({ row }) => (
+          <span
+            className={cn(
+              "tabular-nums font-semibold",
+              (row.original.debit ?? 0) > 0
+                ? "text-rose-700"
+                : "text-gray-400"
+            )}
+          >
+            {formatCurrency(row.original.debit ?? 0)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "balance",
+        header: "Balance",
+        cell: ({ row }) => (
+          <span className="text-sm text-gray-600">
+            {row.original.runningBalance ?? "—"}
           </span>
         ),
       },
@@ -262,7 +264,7 @@ export default function DayBookReportPage() {
         ),
       },
     ],
-    []
+    [data?.branch?.name]
   );
 
   const filterConfig: ReportFilterConfig[] = React.useMemo(
@@ -384,9 +386,15 @@ export default function DayBookReportPage() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-[11px] text-gray-500 uppercase">Amount</p>
+                    <p className="text-[11px] text-gray-500 uppercase">Debit</p>
+                    <p className="font-semibold text-rose-700">
+                      {formatCurrency(activeRow.debit ?? 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-500 uppercase">Credit</p>
                     <p className="font-semibold text-emerald-700">
-                      {formatCurrency(activeRow.cashInFlowReceipt)}
+                      {formatCurrency(activeRow.credit ?? 0)}
                     </p>
                   </div>
                   {activeRow.transactionRef && (

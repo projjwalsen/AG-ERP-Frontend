@@ -204,8 +204,8 @@ function SuspenseLedgerDetailContent() {
                     <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">Amount</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Payment Mode</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Payment Type</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Agency</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Remarks</th>
+                    
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -236,12 +236,11 @@ function SuspenseLedgerDetailContent() {
                       <td className="px-4 py-3 text-sm text-gray-600">
                         {t.paymentType ?? "—"}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {t.agency?.name ?? <span className="text-gray-400">—</span>}
-                      </td>
+                     
                       <td className="px-4 py-3 text-sm text-gray-600">
                         {t.remarks ?? <span className="text-gray-400">—</span>}
                       </td>
+                     
                     </tr>
                   ))}
                 </tbody>

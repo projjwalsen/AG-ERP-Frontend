@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   ArrowLeft, BookOpen, AlertTriangle, RefreshCw, Package, Calendar, Building2, Hash,
+  Download, Filter as FilterIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { fetchProductLedgerById, clearCurrentDetail } from "@/app/store/ledgerSlice";
 import { ProductLedgerEntry, ProductLedgerMovementType } from "@/app/types/ledger";
 import { formatDate, formatDateTime, formatCurrency } from "@/lib/utils";
+import { downloadFile } from "@/lib/download";
 import { useParams, useRouter } from "next/navigation";
 import { branchApi } from "@/app/services/branch.service";
 import { Branch } from "@/app/types/branch";
@@ -62,12 +64,17 @@ function ProductLedgerDetailContent() {
   const { user } = useAppSelector((state) => state.auth);
   const { currentDetail, isDetailLoading, detailError } = useAppSelector((state) => state.ledger);
 
-  // Filter state
+  // Draft filter state (what user is editing); applied state (what's sent to API)
   const [branchId, setBranchId] = React.useState<string>("");
   const [startDate, setStartDate] = React.useState<string>("");
   const [endDate, setEndDate] = React.useState<string>("");
+  const [appliedBranchId, setAppliedBranchId] = React.useState<string>("");
+  const [appliedStartDate, setAppliedStartDate] = React.useState<string>("");
+  const [appliedEndDate, setAppliedEndDate] = React.useState<string>("");
+
   const [currentPage, setCurrentPage] = React.useState(1);
   const [branches, setBranches] = React.useState<Branch[]>([]);
+  const [exporting, setExporting] = React.useState(false);
 
   const isAllBranchAccess = user?.branchAccessType === "ALL";
   const isFixedBranch = user?.branchAccessType === "SELECTED" && !!user?.branchId;
@@ -75,8 +82,8 @@ function ProductLedgerDetailContent() {
   // For fixed-branch users, lock to their branch
   const effectiveBranchId = React.useMemo(() => {
     if (isFixedBranch) return user!.branchId!;
-    return branchId || undefined;
-  }, [isFixedBranch, branchId, user]);
+    return appliedBranchId || undefined;
+  }, [isFixedBranch, appliedBranchId, user]);
 
   // Load branches for ALL-access users
   React.useEffect(() => {
@@ -104,14 +111,14 @@ function ProductLedgerDetailContent() {
       try {
         const params: any = { productId, page, limit: 25 };
         if (effectiveBranchId) params.branchId = effectiveBranchId;
-        if (startDate) params.startDate = startDate;
-        if (endDate) params.endDate = endDate;
+        if (appliedStartDate) params.startDate = appliedStartDate;
+        if (appliedEndDate) params.endDate = appliedEndDate;
         await dispatch(fetchProductLedgerById(params)).unwrap();
       } catch (err: any) {
         addToast(err || "Failed to fetch product ledger details", "error");
       }
     },
-    [productId, effectiveBranchId, startDate, endDate, dispatch, addToast]
+    [productId, effectiveBranchId, appliedStartDate, appliedEndDate, dispatch, addToast]
   );
 
   React.useEffect(() => {
@@ -121,7 +128,7 @@ function ProductLedgerDetailContent() {
     return () => {
       dispatch(clearCurrentDetail());
     };
-  }, [productId, effectiveBranchId, startDate, endDate, fetchDetail, dispatch]);
+  }, [productId, effectiveBranchId, appliedStartDate, appliedEndDate, fetchDetail, dispatch]);
 
   React.useEffect(() => {
     if (productId) {
@@ -129,11 +136,48 @@ function ProductLedgerDetailContent() {
     }
   }, [currentPage, productId, fetchDetail]);
 
+  // Apply button: commit draft filters -> applied filters, then refetch.
+  const applyFilters = () => {
+    setAppliedBranchId(branchId);
+    setAppliedStartDate(startDate);
+    setAppliedEndDate(endDate);
+    setCurrentPage(1);
+  };
+
   const resetFilters = () => {
     setBranchId("");
     setStartDate("");
     setEndDate("");
+    setAppliedBranchId("");
+    setAppliedStartDate("");
+    setAppliedEndDate("");
     setCurrentPage(1);
+  };
+
+  const handleExport = async () => {
+    if (!productId) return;
+    setExporting(true);
+    try {
+      // Stream the product's full movement history as an .xlsx file.
+      // `?export=true` switches the backend to xlsx streaming mode instead
+      // of returning JSON. `downloadFile` fetches + triggers the browser
+      // download — using the service's `exportProductLedgerDetail` here
+      // would only return the blob without saving it (see `lib/download.ts`).
+      const params = new URLSearchParams();
+      params.append("export", "true");
+      if (effectiveBranchId) params.append("branchId", effectiveBranchId);
+      if (appliedStartDate) params.append("startDate", appliedStartDate);
+      if (appliedEndDate) params.append("endDate", appliedEndDate);
+      await downloadFile(
+        `api/product-ledger/${productId}/detail?${params.toString()}`,
+        `product_movements_${productId}.xlsx`
+      );
+      addToast("Product ledger exported successfully", "success");
+    } catch (err: any) {
+      addToast(err?.message || "Failed to export product ledger", "error");
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (isDetailLoading && !currentDetail) {
@@ -184,6 +228,8 @@ function ProductLedgerDetailContent() {
   const { product, ledger, stock, branchStock, movements } = currentDetail;
   const meta = movements?.meta;
   const entries = movements?.entries ?? [];
+  const openingStockKG = stock.openingStockKG ?? 0;
+  const closingStockKG = stock.closingStockKG ?? stock.globalStockKG ?? 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -209,15 +255,28 @@ function ProductLedgerDetailContent() {
               </p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={() => fetchDetail(currentPage)}
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => fetchDetail(currentPage)}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={handleExport}
+              loading={exporting}
+              disabled={!entries.length && !closingStockKG}
+            >
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -339,16 +398,13 @@ function ProductLedgerDetailContent() {
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-lg border border-gray-200 mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Branch</label>
             {isAllBranchAccess ? (
               <Select
                 value={branchId || "__all__"}
-                onValueChange={(value) => {
-                  setBranchId(value === "__all__" ? "" : value);
-                  setCurrentPage(1);
-                }}
+                onValueChange={(value) => setBranchId(value === "__all__" ? "" : value)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All Branches" />
@@ -375,10 +431,7 @@ function ProductLedgerDetailContent() {
               type="date"
               value={startDate}
               max={endDate || undefined}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={(e) => setStartDate(e.target.value)}
             />
           </div>
           <div>
@@ -387,15 +440,27 @@ function ProductLedgerDetailContent() {
               type="date"
               value={endDate}
               min={startDate || undefined}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={(e) => setEndDate(e.target.value)}
             />
           </div>
           <div className="flex items-end">
-            <Button variant="outline" size="sm" onClick={resetFilters} className="w-full">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={resetFilters}
+              className="w-full"
+            >
               Reset Filters
+            </Button>
+          </div>
+          <div className="flex items-end">
+            <Button
+              size="sm"
+              onClick={applyFilters}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+            >
+              <FilterIcon className="h-3.5 w-3.5" />
+              Apply
             </Button>
           </div>
         </div>
@@ -445,9 +510,37 @@ function ProductLedgerDetailContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
+                  {/* Opening stock row */}
+                  <tr className="bg-gray-50">
+                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                      {appliedStartDate ? formatDate(appliedStartDate) : "—"}
+                    </td>
+                    <td className="px-4 py-3" colSpan={5}>
+                      <span className="text-sm font-medium text-gray-700 italic">Opening Stock</span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-medium text-gray-400">—</td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 whitespace-nowrap">
+                      {formatQty(openingStockKG)}
+                      <span className="ml-1 text-[10px] text-gray-400 font-normal">{product.baseUnit || "KG"}</span>
+                    </td>
+                  </tr>
                   {entries.map((m, idx) => (
                     <MovementTableRow key={m.id ?? `opening-${idx}`} movement={m} />
                   ))}
+                  {/* Closing stock row */}
+                  <tr className="bg-gray-50">
+                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                      {appliedEndDate ? formatDate(appliedEndDate) : "—"}
+                    </td>
+                    <td className="px-4 py-3" colSpan={5}>
+                      <span className="text-sm font-medium text-gray-700 italic">Closing Stock</span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-medium text-gray-400">—</td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 whitespace-nowrap">
+                      {formatQty(closingStockKG)}
+                      <span className="ml-1 text-[10px] text-gray-400 font-normal">{product.baseUnit || "KG"}</span>
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>

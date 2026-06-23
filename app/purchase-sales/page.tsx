@@ -771,6 +771,7 @@ function SalesTab() {
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Product</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Batch</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Qty</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total Amount</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Created At</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Invoice</th>
@@ -804,8 +805,12 @@ function SalesTab() {
                       <td className="px-4 py-3 text-sm">
                         <span className="font-mono">{sale.items[0]?.batch?.batchNo || "-"}</span>
                       </td>
+                      
                       <td className="px-4 py-3 text-sm">
                         {sale.items[0]?.quantity || 0} {sale.items[0]?.unit || "KG"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-green-600 font-semibold">
+                        {sale.items[0].totalAmount || 0}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[sale.status]?.bg} ${statusColors[sale.status]?.text}`}>

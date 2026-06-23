@@ -234,6 +234,21 @@ export const ledgerApi = {
     return fetchBlob(`api/product-ledger?${queryParams.toString()}`, "product-ledgers.xlsx");
   },
 
+  // GET /api/product-ledger/:productId/detail?export=true&startDate=&endDate=&branchId=
+  async exportProductLedgerDetail(params: Omit<GetProductLedgerDetailParams, "page" | "limit">): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params.branchId) queryParams.append("branchId", params.branchId);
+    if (params.startDate) queryParams.append("startDate", params.startDate);
+    if (params.endDate) queryParams.append("endDate", params.endDate);
+    if (params.movementType) queryParams.append("movementType", params.movementType);
+
+    return fetchBlob(
+      `api/product-ledger/${params.productId}/detail?${queryParams.toString()}`,
+      `product_movements_${params.productId}.xlsx`
+    );
+  },
+
   // GET /api/ledgers/get-all?export=true&view=BRANCH|AGENCY|SUSPENSE
   // Filename comes from the backend as `ledger_<view>.xlsx` (e.g. ledger_BRANCH.xlsx).
   async exportFinancialLedgers(params: { view: LedgerView; search?: string; branchId?: string }): Promise<{ blob: Blob; filename: string }> {

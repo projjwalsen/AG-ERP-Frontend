@@ -108,7 +108,8 @@ function castDayBook(r: DayBookResponse): DayBookResponse {
     },
     entries: (r.entries || []).map((e) => ({
       ...e,
-      cashInFlowReceipt: toNumber(e.cashInFlowReceipt),
+      debit: toNumber(e.debit),
+      credit: toNumber(e.credit),
       allocations: (e.allocations || []).map((a) => ({
         ...a,
         allocatedAmount: toNumber(a.allocatedAmount),
