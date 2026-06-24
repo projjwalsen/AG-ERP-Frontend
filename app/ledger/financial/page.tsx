@@ -34,7 +34,11 @@ import { downloadFile } from "@/lib/download";
 import { useRouter } from "next/navigation";
 
 type BranchCategory = "ACCOUNTING_LEDGER" | "CASH" | "GST" | "DEBTORS" | "CREDITORS";
-type AgencyCategory = "ACCOUNTING_LEDGER" | "CASH" | "DEBTORS" | "CREDITORS";
+// Agency ledger categories — Sundry Debtors/Creditors are intentionally
+// excluded from the picker since agency-level receivables/payables are
+// already exposed as `Total Receivable` / `Total Payable` columns on
+// the agency list rows.
+type AgencyCategory = "ACCOUNTING_LEDGER" | "CASH";
 type SuspenseCategory = "ACCOUNTING_LEDGER" | "CASH";
 
 const BRANCH_CATEGORIES: { value: BranchCategory; label: string }[] = [
@@ -48,8 +52,6 @@ const BRANCH_CATEGORIES: { value: BranchCategory; label: string }[] = [
 const AGENCY_CATEGORIES: { value: AgencyCategory; label: string }[] = [
   { value: "ACCOUNTING_LEDGER", label: "Accounting Ledgers" },
   { value: "CASH", label: "Cash & Bank" },
-  { value: "DEBTORS", label: "Sundry Debtors" },
-  { value: "CREDITORS", label: "Sundry Creditors" },
 ];
 
 const SUSPENSE_CATEGORIES: { value: SuspenseCategory; label: string }[] = [
