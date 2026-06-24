@@ -39,9 +39,12 @@ import { hasModulePermission } from "@/lib/usePermissions";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import {
   fetchTransactionById,
+  approveTransaction,
+  rejectTransaction,
 } from "@/app/store/transactionsSlice";
 import { StatusBadge } from "../components/StatusBadge";
 import { TransactionTimeline } from "../components/TransactionTimeline";
+import { RejectionModal } from "../components/RejectionModal";
 import { AuditLog, MockTransactionStatus } from "../types/mock";
 
 // ============== INFO ROW ==============
@@ -133,8 +136,50 @@ export default function TransactionDetailsPage() {
 
   const txn = useAppSelector((s) => s.transactions.currentTransaction);
   const isLoading = useAppSelector((s) => s.transactions.isLoading);
+  const isSubmitting = useAppSelector((s) => s.transactions.isSubmitting);
   const error = useAppSelector((s) => s.transactions.error);
   const permissions = useAppSelector((s) => s.auth.permissions);
+
+  // Inline approve/reject on the detail page — when the manager opens
+  // a voucher directly (e.g. from a notification / list link), they
+  // shouldn't have to detour through /transactions/pending to act on it.
+  const [rejectOpen, setRejectOpen] = React.useState<boolean>(false);
+  const [approving, setApproving] = React.useState<boolean>(false);
+
+  const handleApprove = async () => {
+    if (!txn) return;
+    setApproving(true);
+    try {
+      await dispatch(approveTransaction(txn.id)).unwrap();
+      addToast(
+        `Voucher ${txn.transactionNo} authenticated successfully`,
+        "success"
+      );
+    } catch (err: any) {
+      addToast(
+        typeof err === "string" ? err : err?.message || "Failed to approve transaction",
+        "error"
+      );
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleReject = async (reason: string) => {
+    if (!txn) return;
+    try {
+      await dispatch(
+        rejectTransaction({ transactionId: txn.id, remarks: reason })
+      ).unwrap();
+      addToast(`Voucher ${txn.transactionNo} rejected`, "success");
+      setRejectOpen(false);
+    } catch (err: any) {
+      addToast(
+        typeof err === "string" ? err : err?.message || "Failed to reject transaction",
+        "error"
+      );
+    }
+  };
 
   const canView = hasModulePermission(permissions, "TRANSACTION", "VIEW");
   const canWrite = hasModulePermission(permissions, "TRANSACTION", "WRITE");
@@ -721,21 +766,46 @@ export default function TransactionDetailsPage() {
             <Link href="/transactions">
               <Button variant="outline">Back to List</Button>
             </Link>
-            {/* <Button variant="outline" className="gap-2">
-              <Printer className="h-4 w-4" />
-              Print Voucher
-            </Button> */}
+            {/* Inline approve/reject from the detail page so the manager
+                can act on a voucher without detouring through the pending
+                queue. Only renders for PENDING vouchers and only when the
+                current user has the TRANSACTION:APPROVE permission. */}
             {isPending && canApprove && (
-              <Link href="/transactions/pending">
-                <Button className="gap-2">
+              <>
+                <Button
+                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={handleApprove}
+                  loading={approving}
+                >
                   <ShieldCheck className="h-4 w-4" />
-                  Go to Pending Queue
+                  Approve
                 </Button>
-              </Link>
+                <Button
+                  variant="destructive"
+                  className="gap-2"
+                  onClick={() => setRejectOpen(true)}
+                  disabled={approving}
+                >
+                  <XCircle className="h-4 w-4" />
+                  Reject
+                </Button>
+              </>
             )}
           </div>
         </CardContent>
       </Card>
+
+      {/* Reject-from-detail modal — same component the pending queue
+          uses, so behaviour and validation are identical. */}
+      <RejectionModal
+        open={rejectOpen}
+        onOpenChange={(o) => {
+          setRejectOpen(o);
+        }}
+        transaction={isPending ? txn : null}
+        onConfirm={handleReject}
+        loading={isSubmitting}
+      />
 
       <ToastContainer />
     </div>

@@ -31,14 +31,8 @@ import { Product } from "@/app/types/product";
 import { useRouter } from "next/navigation";
 
 const categoryOptions = [
-  "PETROL",
-  "DIESEL",
-  "LUBRICANT",
-  "GREASE",
-  "KEROSENE",
-  "CNG",
-  "LPG",
-];
+  "ALL",
+] as const;
 
 const unitOptions = ["KG", "LTR"] as const;
 
@@ -191,7 +185,7 @@ function ProductsTab() {
             className="pl-10"
           />
         </div>
-        <div className="flex items-center gap-2">
+        {/* <div className="flex items-center gap-2">
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
@@ -202,7 +196,7 @@ function ProductsTab() {
               <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>
-        </div>
+        </div> */}
         {(searchTerm || selectedCategory) && (
           <Button
             variant="ghost"
@@ -246,8 +240,7 @@ function ProductsTab() {
                   <tr className="border-b border-gray-100 bg-gray-50">
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Product</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">SKU</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Category</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Units</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Unit (KG)</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Price</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -273,12 +266,9 @@ function ProductsTab() {
                         <code className="text-sm text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{product.sku}</code>
                       </td>
                       <td className="px-4 py-3">
-                        <Badge variant="outline">{product.category}</Badge>
-                      </td>
-                      <td className="px-4 py-3">
                         <div className="flex items-center gap-1 text-sm text-gray-600">
                           <Scale className="h-3.5 w-3.5 text-gray-400" />
-                          {product.baseUnit} / {product.operationalUnit}
+                          KG
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -410,7 +400,9 @@ function EditProductModal({
       setForm({
         name: product.name,
         sku: product.sku,
-        category: product.category,
+        // Always send "ALL" on edit so backend listing keeps matching
+        // the row regardless of the active category filter.
+        category: "ALL",
         description: product.description || "",
         hsnNo: product.hsnNo || "",
         applicableGST: product.applicableGST,
@@ -484,21 +476,10 @@ function EditProductModal({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-category">Category *</Label>
-              <select
-                id="edit-category"
-                value={form.category || ""}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                required
-              >
-                <option value="">Select category</option>
-                {categoryOptions.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
+            {/* Category is no longer user-selectable. Every edit payload
+                sends the "ALL" enum so the row continues to match
+                backend listing for any active category. */}
+            <input type="hidden" name="edit-category" value={form.category ?? "ALL"} />
             <div className="space-y-2">
               <Label htmlFor="edit-hsnNo">HSN Number</Label>
               <Input

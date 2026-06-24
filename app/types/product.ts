@@ -15,6 +15,7 @@ export interface Product {
   operationalUnit: ProductUnit;
   minimumStockKG?: number;
   sellPricePerUnit: number;
+  sellPriceLTR: number;
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;

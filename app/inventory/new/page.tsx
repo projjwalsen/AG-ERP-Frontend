@@ -10,17 +10,17 @@ import { useToast, ToastContainer } from "@/components/ui/toast";
 import { productApi, CreateProductPayload } from "@/app/services/product.service";
 import { useRouter } from "next/navigation";
 
-const categoryOptions = [
-  "PETROL",
-  "DIESEL",
-  "LUBRICANT",
-  "GREASE",
-  "KEROSENE",
-  "CNG",
-  "LPG",
-];
+// The product category is not user-selectable — every create payload
+// sends the "ALL" enum so backend listing matches regardless of which
+// category the user has active.
+const DEFAULT_CATEGORY = "ALL";
 
-const unitOptions = ["KG", "LTR"] as const;
+// Both the base unit and the operational unit are locked to "KG" on
+// create — they are shown read-only so the user can see the values
+// going into the payload, but cannot change them. The inventory list
+// page renders the unit column as "KG" only, so changing this here
+// would just create inconsistency downstream.
+const FIXED_UNIT = "KG" as const;
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -32,13 +32,13 @@ export default function NewProductPage() {
   const [form, setForm] = React.useState<CreateProductPayload>({
     name: "",
     sku: "",
-    category: "",
+    category: DEFAULT_CATEGORY,
     description: "",
     hsnNo: "",
     applicableGST: undefined,
-    baseUnit: "KG",
+    baseUnit: FIXED_UNIT,
     density: undefined,
-    operationalUnit: "LTR",
+    operationalUnit: FIXED_UNIT,
     minimumStockKG: undefined,
     sellPricePerUnit: 0,
   });
@@ -124,21 +124,10 @@ export default function NewProductPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="category">Category *</Label>
-                <select
-                  id="category"
-                  value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                  required
-                >
-                  <option value="">Select category</option>
-                  {categoryOptions.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Category is sent as a comma-separated list of ALL
+                  categories so backend listing matches every category.
+                  Hidden from the user; no UI to pick. */}
+              <input type="hidden" name="category" value={form.category} />
               <div className="space-y-2">
                 <Label htmlFor="hsnNo">HSN Number</Label>
                 <Input
@@ -186,33 +175,35 @@ export default function NewProductPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              {/* Base Unit — read-only. The form payload always sends
+                  "KG" so the inventory list view (which displays a
+                  single "Unit (KG)" column) stays consistent. A hidden
+                  input keeps the value in the form state. */}
               <div className="space-y-2">
-                <Label htmlFor="baseUnit">Base Unit *</Label>
-                <select
+                <Label htmlFor="baseUnit">Base Unit</Label>
+                <Input
                   id="baseUnit"
                   value={form.baseUnit}
-                  onChange={(e) => setForm({ ...form, baseUnit: e.target.value as "KG" | "LTR" })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                  required
-                >
-                  {unitOptions.map((unit) => (
-                    <option key={unit} value={unit}>{unit}</option>
-                  ))}
-                </select>
+                  readOnly
+                  disabled
+                  className="bg-gray-50 text-gray-600 cursor-not-allowed font-mono"
+                  title="Locked to KG — see inventory list unit column"
+                />
               </div>
+              {/* Operational Unit — also locked to KG for the same
+                  reason as Base Unit. Density becomes irrelevant when
+                  both units are KG, but the field is kept below for
+                  backward compat with the backend schema. */}
               <div className="space-y-2">
-                <Label htmlFor="operationalUnit">Operational Unit *</Label>
-                <select
+                <Label htmlFor="operationalUnit">Operational Unit</Label>
+                <Input
                   id="operationalUnit"
                   value={form.operationalUnit}
-                  onChange={(e) => setForm({ ...form, operationalUnit: e.target.value as "KG" | "LTR" })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                  required
-                >
-                  {unitOptions.map((unit) => (
-                    <option key={unit} value={unit}>{unit}</option>
-                  ))}
-                </select>
+                  readOnly
+                  disabled
+                  className="bg-gray-50 text-gray-600 cursor-not-allowed font-mono"
+                  title="Locked to KG — see inventory list unit column"
+                />
               </div>
             </div>
 

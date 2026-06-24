@@ -28,6 +28,7 @@ interface SaleItem {
   unit: "KG" | "LTR";
   sellPrice: number;
   gst: number | null;
+
 }
 
 export default function NewSalePage() {
@@ -134,9 +135,17 @@ export default function NewSalePage() {
     }
   };
 
-  const getProductPrice = (productId: string): number => {
+  // Pick the right price for the chosen unit. The Product type carries
+  // `sellPricePerUnit` (KG price) and `sellPriceLTR` (litre price); fall
+  // back to `sellPricePerUnit` if the per-litre price hasn't been set.
+  const getProductPrice = (productId: string, unit: "KG" | "LTR"): number => {
     const product = products.find((p) => p.id === productId);
-    return product ? Number(product.sellPricePerUnit) || 0 : 0;
+    if (!product) return 0;
+    if (unit === "LTR") {
+      const ltr = Number(product.sellPriceLTR);
+      if (Number.isFinite(ltr) && ltr > 0) return ltr;
+    }
+    return Number(product.sellPricePerUnit) || 0;
   };
 
   const getProductGST = (productId: string): number | null => {
@@ -186,12 +195,22 @@ export default function NewSalePage() {
       prevItems.map((item) => {
         if (item.id === id) {
           if (field === "productId") {
-            const price = getProductPrice(value);
+            const price = getProductPrice(value, item.unit);
             const gst = getProductGST(value);
             if (formData.branchId) {
               fetchAvailableBatches(formData.branchId, value, id);
             }
             return { ...item, [field]: value, sellPrice: price, gst, batchId: "" };
+          }
+          // When the user toggles KG <-> LTR, re-resolve the price
+          // against the right per-unit field so the input reflects the
+          // new unit's default price rather than the previous unit's.
+          if (field === "unit") {
+            const nextUnit = value as "KG" | "LTR";
+            const price = item.productId
+              ? getProductPrice(item.productId, nextUnit)
+              : item.sellPrice;
+            return { ...item, [field]: nextUnit, sellPrice: price };
           }
           return { ...item, [field]: value };
         }
@@ -373,7 +392,9 @@ export default function NewSalePage() {
                       <th className="px-4 py-3 text-left font-semibold w-[280px]">Batch (Available Qty)</th>
                       <th className="px-4 py-3 text-right font-semibold w-[110px]">Qty</th>
                       <th className="px-4 py-3 text-left font-semibold w-[100px]">Unit</th>
-                      <th className="px-4 py-3 text-right font-semibold w-[130px]">Price</th>
+                      <th className="px-4 py-3 text-right font-semibold w-[130px]">
+                        Sell Price / Unit
+                      </th>
                       <th className="px-4 py-3 text-right font-semibold w-[120px]">Amount</th>
                       <th className="px-4 py-3 text-right font-semibold text-nowrap w-[80px]">GST %</th>
                       <th className="px-4 py-3 text-right font-semibold text-nowrap w-[130px]">Total w/ GST</th>
@@ -469,7 +490,7 @@ export default function NewSalePage() {
                                 handleItemChange(item.id, "sellPrice", parseFloat(e.target.value) || 0)
                               }
                               className="h-9 text-sm text-right px-2"
-                              title="Default is the product's sell price; override as needed"
+                              title={`Default is the product's sell price per ${item.unit === "KG" ? "unit" : "litre"}; override as needed`}
                             />
                           </td>
                           <td className="px-4 py-3 text-right font-semibold text-nowrap">

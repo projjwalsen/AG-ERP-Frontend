@@ -329,18 +329,41 @@ export type LedgerViewRow = BranchViewRow | AgencyViewRow | SuspenseBranchView;
 
 // ====== Branch / Agency / Suspense details ======
 
+/**
+ * One row of the suspense ledger detail. The backend returns
+ * `entries[]` (income/expense style) rather than the previous
+ * `transactions[]` shape — the renderer in
+ * `app/ledger/financial/suspense/[branchId]/page.tsx` is built around
+ * this contract.
+ */
+export interface SuspenseLedgerEntry {
+  serialNo: number;
+  date: string;
+  voucherNo: string;
+  description: string;
+  income: number;
+  expense: number;
+  paymentMode: string;
+  paymentType: string;
+  transactionRefNo?: string | null;
+  remarks?: string | null;
+}
+
 export interface SuspenseLedgerDetailResponse {
   branch: { id: string; code: string; name: string; gstin?: string | null };
   category?: "ACCOUNTING_LEDGER" | "CASH";
   summary?: {
     totalTransactions?: number;
+    totalIncome?: number;
+    totalExpense?: number;
+    closingBalance?: number;
     totalInward?: number;
     totalOutward?: number;
     cashTransactions?: number;
     cashInward?: number;
     cashOutward?: number;
   };
-  transactions: SuspenseTransactionRow[];
+  entries: SuspenseLedgerEntry[];
 }
 
 // ====== Branch / Agency details (from getLedgerByBranchId / getLedgerByAgencyId) ======

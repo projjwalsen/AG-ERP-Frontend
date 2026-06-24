@@ -80,11 +80,61 @@ function FinancialLedgerContent() {
     companyLedgerError,
   } = useAppSelector((state) => state.ledger);
 
-  // Three tabs - AGENCY is the default
-  const [activeTab, setActiveTab] = React.useState<LedgerView>("AGENCY");
+  // Three tabs - AGENCY is the default.
+  // Tab selection is persisted across navigations to/from detail pages:
+  // when the user opens a branch/agency/suspense detail then comes back,
+  // they should land on the same tab they left. We mirror the active tab
+  // to the `?tab=` query string so deep-links and refreshes also restore it,
+  // and fall back to sessionStorage for the in-session case.
+  const [activeTab, setActiveTab] = React.useState<LedgerView>(() => {
+    if (typeof window !== "undefined") {
+      const fromUrl = new URLSearchParams(window.location.search).get("tab");
+      if (
+        fromUrl === "AGENCY" ||
+        fromUrl === "BRANCH" ||
+        fromUrl === "SUSPENSE" ||
+        fromUrl === "COMPANY"
+      ) {
+        return fromUrl;
+      }
+      const fromStorage = window.sessionStorage.getItem(
+        "ledger:financial:activeTab"
+      );
+      if (
+        fromStorage === "AGENCY" ||
+        fromStorage === "BRANCH" ||
+        fromStorage === "SUSPENSE" ||
+        fromStorage === "COMPANY"
+      ) {
+        return fromStorage as LedgerView;
+      }
+    }
+    return "AGENCY";
+  });
   const [searchTerm, setSearchTerm] = React.useState("");
   const [currentPage, setCurrentPage] = React.useState(1);
   const [exporting, setExporting] = React.useState(false);
+
+  // Whenever the tab changes, mirror it to sessionStorage and the URL
+  // query string so back-navigation from a detail page restores the
+  // same tab. The URL update uses `replace` (not `push`) so the tab
+  // switch doesn't bloat the browser history.
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.setItem(
+      "ledger:financial:activeTab",
+      activeTab
+    );
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("tab") !== activeTab) {
+      url.searchParams.set("tab", activeTab);
+      window.history.replaceState(
+        window.history.state,
+        "",
+        url.pathname + url.search
+      );
+    }
+  }, [activeTab]);
 
   // Company-ledger specific filter state. Same draft/applied split used on
   // the agency/branch detail pages: the inputs mutate `draft*`, and clicking
@@ -216,19 +266,24 @@ function FinancialLedgerContent() {
   }>(null);
 
   const openCategoryModal = (row: any, view: "BRANCH" | "AGENCY" | "SUSPENSE") => {
-    // For suspense tab, each row is a transaction (not a branch).
-    // But "View Details" should still drive a category selection that
-    // navigates to the branch suspense page (using the txn's branch.id).
-    let id = "";
-    let name = "";
+    // Suspense rows carry a `branch.id` — "View Details" navigates
+    // straight to the suspense branch detail page (by branch id) with
+    // no category picker. The detail page itself defaults to
+    // ACCOUNTING_LEDGER if no category is passed. Branch and agency
+    // views still open the category modal to pick which ledger to
+    // drill into.
     if (view === "SUSPENSE") {
       const txn = row as unknown as SuspenseTransactionRow;
-      id = txn?.branch?.id ?? "";
-      name = txn?.branch?.name ?? "";
-    } else {
-      id = (row as any).id ?? "";
-      name = (row as any).name ?? "";
+      const branchId = txn?.branch?.id ?? "";
+      const branchName = txn?.branch?.name ?? "";
+      if (!branchId) return;
+      router.push(
+        `/ledger/financial/suspense/${branchId}?name=${encodeURIComponent(branchName)}`
+      );
+      return;
     }
+    const id = (row as any).id ?? "";
+    const name = (row as any).name ?? "";
     setCategoryModal({ view, id, name });
   };
 
@@ -238,6 +293,25 @@ function FinancialLedgerContent() {
     if (!categoryModal) return;
     const { view, id, name } = categoryModal;
     closeCategoryModal();
+
+    // Suspense rows now navigate straight to the per-transaction detail
+    // page from `openCategoryModal` — this branch is unreachable but
+    // kept as a safety net in case a future caller sets `view: "SUSPENSE"`
+    // directly. It mirrors the previous behaviour (group by branch + cat).
+    if (view === "SUSPENSE") {
+      try {
+        await dispatch(
+          fetchLedgerBySuspenseId({
+            branchId: id,
+            category: category as SuspenseCategory,
+          })
+        ).unwrap();
+        router.push(`/ledger/financial/suspense/${id}?category=${category}&name=${encodeURIComponent(name)}`);
+      } catch (err: any) {
+        addToast(err || "Failed to fetch suspense ledgers", "error");
+      }
+      return;
+    }
 
     // Branch-wise → getLedgerByBranchId
     if (view === "BRANCH") {
@@ -255,32 +329,17 @@ function FinancialLedgerContent() {
       return;
     }
 
-    if (view === "AGENCY") {
-      try {
-        await dispatch(
-          fetchLedgerByAgencyId({
-            agencyId: id,
-            category: category as AgencyCategory,
-          })
-        ).unwrap();
-        router.push(`/ledger/financial/agency/${id}?category=${category}&name=${encodeURIComponent(name)}`);
-      } catch (err: any) {
-        addToast(err || "Failed to fetch agency ledgers", "error");
-      }
-      return;
-    }
-
-    // Suspense → getLedgerBySuspenseId
+    // Agency-wise → getLedgerByAgencyId
     try {
       await dispatch(
-        fetchLedgerBySuspenseId({
-          branchId: id,
-          category: category as SuspenseCategory,
+        fetchLedgerByAgencyId({
+          agencyId: id,
+          category: category as AgencyCategory,
         })
       ).unwrap();
-      router.push(`/ledger/financial/suspense/${id}?category=${category}&name=${encodeURIComponent(name)}`);
+      router.push(`/ledger/financial/agency/${id}?category=${category}&name=${encodeURIComponent(name)}`);
     } catch (err: any) {
-      addToast(err || "Failed to fetch suspense ledgers", "error");
+      addToast(err || "Failed to fetch agency ledgers", "error");
     }
   };
 
