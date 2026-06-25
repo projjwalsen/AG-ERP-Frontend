@@ -173,6 +173,43 @@ export default function UsersListPage() {
       },
     },
     {
+      accessorKey: "permissions",
+      header: "Permissions",
+      cell: ({ row }) => {
+        const perms = row.original.permissions || [];
+        if (perms.length === 0) {
+          return <span className="text-gray-400 text-sm">-</span>;
+        }
+        const VISIBLE = 4;
+        const visible = perms.slice(0, VISIBLE);
+        const overflow = perms.length - visible.length;
+        return (
+          <div className="space-y-1.5">
+            <span className="text-xs font-medium text-gray-500">
+              {perms.length} permission{perms.length === 1 ? "" : "s"}
+            </span>
+            <div className="flex flex-wrap gap-1">
+              {visible.map((p) => (
+                <Badge
+                  key={p.id}
+                  variant="outline"
+                  className="text-[10px] font-mono"
+                  title={p.key}
+                >
+                  {p.key}
+                </Badge>
+              ))}
+              {overflow > 0 && (
+                <Badge variant="secondary" className="text-[10px]">
+                  +{overflow} more
+                </Badge>
+              )}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
       accessorKey: "createdAt",
       header: "Created",
       cell: ({ row }) => row.original.createdAt ? <span className="text-sm text-gray-600">{formatDate(row.original.createdAt)}</span> : <span className="text-gray-400">-</span>,

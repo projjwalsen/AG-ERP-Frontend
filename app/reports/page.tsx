@@ -28,7 +28,7 @@ interface ReportCardData {
 
 const REPORT_CARDS: ReportCardData[] = [
   {
-    title: "Outstanding Report",
+    title: "AP/AR report",
     description:
       "Accounts receivable and payable outstanding by agency with debit / credit and balance type.",
     href: "/reports/outstanding",

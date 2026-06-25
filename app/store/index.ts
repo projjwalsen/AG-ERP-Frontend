@@ -8,6 +8,7 @@ import inventoryReducer from "./inventorySlice";
 import settingsReducer from "./settingsSlice";
 import ledgerReducer from "./ledgerSlice";
 import reportsReducer from "./reportsSlice";
+import dashboardReducer from "./dashboardSlice";
 
 export const store = configureStore({
   reducer: {
@@ -20,6 +21,7 @@ export const store = configureStore({
     settings: settingsReducer,
     ledger: ledgerReducer,
     reports: reportsReducer,
+    dashboard: dashboardReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

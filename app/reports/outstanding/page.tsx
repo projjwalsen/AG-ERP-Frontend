@@ -27,14 +27,6 @@ import { reportApi } from "@/app/services/report.service";
 import { OutstandingRow, OutstandingType } from "@/app/types/report";
 import { formatCurrency } from "@/lib/utils";
 
-/**
- * Outstanding Report — GET /api/reports/outstanding-report
- *
- * Renders two summary cards (Total Agencies, Total Outstanding) and a
- * table of one row per agency with opening balance, debit, credit, total
- * outstanding and balance type. A segmented control toggles the API
- * param between `type=RECEIVABLE` and `type=PAYABLE`.
- */
 export default function OutstandingReportPage() {
   const dispatch = useAppDispatch();
   const router = useRouter();
@@ -205,7 +197,7 @@ export default function OutstandingReportPage() {
 
   return (
     <ReportLayout
-      title="Outstanding Report"
+      title="AP/AR report"
       description={
         outstandingType === "RECEIVABLE"
           ? "Accounts receivable — money owed to your organization"

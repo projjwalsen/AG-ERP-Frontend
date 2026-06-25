@@ -1,21 +1,28 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   IndianRupee, ShoppingCart, CreditCard, Package, Users, AlertCircle,
   ArrowUpRight, ArrowDownRight, Plus, FileText, Settings, TrendingUp, Building2,
+  ArrowDownLeft, ArrowUpRight as ArrowUp,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PageHeader } from "@/components/layout";
-import { mockDashboardStats, mockTransactions, mockActivities } from "@/data/mockData";
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from "recharts";
 import { branchApi } from "@/app/services/branch.service";
 import { Branch } from "@/app/types/branch";
+import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
+import { fetchDashboardKPI } from "@/app/store/dashboardSlice";
+import {
+  BranchMonthlyRevenue,
+  RecentKpiTransaction,
+} from "@/app/types/dashboard";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -27,8 +34,8 @@ const itemVariants = {
   show: { opacity: 1, y: 0 },
 };
 
-function StatsCard({ title, value, change, trend, icon: Icon, color }: {
-  title: string; value: string; change: number; trend: "up" | "down"; icon: React.ElementType; color: string;
+function StatsCard({ title, value, icon: Icon, color }: {
+  title: string; value: string; icon: React.ElementType; color: string;
 }) {
   return (
     <motion.div variants={itemVariants}>
@@ -38,11 +45,6 @@ function StatsCard({ title, value, change, trend, icon: Icon, color }: {
             <div>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{title}</p>
               <p className="text-xl font-bold text-gray-900 mt-1">{value}</p>
-              <div className="flex items-center gap-1 mt-1.5">
-                {trend === "up" ? <ArrowUpRight className="h-3 w-3 text-green-600" /> : <ArrowDownRight className="h-3 w-3 text-red-500" />}
-                <span className={cn("text-xs font-medium", trend === "up" ? "text-green-600" : "text-red-500")}>{change}%</span>
-                <span className="text-xs text-gray-400">vs last month</span>
-              </div>
             </div>
             <div className={cn("p-2.5 rounded-xl", color === "green" && "bg-emerald-50 text-emerald-600", color === "blue" && "bg-blue-50 text-blue-600", color === "purple" && "bg-purple-50 text-purple-600", color === "amber" && "bg-amber-50 text-amber-600", color === "red" && "bg-red-50 text-red-600")}>
               <Icon className="h-5 w-5" />
@@ -54,91 +56,47 @@ function StatsCard({ title, value, change, trend, icon: Icon, color }: {
   );
 }
 
-function TransactionRow({ transaction }: { transaction: (typeof mockTransactions)[0] }) {
-  const statusColors = { completed: "success", pending: "warning", failed: "error" } as const;
-  const typeColors = { sale: "bg-emerald-50 text-emerald-600", purchase: "bg-blue-50 text-blue-600", payment: "bg-purple-50 text-purple-600", return: "bg-amber-50 text-amber-600" };
-  const icons = { sale: IndianRupee, purchase: ShoppingCart, payment: CreditCard, return: Package };
+function TransactionRow({ transaction }: { transaction: RecentKpiTransaction }) {
+  const isInward = transaction.direction === "INWARD";
+  const icon = isInward ? ArrowDownLeft : ArrowUp;
+  const color = isInward ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600";
 
   return (
     <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-      <div className="flex items-center gap-3">
-        <div className={cn("p-2 rounded-lg", typeColors[transaction.type])}>
-          {React.createElement(icons[transaction.type], { className: "h-4 w-4" })}
+      <div className="flex items-center gap-3 min-w-0">
+        <div className={cn("p-2 rounded-lg shrink-0", color)}>
+          {React.createElement(icon, { className: "h-4 w-4" })}
         </div>
-        <div>
-          <p className="text-sm font-medium text-gray-900">{transaction.reference}</p>
-          <p className="text-xs text-gray-500">{transaction.customer}</p>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-gray-900 truncate">{transaction.agency || "—"}</p>
+          <p className="text-xs text-gray-500 truncate">
+            {transaction.branch} · {transaction.transactionNo}
+          </p>
         </div>
       </div>
-      <div className="text-right">
+      <div className="text-right shrink-0 ml-3">
         <p className="text-sm font-semibold text-gray-900">{formatCurrency(transaction.amount)}</p>
-        <Badge variant={statusColors[transaction.status]} dot className="mt-0.5">{transaction.status}</Badge>
+        <div className="flex items-center justify-end gap-1.5 mt-0.5">
+          <Badge variant={isInward ? "success" : "info"} className="text-[10px]">
+            {transaction.direction}
+          </Badge>
+          {transaction.paymentMode && (
+            <span className="text-[10px] text-gray-500">{transaction.paymentMode}</span>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function ActivityItem({ activity }: { activity: (typeof mockActivities)[0] }) {
-  const initials = activity.user.split(" ").map((n: string) => n[0]).join("");
-  return (
-    <div className="flex gap-3 py-3 border-b border-gray-100 last:border-0">
-      <div className="flex items-center justify-center h-8 w-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full">
-        <span className="text-xs font-medium text-white">{initials}</span>
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-gray-900"><span className="font-medium">{activity.user}</span> {activity.action} <span className="text-gray-600">{activity.target}</span></p>
-        <p className="text-xs text-gray-400 mt-0.5">{formatDateTime(activity.timestamp)}</p>
-      </div>
-    </div>
-  );
-}
-
-// Demo data for monthly revenue (used for All and as fallback for branches)
-const allBranchesRevenueData = [
-  { month: "Apr", revenue: 38 },
-  { month: "May", revenue: 45 },
-  { month: "Jun", revenue: 48 },
-  { month: "Jul", revenue: 46 },
-  { month: "Aug", revenue: 44 },
-  { month: "Sep", revenue: 52 },
-  { month: "Oct", revenue: 58 },
-  { month: "Nov", revenue: 64 },
-  { month: "Dec", revenue: 69 },
-  { month: "Jan", revenue: 54 },
-  { month: "Feb", revenue: 52 },
-  { month: "Mar", revenue: 0 },
-];
-
-// Branch-wise Monthly Revenue Data (using same demo data for all branches)
-const branchRevenueData: Record<string, { month: string; revenue: number }[]> = {
-  all: allBranchesRevenueData,
-};
-
-// Stock Distribution Data
-const stockDistributionData = [
-  { name: "Healthy Stock", value: 65, color: "#10B981" },
-  { name: "Low Stock", value: 25, color: "#F59E0B" },
-  { name: "Critical", value: 10, color: "#EF4444" },
-];
-
-// Custom tooltip for KPI chart
-function KPILegend() {
-  return (
-    <div className="flex items-center gap-4">
-      <div className="flex items-center gap-2">
-        <div className="w-6 h-2.5 rounded-sm bg-gradient-to-r from-blue-500 to-blue-600" />
-        <span className="text-xs text-gray-600">Revenue</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="w-6 h-2.5 rounded-sm bg-gray-200" />
-        <span className="text-xs text-gray-600">Target</span>
-      </div>
-    </div>
-  );
+// Format month label for tooltip: "Jun 2026"
+function formatMonthLabel(month: string, year: number) {
+  return `${month} ${year}`;
 }
 
 export default function DashboardPage() {
-  const stats = mockDashboardStats;
+  const dispatch = useAppDispatch();
+  const { kpi, isLoading, error } = useAppSelector((state) => state.dashboard);
   const [selectedBranch, setSelectedBranch] = React.useState("all");
   const [branches, setBranches] = React.useState<Branch[]>([]);
 
@@ -148,24 +106,81 @@ export default function DashboardPage() {
     { label: "Settings", icon: Settings, href: "/settings" },
   ];
 
-  // Fetch branches for dropdown
+  // Fetch branches for dropdown (used by chart filter)
   React.useEffect(() => {
-    fetchBranches();
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await branchApi.getActive();
+        const branchesData = Array.isArray(response.data)
+          ? response.data
+          : response.data?.branches ?? [];
+        if (!cancelled) setBranches(branchesData);
+      } catch (err) {
+        console.error("Failed to fetch branches");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const fetchBranches = async () => {
-    try {
-      const response = await branchApi.getActive();
-      const branchesData = Array.isArray(response.data)
-        ? response.data
-        : response.data?.branches ?? [];
-      setBranches(branchesData);
-    } catch (err) {
-      console.error("Failed to fetch branches");
-    }
-  };
+  // Fetch dashboard KPIs. Re-fetch when the user picks a different branch.
+  React.useEffect(() => {
+    dispatch(
+      fetchDashboardKPI(
+        selectedBranch === "all" ? undefined : { branchId: selectedBranch }
+      )
+    );
+  }, [dispatch, selectedBranch]);
 
-  const currentData = branchRevenueData[selectedBranch] || allBranchesRevenueData;
+  // Bar chart data — either the selected branch's monthlyRevenue, or the
+  // aggregated sum across all branches (grouped by month) for "All".
+  const chartData: { month: string; revenue: number }[] = React.useMemo(() => {
+    if (!kpi) return [];
+    if (selectedBranch === "all") {
+      // Aggregate by month label across branches.
+      const totals = new Map<string, number>();
+      kpi.branchMonthlyRevenue.forEach((b) => {
+        b.monthlyRevenue.forEach((p) => {
+          const key = formatMonthLabel(p.month, p.year);
+          totals.set(key, (totals.get(key) || 0) + p.revenue);
+        });
+      });
+      return Array.from(totals.entries()).map(([month, revenue]) => ({
+        month,
+        revenue,
+      }));
+    }
+    const branch: BranchMonthlyRevenue | undefined =
+      kpi.branchMonthlyRevenue.find((b) => b.branchId === selectedBranch);
+    if (!branch) return [];
+    return branch.monthlyRevenue.map((p) => ({
+      month: formatMonthLabel(p.month, p.year),
+      revenue: p.revenue,
+    }));
+  }, [kpi, selectedBranch]);
+
+  // Stock distribution donut data — counts from API.
+  const stockDistributionData = React.useMemo(() => {
+    if (!kpi) return [];
+    const { healthy, low, critical } = kpi.stockDistribution;
+    const total = healthy + low + critical;
+    if (total <= 0) {
+      return [
+        { name: "Healthy Stock", value: 0, color: "#10B981", count: healthy },
+        { name: "Low Stock", value: 0, color: "#F59E0B", count: low },
+        { name: "Critical", value: 0, color: "#EF4444", count: critical },
+      ];
+    }
+    return [
+      { name: "Healthy Stock", value: Math.round((healthy / total) * 100), color: "#10B981", count: healthy },
+      { name: "Low Stock", value: Math.round((low / total) * 100), color: "#F59E0B", count: low },
+      { name: "Critical", value: Math.round((critical / total) * 100), color: "#EF4444", count: critical },
+    ];
+  }, [kpi]);
+
+  const summary = kpi?.summary;
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-5 p-6">
@@ -174,14 +189,50 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        <StatsCard title="Revenue" value={formatCurrency(stats.revenue.value)} change={stats.revenue.change} trend={stats.revenue.trend} icon={IndianRupee} color="green" />
-        <StatsCard title="Purchases" value={formatCurrency(stats.purchases.value)} change={stats.purchases.change} trend={stats.purchases.trend} icon={ShoppingCart} color="blue" />
-        <StatsCard title="Sales" value={formatCurrency(stats.sales.value)} change={stats.sales.change} trend={stats.sales.trend} icon={CreditCard} color="purple" />
-        <StatsCard title="Inventory" value={formatCurrency(stats.inventory.value)} change={Math.abs(stats.inventory.change)} trend={stats.inventory.trend} icon={Package} color="amber" />
-        <StatsCard title="Outstanding" value={formatCurrency(stats.outstandingPayments.value)} change={Math.abs(stats.outstandingPayments.change)} trend={stats.outstandingPayments.trend} icon={AlertCircle} color="red" />
-        <StatsCard title="Users" value={stats.activeUsers.value.toString()} change={stats.activeUsers.change} trend={stats.activeUsers.trend} icon={Users} color="blue" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <StatsCard
+          title="Revenue"
+          value={summary ? formatCurrency(summary.revenue) : "—"}
+          icon={IndianRupee}
+          color="green"
+        />
+        <StatsCard
+          title="Purchases"
+          value={summary ? formatCurrency(summary.purchases) : "—"}
+          icon={ShoppingCart}
+          color="blue"
+        />
+        <StatsCard
+          title="Sales"
+          value={summary ? formatCurrency(summary.sales) : "—"}
+          icon={CreditCard}
+          color="purple"
+        />
+        <StatsCard
+          title="Inventory"
+          value={summary ? formatCurrency(summary.inventoryValues) : "—"}
+          icon={Package}
+          color="amber"
+        />
+        <StatsCard
+          title="Outstanding"
+          value={summary ? formatCurrency(summary.outstanding) : "—"}
+          icon={AlertCircle}
+          color="red"
+        />
+        <StatsCard
+          title="Users"
+          value={summary ? summary.users.toString() : "—"}
+          icon={Users}
+          color="blue"
+        />
       </div>
+
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4 text-sm text-red-700">{error}</CardContent>
+        </Card>
+      )}
 
       {/* Charts Section - Two columns */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -194,8 +245,8 @@ export default function DashboardPage() {
                   <TrendingUp className="h-4 w-4 text-blue-600" />
                 </div>
                 <div>
-                  <CardTitle className="text-sm font-semibold text-gray-900">Branch Wise Earning Graph </CardTitle>
-                  <p className="text-xs text-gray-500 mt-0.5">Revenue by Branch (In Lakhs)</p>
+                  <CardTitle className="text-sm font-semibold text-gray-900">Branch Wise Earning Graph</CardTitle>
+                  <p className="text-xs text-gray-500 mt-0.5">Revenue by Branch</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -217,27 +268,47 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="pt-4">
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={currentData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }} barCategoryGap="35%">
-                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} tickFormatter={(value) => `${value}L`} />
-                  <Tooltip
-                    content={({ active, payload, label }) => {
-                      if (active && payload && payload.length) {
-                        const revenue = payload[0]?.value || 0;
-                        return (
-                          <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-3">
-                            <p className="text-sm font-semibold text-white mb-1">{label}</p>
-                            <p className="text-sm font-medium text-emerald-400">₹{revenue}L</p>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  <Bar dataKey="revenue" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={24} />
-                </BarChart>
-              </ResponsiveContainer>
+              {isLoading && chartData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-sm text-gray-400">
+                  Loading revenue…
+                </div>
+              ) : chartData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-sm text-gray-400">
+                  No revenue data for the selected period
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="35%">
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: "#6B7280" }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(value) => {
+                        // Show in lakhs (L) when the max is large enough, else raw.
+                        if (value >= 100000) return `₹${(value / 100000).toFixed(1)}L`;
+                        if (value >= 1000) return `₹${(value / 1000).toFixed(1)}k`;
+                        return `₹${value}`;
+                      }}
+                    />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          const revenue = payload[0]?.value || 0;
+                          return (
+                            <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-3">
+                              <p className="text-sm font-semibold text-white mb-1">{label}</p>
+                              <p className="text-sm font-medium text-emerald-400">{formatCurrency(Number(revenue))}</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar dataKey="revenue" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={24} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -260,37 +331,44 @@ export default function DashboardPage() {
           <CardContent className="pt-4">
             <div className="flex items-center">
               <div className="w-48 h-48 mx-auto">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={stockDistributionData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={80}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
-                      {stockDistributionData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          const data = payload[0].payload;
-                          return (
-                            <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-xl px-3 py-2">
-                              <p className="text-xs text-gray-400">{data.name}</p>
-                              <p className="text-sm font-semibold text-white">{data.value}%</p>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                {isLoading && stockDistributionData.every((d) => d.value === 0) ? (
+                  <div className="h-full flex items-center justify-center text-sm text-gray-400">
+                    Loading…
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={stockDistributionData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={80}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {stockDistributionData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload as { name: string; value: number; count: number };
+                            return (
+                              <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-xl px-3 py-2">
+                                <p className="text-xs text-gray-400">{data.name}</p>
+                                <p className="text-sm font-semibold text-white">{data.value}%</p>
+                                <p className="text-[11px] text-gray-300">{data.count} item(s)</p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </div>
             {/* Legend below chart */}
@@ -299,7 +377,9 @@ export default function DashboardPage() {
                 <div key={index} className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                   <span className="text-xs text-gray-600">{item.name}</span>
-                  <span className="text-xs font-semibold text-gray-900">{item.value}%</span>
+                  <span className="text-xs font-semibold text-gray-900">
+                    {item.count} ({item.value}%)
+                  </span>
                 </div>
               ))}
             </div>
@@ -307,52 +387,44 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Main Content - Two columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <motion.div variants={itemVariants} className="lg:col-span-2">
-          <Card className="border-0 shadow-sm h-full">
-            <CardHeader className="pb-4 border-b border-gray-100">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-emerald-50 rounded-lg">
-                    <CreditCard className="h-4 w-4 text-emerald-600" />
-                  </div>
-                  <CardTitle className="text-sm font-semibold text-gray-900">Recent Transactions</CardTitle>
+      {/* Recent Transactions */}
+      <motion.div variants={itemVariants}>
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-4 border-b border-gray-100">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-50 rounded-lg">
+                  <CreditCard className="h-4 w-4 text-emerald-600" />
                 </div>
+                <CardTitle className="text-sm font-semibold text-gray-900">Recent Transactions</CardTitle>
+              </div>
+              <Link href="/transactions">
                 <Button variant="ghost" size="sm" className="text-emerald-600 text-xs h-7 hover:text-emerald-700 hover:bg-emerald-50">View All</Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-64">
-                {mockTransactions.map((t) => <TransactionRow key={t.id} transaction={t} />)}
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div variants={itemVariants}>
-          <Card className="border-0 shadow-sm h-full">
-            <CardHeader className="pb-4 border-b border-gray-100">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-amber-50 rounded-lg">
-                    <Users className="h-4 w-4 text-amber-600" />
-                  </div>
-                  <CardTitle className="text-sm font-semibold text-gray-900">Recent Activity</CardTitle>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-72">
+              {isLoading && (!kpi || kpi.recentTransactions.length === 0) ? (
+                <div className="h-full flex items-center justify-center text-sm text-gray-400 py-8">
+                  Loading transactions…
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-64">
-                {mockActivities.map((a) => <ActivityItem key={a.id} activity={a} />)}
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
+              ) : !kpi || kpi.recentTransactions.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-sm text-gray-400 py-8">
+                  No recent transactions
+                </div>
+              ) : (
+                kpi.recentTransactions.map((t, idx) => (
+                  <TransactionRow key={`${t.transactionNo}-${idx}`} transaction={t} />
+                ))
+              )}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </motion.div>
 
       {/* Quick Actions */}
-      <Card className="border-0 shadow-sm">
+      {/* <Card className="border-0 shadow-sm">
         <CardHeader className="pb-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <div className="p-2 bg-gray-100 rounded-lg">
@@ -371,7 +443,7 @@ export default function DashboardPage() {
             ))}
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
     </motion.div>
   );
 }

@@ -17,13 +17,7 @@ import {
 // STATE
 // =====================================================================
 
-/**
- * The reports module is a "view-only" read surface — every report holds
- * (a) the latest report payload for its table + summary cards, and
- * (b) a small bag of `isLoading` / `error` flags keyed per-report so that
- * switching tabs in the UI does not wipe the others. Each slice is
- * independent: the Outstanding report has no knowledge of the Day Book.
- */
+
 export interface ReportsState {
   outstanding: {
     data: OutstandingReportResponse | null;
@@ -190,10 +184,10 @@ export const fetchOutstandingReport = createAsyncThunk<
     if (response.success && response.data) {
       return response.data;
     }
-    return rejectWithValue(response.message || "Failed to fetch outstanding report");
+    return rejectWithValue(response.message || "Failed to fetch AP/AR report");
   } catch (error: unknown) {
     const message =
-      error instanceof Error ? error.message : "Failed to fetch outstanding report";
+      error instanceof Error ? error.message : "Failed to fetch AP/AR report";
     return rejectWithValue(message);
   }
 });
@@ -309,7 +303,7 @@ const reportsSlice = createSlice({
       .addCase(fetchOutstandingReport.rejected, (state, action) => {
         state.outstanding.isLoading = false;
         state.outstanding.error =
-          action.payload || "Failed to fetch outstanding report";
+          action.payload || "Failed to fetch AP/AR report";
       })
       // ----- Day Book -----
       .addCase(fetchBranchDayBook.pending, (state) => {

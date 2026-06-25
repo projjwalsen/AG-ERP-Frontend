@@ -21,10 +21,6 @@ export interface ReportPeriod {
   endDate?: string | Date | null;
 }
 
-// =====================================================================
-// 1. OUTSTANDING REPORT — GET /api/reports/outstanding-report
-// =====================================================================
-
 export interface OutstandingLedgerRef {
   id: string;
   code: string;

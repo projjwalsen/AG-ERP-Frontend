@@ -246,7 +246,7 @@ const buildSidebarItems = (): SidebarItem[] => [
     icon: BarChart3,
     module: "REPORT",
     children: [
-      { title: "Outstanding Report", href: "/reports/outstanding", icon: FileText },
+      { title: "AP/AR report", href: "/reports/outstanding", icon: FileText },
       { title: "Branch Day Book", href: "/reports/day-book", icon: BookOpen },
       { title: "GSTR-1 Report", href: "/reports/gstr1", icon: Receipt },
       { title: "GST Suspense Log", href: "/reports/gst-suspense", icon: AlertTriangle },
