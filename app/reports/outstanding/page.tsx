@@ -37,7 +37,7 @@ export default function OutstandingReportPage() {
   );
 
   const [outstandingType, setOutstandingType] =
-    React.useState<OutstandingType>("RECEIVABLE");
+    React.useState<OutstandingType>("AR");
   const [filters, setFilters] = React.useState<ReportFilterValues>({});
 
   const load = React.useCallback(
@@ -73,7 +73,7 @@ export default function OutstandingReportPage() {
   const summary: SummaryCardItem[] = React.useMemo(() => {
     const totalAgencies = data?.summary?.totalAgencies ?? 0;
     const totalOutstanding = data?.summary?.totalOutstanding ?? 0;
-    const isReceivable = outstandingType === "RECEIVABLE";
+    const isReceivable = outstandingType === "AR";
     return [
       {
         title: isReceivable ? "Total Customers" : "Total Vendors",
@@ -168,29 +168,29 @@ export default function OutstandingReportPage() {
     <div className="inline-flex h-9 items-center bg-gray-100 p-0.5 rounded-md text-gray-600">
       <button
         type="button"
-        onClick={() => setOutstandingType("RECEIVABLE")}
+        onClick={() => setOutstandingType("AR")}
         className={
           "h-8 px-3 text-sm font-medium rounded inline-flex items-center gap-1.5 " +
-          (outstandingType === "RECEIVABLE"
+          (outstandingType === "AR"
             ? "bg-white text-gray-900 shadow-sm"
             : "hover:text-gray-900")
         }
       >
         <ArrowDownToLine className="h-3.5 w-3.5" />
-        Receivable
+        AR
       </button>
       <button
         type="button"
-        onClick={() => setOutstandingType("PAYABLE")}
+        onClick={() => setOutstandingType("AP")}
         className={
           "h-8 px-3 text-sm font-medium rounded inline-flex items-center gap-1.5 " +
-          (outstandingType === "PAYABLE"
+          (outstandingType === "AP"
             ? "bg-white text-gray-900 shadow-sm"
             : "hover:text-gray-900")
         }
       >
         <ArrowUpFromLine className="h-3.5 w-3.5" />
-        Payable
+        AP
       </button>
     </div>
   );
@@ -199,7 +199,7 @@ export default function OutstandingReportPage() {
     <ReportLayout
       title="AP/AR report"
       description={
-        outstandingType === "RECEIVABLE"
+        outstandingType === "AR"
           ? "Accounts receivable — money owed to your organization"
           : "Accounts payable — money owed by your organization"
       }
@@ -232,7 +232,7 @@ export default function OutstandingReportPage() {
       }
       isLoading={isLoading}
       isEmpty={!isLoading && rows.length === 0}
-      emptyMessage={`No ${outstandingType === "RECEIVABLE" ? "receivable" : "payable"} outstanding`}
+      emptyMessage={`No ${outstandingType === "AR" ? "receivable" : "AP"} outstanding`}
       emptyDescription="Try a different branch or date range, or switch the tab."
     >
       {tabsNode}

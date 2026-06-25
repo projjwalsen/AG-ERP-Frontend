@@ -12,7 +12,7 @@ import type { Branch } from "./branch";
 // COMMON
 // =====================================================================
 
-export type OutstandingType = "RECEIVABLE" | "PAYABLE";
+export type OutstandingType = "AR" | "AP";
 export type SuspenseAuthStatus = "PENDING_AUTHENTICATION" | "AUTHENTICATED";
 export type GSTRClassification = "B2B" | "B2C";
 
