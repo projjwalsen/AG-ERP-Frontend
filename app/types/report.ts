@@ -13,6 +13,16 @@ import type { Branch } from "./branch";
 // =====================================================================
 
 export type OutstandingType = "AR" | "AP";
+export type OutstandingSettlementStatus =
+  | "UNPAID"
+  | "PARTIALLY_SETTLED"
+  | "SETTLED";
+export type OutstandingInvoiceType = "PURCHASE" | "SALE";
+export type OutstandingBucketKey =
+  | "bucket_0_30_days"
+  | "bucket_31_60_days"
+  | "bucket_61_90_days"
+  | "bucket_91_plus_days";
 export type SuspenseAuthStatus = "PENDING_AUTHENTICATION" | "AUTHENTICATED";
 export type GSTRClassification = "B2B" | "B2C";
 
@@ -21,31 +31,98 @@ export interface ReportPeriod {
   endDate?: string | Date | null;
 }
 
-export interface OutstandingLedgerRef {
+// =====================================================================
+// 1. AP / AR OUTSTANDING — GET /api/reports/outstanding-report?type=AR|AP
+// =====================================================================
+//
+// Backend returns a nested structure: one row per agency, with four
+// aging buckets (0-30 / 31-60 / 61-90 / 91+ days). Each bucket carries
+// its own `amount` and an `invoices` array. A separate top-level
+// `detailRows` flattens the same data into a per-invoice ledger view —
+// used both for the "detail" toggle and for export.
+
+export interface OutstandingInvoiceRecord {
   id: string;
-  code: string;
-  name: string;
+  agencyId: string;
+  branchId: string | null;
+  invoiceNo: string | null;
+  invoiceDate: string | Date | null;
+  supplierInvoiceDate: string | Date | null;
+  voucherType: string | null;
+  otherReference: string | null;
+  subtotalAmount: number | string;
+  totalCGSTAmount: number | string;
+  totalSGSTAmount: number | string;
+  totalIGSTAmount: number | string;
+  totalGSTAmount: number | string;
+  roundOffAmount: number | string;
+  grandTotal: number | string;
+  status: string;
+  remarks: string | null;
+  createdById: string;
+  approvedById: string | null;
+  approvedAt: string | Date | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  agency?: Record<string, unknown> | null;
+  branch?: Record<string, unknown> | null;
+  allocations?: Array<Record<string, unknown>>;
+}
+
+export interface OutstandingBucketInvoice {
+  invoiceId: string;
+  invoiceType: OutstandingInvoiceType;
+  invoiceNo: string | null;
+  invoiceDate: string | Date | null;
+  invoiceAgeDays: number;
+  grandTotal: number;
+  allocatedAmount: number;
+  outstandingAmount: number;
+  settlementStatus: OutstandingSettlementStatus;
+  invoice: OutstandingInvoiceRecord;
+}
+
+export interface OutstandingBucket {
+  amount: number;
+  invoices: OutstandingBucketInvoice[];
 }
 
 export interface OutstandingRow {
-  agency_id: string | null;
-  agency_name: string | null;
-  agency_type: string | null;
-  branch: Pick<Branch, "id" | "name" | "code"> | null;
-  ledger: OutstandingLedgerRef;
-  openingBalance: number | string;
-  debit: number | string;
-  credit: number | string;
-  total_outstanding: number;
-  balanceType: string;
-  gstin: string | null;
-  createdAt: string | Date;
-  updatedAt: string | Date;
+  agencyId: string;
+  agencyName: string;
+  vendorCode: string | null;
+  totalOutstanding: number;
+  bucket_0_30_days: OutstandingBucket;
+  bucket_31_60_days: OutstandingBucket;
+  bucket_61_90_days: OutstandingBucket;
+  bucket_91_plus_days: OutstandingBucket;
+}
+
+export interface OutstandingDetailRow {
+  vendorCode: string;
+  vendorName: string;
+  billNo: string | null;
+  billDate: string | Date | null;
+  dueDate: string | Date | null;
+  billAmount: number;
+  gstAmount: number;
+  tds: number;
+  paidAmount: number;
+  balanceAmount: number;
+  agingDays: number;
+  agingBucket: string;
+  branch: string | null;
+  remarks: string | null;
 }
 
 export interface OutstandingSummary {
   totalAgencies: number;
+  totalInvoices: number;
   totalOutstanding: number;
+  bucket_0_30_days: number;
+  bucket_31_60_days: number;
+  bucket_61_90_days: number;
+  bucket_91_plus_days: number;
 }
 
 export interface OutstandingReportResponse {
@@ -53,6 +130,7 @@ export interface OutstandingReportResponse {
   generatedAt: string | Date;
   summary: OutstandingSummary;
   rows: OutstandingRow[];
+  detailRows: OutstandingDetailRow[];
 }
 
 export interface GetOutstandingReportParams {

@@ -72,6 +72,56 @@ function toNumber(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Per-bucket invoice fields arrive either as numbers (computed server-side)
+ * or as Prisma-serialized strings. We cast inside the bucket to keep the
+ * nested invoice records tidy. The full `invoice` object is left largely
+ * untouched — the page only needs a couple of computed sub-fields out of
+ * it. Numeric fields nested inside `invoice` are still Prisma strings,
+ * but the page doesn't read them — it's safe to leave them.
+ */
+function castBucket(
+  bucket: OutstandingReportResponse["rows"][number]["bucket_0_30_days"]
+): OutstandingReportResponse["rows"][number]["bucket_0_30_days"] {
+  return {
+    amount: toNumber(bucket?.amount),
+    invoices: (bucket?.invoices || []).map((inv) => ({
+      ...inv,
+      invoiceAgeDays: toNumber(inv.invoiceAgeDays),
+      grandTotal: toNumber(inv.grandTotal),
+      allocatedAmount: toNumber(inv.allocatedAmount),
+      outstandingAmount: toNumber(inv.outstandingAmount),
+    })),
+  };
+}
+
+function castRow(
+  row: OutstandingReportResponse["rows"][number]
+): OutstandingReportResponse["rows"][number] {
+  return {
+    ...row,
+    totalOutstanding: toNumber(row.totalOutstanding),
+    bucket_0_30_days: castBucket(row.bucket_0_30_days),
+    bucket_31_60_days: castBucket(row.bucket_31_60_days),
+    bucket_61_90_days: castBucket(row.bucket_61_90_days),
+    bucket_91_plus_days: castBucket(row.bucket_91_plus_days),
+  };
+}
+
+function castDetailRow(
+  row: OutstandingReportResponse["detailRows"][number]
+): OutstandingReportResponse["detailRows"][number] {
+  return {
+    ...row,
+    billAmount: toNumber(row.billAmount),
+    gstAmount: toNumber(row.gstAmount),
+    tds: toNumber(row.tds),
+    paidAmount: toNumber(row.paidAmount),
+    balanceAmount: toNumber(row.balanceAmount),
+    agingDays: toNumber(row.agingDays),
+  };
+}
+
 function castOutstanding(
   r: OutstandingReportResponse
 ): OutstandingReportResponse {
@@ -79,15 +129,15 @@ function castOutstanding(
     ...r,
     summary: {
       totalAgencies: r.summary?.totalAgencies ?? 0,
+      totalInvoices: r.summary?.totalInvoices ?? 0,
       totalOutstanding: toNumber(r.summary?.totalOutstanding),
+      bucket_0_30_days: toNumber(r.summary?.bucket_0_30_days),
+      bucket_31_60_days: toNumber(r.summary?.bucket_31_60_days),
+      bucket_61_90_days: toNumber(r.summary?.bucket_61_90_days),
+      bucket_91_plus_days: toNumber(r.summary?.bucket_91_plus_days),
     },
-    rows: (r.rows || []).map((row) => ({
-      ...row,
-      openingBalance: toNumber(row.openingBalance),
-      debit: toNumber(row.debit),
-      credit: toNumber(row.credit),
-      total_outstanding: toNumber(row.total_outstanding),
-    })),
+    rows: (r.rows || []).map(castRow),
+    detailRows: (r.detailRows || []).map(castDetailRow),
   };
 }
 

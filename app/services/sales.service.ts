@@ -42,29 +42,88 @@ export interface GetSalesParams {
   branchId?: string;
 }
 
-// Payload matches backend API contract
+/**
+ * Mirrors POST /api/sales/create. Items are FLAT — each row is exactly
+ * one (product, batch) pair carrying `quantity` and an optional
+ * `unitPrice` override. To allocate quantity for a single product from
+ * N batches, send N items. The backend computes GST / totals itself
+ * from the resolved batch + product + agency branch-state.
+ *
+ * Wire shape (matches `SalesItemPayload` in `sales.service.ts`):
+ *
+ * {
+ *   agencyId, branchId,
+ *   invoiceNo?, invoiceDate?, remarks?, voucherType?, otherReference?,
+ *   roundOffAmount?, suppliersRef?, deliveryNote?,
+ *   buyerOrderNo?, buyerOrderDate?, despatchDocNo?, despatchDocDate?,
+ *   despatchThrough?, destination?,
+ *   transport?: { ... },
+ *   items: [{ productId, batchId, quantity, unit, unitPrice? }]
+ * }
+ */
+export interface SaleTransportDetails {
+  /** Delivery — fields not currently filled remain blank strings. */
+  deliveryNote?: string;
+  buyerOrderNo?: string;
+  buyerOrderDate?: string;
+  termsOfDelivery?: string;
+
+  /** Dispatch. */
+  despatchDocNo?: string;
+  despatchDocDate?: string;
+  despatchThrough?: string;
+  destination?: string;
+  vehicleOrFlightNo?: string;
+
+  /** Export. */
+  portOfLoading?: string;
+  portOfDischarge?: string;
+  countryTo?: string;
+  shippingNo?: string;
+  shippingDate?: string;
+  portCode?: string;
+
+  /** Convenience aliases kept for the form (mapped into the matching
+      backend field on submit). */
+  lrNo?: string;
+  receiptNoteNo?: string;
+  receiptNoteDate?: string;
+  purchaseOrderNo?: string;
+  purchaseOrderDate?: string;
+  dispatchThrough?: string;
+  billOfEntryNo?: string;
+  billOfEntryDate?: string;
+}
+
+export interface CreateSalesItem {
+  productId: string;
+  batchId: string;
+  quantity: number;
+  unit: "KG" | "LTR";
+  /** Optional override; backend falls back to the product's per-unit
+   *  default price when omitted. */
+  unitPrice?: number;
+}
+
 export interface CreateSalesPayload {
   agencyId: string;
   branchId: string;
-  items: {
-    productId: string;
-    batchId: string;
-    quantity: number;
-    unit: "KG" | "LTR";
-    unitPrice?: number;
-  }[];
+  invoiceNo?: string;
+  invoiceDate?: string;
   remarks?: string;
-  deliveryNote:string;
-  suppliersRef: string;
-  otherReference:string;
-  buyerOrderNo: string;
-  buyerOrderDate: string,
-  despatchDocNo: string,
-  despatchDocDate: string,
-  despatchThrough: string,
-  destination: string,
-  invoiceDate?: string,
-
+  voucherType?: string;
+  otherReference?: string;
+  roundOffAmount?: number;
+  suppliersRef?: string;
+  deliveryNote?: string;
+  buyerOrderNo?: string;
+  buyerOrderDate?: string;
+  despatchDocNo?: string;
+  despatchDocDate?: string;
+  despatchThrough?: string;
+  destination?: string;
+  transport?: SaleTransportDetails;
+  items: CreateSalesItem[];
 }
 
 export interface ApproveSalesPayload {

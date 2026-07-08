@@ -14,6 +14,7 @@ import { createPurchase } from "@/app/store/purchasesSlice";
 import { agencyApi } from "@/app/services/agency.service";
 import { productApi } from "@/app/services/product.service";
 import { branchApi } from "@/app/services/branch.service";
+import type { PurchaseTransportDetails } from "@/app/services/purchase.service";
 import { Agency } from "@/app/types/agency";
 import { Product } from "@/app/types/product";
 import { Branch } from "@/app/types/branch";
@@ -27,6 +28,55 @@ interface PurchaseItem {
   unit: "KG" | "LTR";
   purchasePrice: number;
   gst: number | null;
+}
+
+const emptyTransport: PurchaseTransportDetails = {
+  purchaseOrderNo: "",
+  purchaseOrderDate: "",
+  receiptNoteNo: "",
+  receiptNoteDate: "",
+  lrNo: "",
+  dispatchThrough: "",
+  destination: "",
+  vehicleOrFlightNo: "",
+  portOfLoading: "",
+  portOfDischarge: "",
+  countryTo: "",
+  billOfEntryNo: "",
+  billOfEntryDate: "",
+  portCode: "",
+};
+
+// Convert "YYYY-MM-DD" → "2026-07-06T00:00:00.000Z" so the backend
+// receives an ISO timestamp that matches its expected `invoiceDate`
+// type. Returns the empty string for blank input so callers can decide
+// whether to include the field in the payload.
+function dateInputToIso(d: string): string {
+  if (!d) return "";
+  return `${d}T00:00:00.000Z`;
+}
+
+// Drop empty / whitespace-only fields from a transport object so the
+// payload only carries what the user actually filled in. Matches the
+// curl sample where unused dates are simply omitted ("" would also be
+// accepted, but keeping the payload clean avoids surprising the server).
+function compactTransport(
+  t: PurchaseTransportDetails
+): PurchaseTransportDetails | undefined {
+  const cleaned: PurchaseTransportDetails = {};
+  let dirty = false;
+  (Object.keys(emptyTransport) as Array<keyof PurchaseTransportDetails>).forEach(
+    (k) => {
+      const v = t[k];
+      if (typeof v === "string" && v.trim() !== "") {
+        cleaned[k] = v.trim();
+        dirty = true;
+      } else if (typeof v === "string") {
+        cleaned[k] = "";
+      }
+    }
+  );
+  return dirty ? cleaned : undefined;
 }
 
 export default function NewPurchasePage() {
@@ -43,8 +93,15 @@ export default function NewPurchasePage() {
     agencyId: "",
     branchId: "",
     invoiceNo: "",
+    invoiceDate: "",
+    supplierInvoiceDate: "",
+    otherReference: "",
+    roundOffAmount: "" as string, // string in state for the input, number on submit
     remarks: "",
   });
+
+  const [transport, setTransport] =
+    React.useState<PurchaseTransportDetails>({ ...emptyTransport });
 
   const [items, setItems] = React.useState<PurchaseItem[]>([
     {
@@ -129,19 +186,26 @@ export default function NewPurchasePage() {
     setItems(items.filter((item) => item.id !== id));
   };
 
-  const handleItemChange = (id: string, field: keyof PurchaseItem, value: any) => {
+  const handleItemChange = (id: string, field: keyof PurchaseItem, value: unknown) => {
     setItems(
       items.map((item) => {
         if (item.id === id) {
           if (field === "productId") {
-            const gst = getProductGST(value);
-            return { ...item, [field]: value, gst };
+            const gst = getProductGST(value as string);
+            return { ...item, [field]: value as string, gst };
           }
-          return { ...item, [field]: value };
+          return { ...item, [field]: value as never };
         }
         return item;
       })
     );
+  };
+
+  const handleTransportChange = (
+    field: keyof PurchaseTransportDetails,
+    value: string
+  ) => {
+    setTransport((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -152,8 +216,15 @@ export default function NewPurchasePage() {
       return;
     }
 
+    if (!formData.invoiceNo.trim()) {
+      addToast("Invoice number is required", "error");
+      return;
+    }
+
     // Validate items
-    const validItems = items.filter((item) => item.productId && item.batchNo && item.quantity && item.purchasePrice);
+    const validItems = items.filter(
+      (item) => item.productId && item.batchNo && item.quantity && item.purchasePrice
+    );
     if (validItems.length === 0) {
       addToast("Please add at least one valid product item", "error");
       return;
@@ -161,26 +232,46 @@ export default function NewPurchasePage() {
 
     setLoading(true);
     try {
+      const roundOffParsed = formData.roundOffAmount.trim() === ""
+        ? undefined
+        : Number(formData.roundOffAmount);
+      const compactTransport$1 = compactTransport(transport);
+
       await dispatch(
         createPurchase({
           agencyId: formData.agencyId,
           branchId: formData.branchId,
-          invoiceNo: formData.invoiceNo || `PI-${Date.now()}`,
+          invoiceNo: formData.invoiceNo.trim(),
+          invoiceDate: dateInputToIso(formData.invoiceDate) || undefined,
+          supplierInvoiceDate:
+            dateInputToIso(formData.supplierInvoiceDate) || undefined,
+          otherReference: formData.otherReference.trim() || undefined,
+          roundOffAmount:
+            roundOffParsed !== undefined && Number.isFinite(roundOffParsed)
+              ? roundOffParsed
+              : undefined,
+          remarks: formData.remarks.trim() || undefined,
+          transport: compactTransport$1,
           items: validItems.map((item) => ({
             productId: item.productId,
-            batchNo: item.batchNo,
+            batchNo: item.batchNo.trim(),
             quantity: item.quantity,
             unit: item.unit,
             purchasePrice: item.purchasePrice,
           })),
-          remarks: formData.remarks,
         })
       ).unwrap();
 
       addToast("Purchase created successfully", "success");
       router.push("/purchase-sales");
-    } catch (err: any) {
-      addToast(err || "Failed to create purchase", "error");
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === "string"
+          ? err
+          : "Failed to create purchase";
+      addToast(msg, "error");
     } finally {
       setLoading(false);
     }
@@ -230,14 +321,15 @@ export default function NewPurchasePage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Header Section */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="invoiceNo">Invoice Number*</Label>
+                <Label htmlFor="invoiceNo">Invoice Number *</Label>
                 <Input
                   id="invoiceNo"
                   value={formData.invoiceNo}
-                  onChange={(e) => setFormData({ ...formData, invoiceNo: e.target.value })}
-                  placeholder="Write the Invoice no."
+                  onChange={(e) =>
+                    setFormData({ ...formData, invoiceNo: e.target.value })
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -253,8 +345,60 @@ export default function NewPurchasePage() {
                   options={branches.map<DataSelectOption>((branch) => ({
                     value: branch.id,
                     label: branch.name,
-                    description: [branch.code, branch.city, branch.state].filter(Boolean).join(" • "),
+                    description: [branch.code, branch.city, branch.state]
+                      .filter(Boolean)
+                      .join(" • "),
                   }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="invoiceDate">Invoice Date</Label>
+                <Input
+                  id="invoiceDate"
+                  type="date"
+                  value={formData.invoiceDate}
+                  onChange={(e) =>
+                    setFormData({ ...formData, invoiceDate: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="supplierInvoiceDate">Supplier Invoice Date</Label>
+                <Input
+                  id="supplierInvoiceDate"
+                  type="date"
+                  value={formData.supplierInvoiceDate}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      supplierInvoiceDate: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="otherReference">Other Reference</Label>
+                <Input
+                  id="otherReference"
+                  value={formData.otherReference}
+                  onChange={(e) =>
+                    setFormData({ ...formData, otherReference: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="roundOffAmount">Round Off</Label>
+                <Input
+                  id="roundOffAmount"
+                  type="number"
+                  step="0.01"
+                  value={formData.roundOffAmount}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      roundOffAmount: e.target.value,
+                    })
+                  }
                 />
               </div>
             </div>
@@ -314,7 +458,7 @@ export default function NewPurchasePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((item, index) => {
+                    {items.map((item) => {
                       const amount = calculateTotalAmount(item.quantity, item.purchasePrice);
                       const gstAmount = calculateGSTAmount(amount, item.gst);
                       const totalWithGST = calculateTotalWithGST(amount, gstAmount);
@@ -342,7 +486,6 @@ export default function NewPurchasePage() {
                             <Input
                               value={item.batchNo}
                               onChange={(e) => handleItemChange(item.id, "batchNo", e.target.value)}
-                              placeholder="Batch"
                               className="text-sm"
                               required
                             />
@@ -429,6 +572,154 @@ export default function NewPurchasePage() {
               </div>
             </div>
 
+            {/* Transport Details */}
+            <div className="space-y-4">
+              <h4 className="font-semibold text-gray-900">Transport & Reference</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="purchaseOrderNo">Purchase Order No</Label>
+                  <Input
+                    id="purchaseOrderNo"
+                    value={transport.purchaseOrderNo ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("purchaseOrderNo", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="purchaseOrderDate">Purchase Order Date</Label>
+                  <Input
+                    id="purchaseOrderDate"
+                    type="date"
+                    value={transport.purchaseOrderDate ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("purchaseOrderDate", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="receiptNoteNo">Receipt Note No</Label>
+                  <Input
+                    id="receiptNoteNo"
+                    value={transport.receiptNoteNo ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("receiptNoteNo", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="receiptNoteDate">Receipt Note Date</Label>
+                  <Input
+                    id="receiptNoteDate"
+                    type="date"
+                    value={transport.receiptNoteDate ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("receiptNoteDate", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lrNo">LR No</Label>
+                  <Input
+                    id="lrNo"
+                    value={transport.lrNo ?? ""}
+                    onChange={(e) => handleTransportChange("lrNo", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dispatchThrough">Dispatch Through</Label>
+                  <Input
+                    id="dispatchThrough"
+                    value={transport.dispatchThrough ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("dispatchThrough", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="destination">Destination</Label>
+                  <Input
+                    id="destination"
+                    value={transport.destination ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("destination", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vehicleOrFlightNo">Vehicle / Flight No</Label>
+                  <Input
+                    id="vehicleOrFlightNo"
+                    value={transport.vehicleOrFlightNo ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("vehicleOrFlightNo", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="portOfLoading">Port of Loading</Label>
+                  <Input
+                    id="portOfLoading"
+                    value={transport.portOfLoading ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("portOfLoading", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="portOfDischarge">Port of Discharge</Label>
+                  <Input
+                    id="portOfDischarge"
+                    value={transport.portOfDischarge ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("portOfDischarge", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="countryTo">Country (To)</Label>
+                  <Input
+                    id="countryTo"
+                    value={transport.countryTo ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("countryTo", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="billOfEntryNo">Bill of Entry No</Label>
+                  <Input
+                    id="billOfEntryNo"
+                    value={transport.billOfEntryNo ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("billOfEntryNo", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="billOfEntryDate">Bill of Entry Date</Label>
+                  <Input
+                    id="billOfEntryDate"
+                    type="date"
+                    value={transport.billOfEntryDate ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("billOfEntryDate", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="portCode">Port Code</Label>
+                  <Input
+                    id="portCode"
+                    value={transport.portCode ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("portCode", e.target.value)
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Remarks */}
             <div className="space-y-2">
               <Label htmlFor="remarks">Remarks</Label>
@@ -436,7 +727,6 @@ export default function NewPurchasePage() {
                 id="remarks"
                 value={formData.remarks}
                 onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
-                placeholder="Optional remarks"
                 rows={3}
               />
             </div>

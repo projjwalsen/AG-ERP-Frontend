@@ -11,6 +11,44 @@ export type TransactionDirection = "INWARD" | "OUTWARD";
 export type TransactionStatus = "PENDING" | "APPROVED" | "REJECTED";
 export type TransactionPaymentType = "NORMAL" | "THIRD_PARTY";
 /**
+ * Settlement type the backend expects on create/update. The previous
+ * "3rd Party Transaction" toggle used `paymentType: "THIRD_PARTY"`; the
+ * new flow asks the user to pick *how* the payment is settled:
+ *
+ *   - INVOICE_TO_INVOICE  → apply the payment against one specific invoice
+ *                           (sale for INWARD, purchase for OUTWARD). The
+ *                           transaction amount MUST equal the invoice's
+ *                           outstanding — server-enforced.
+ *
+ *   - LUMPSUM             → apply a single amount that gets FIFO-allocated
+ *                           across the primary agency's outstanding
+ *                           invoices AND the third-party counter-party's
+ *                           invoices on approval. Requires a third-party
+ *                           agency; primary and third-party agencies must
+ *                           differ; both must have enough outstanding for
+ *                           the requested amount.
+ */
+export type SettlementType = "INVOICE_TO_INVOICE" | "LUMPSUM";
+
+export const SETTLEMENT_TYPE_OPTIONS: {
+  value: SettlementType;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "INVOICE_TO_INVOICE",
+    label: "Invoice to Invoice",
+    description:
+      "Settle the payment against a single invoice. The amount must match the invoice's outstanding.",
+  },
+  {
+    value: "LUMPSUM",
+    label: "Lumpsum",
+    description:
+      "Apply a single amount that gets FIFO-allocated across both the primary and counter-party agency invoices on approval.",
+  },
+];
+/**
  * Legacy ONLINE / OFFLINE bucket kept only for display in read paths where
  * the server hasn't migrated to `paymentThrough` yet. New payloads should
  * send `paymentThrough` instead.
@@ -24,6 +62,11 @@ export type PaymentMode = "ONLINE" | "OFFLINE";
  *   - CHEQUE | DD              → referenceNo       is required
  *   - CASH                     → neither is required
  *   - 3rd Party agency         → no paymentThrough at all (treated as CASH)
+ *
+ * Note: this list mirrors the OpenAPI scalar (`CASH / CHEQUE / DD / NEFT /
+ * RTGS / UPI`). The backend's Prisma enum also includes `BANK_DEPOSIT`,
+ * which the documented `/create` schema accepts but the form dropdown
+ * doesn't surface — extend `PAYMENT_THROUGH_OPTIONS` when you need it.
  */
 export type PaymentThrough = "CASH" | "CHEQUE" | "DD" | "NEFT" | "RTGS" | "UPI";
 
@@ -82,6 +125,20 @@ export interface Transaction {
   agencyId: string | null;
   paymentType: TransactionPaymentType;
   thirdPartyAgencyId: string | null;
+  /**
+   * Settlement type carried by the new flow. Older rows predating the
+   * migration were stored with `paymentType: "THIRD_PARTY"` instead —
+   * the form synthesises a settlement type from `paymentType` for those
+   * (THIRD_PARTY → LUMPSUM) when reading back.
+   */
+  settlementType?: SettlementType | null;
+  /**
+   * For invoice-to-invoice settlements, the resolved invoice id. The
+   * server enforces INWARD → `saleId` and OUTWARD → `purchaseId`, but
+   * carries both columns on the row regardless.
+   */
+  saleId?: string | null;
+  purchaseId?: string | null;
   amount: number;
   paymentMode: PaymentMode;
   /**
@@ -184,28 +241,43 @@ export interface GetTransactionsParams {
 export interface CreateTransactionPayload {
   branchId: string;
   direction: TransactionDirection;
+  /**
+   * New field. Drives which validations the backend runs at create time.
+   * Required for non-suspense transactions.
+   */
+  settlementType: SettlementType;
   suspense: boolean;
   agencyId?: string;
-  paymentType: TransactionPaymentType;
-  thirdPartyAgencyId?: string;
-  amount: number;
   /**
-   * Required field — instrument-level enum (CASH / CHEQUE / DD / NEFT /
-   * RTGS / UPI). Decides which reference field below is required.
+   * Required when settlementType === 'LUMPSUM'. Backend rejects
+   * third-party for invoice-to-invoice settlements.
    */
+  thirdPartyAgencyId?: string;
+  /**
+   * Required when settlementType === 'INVOICE_TO_INVOICE' and
+   * direction === 'INWARD'. Populated via /api/transactions/invoices.
+   * Mutually exclusive with purchaseId.
+   */
+  saleId?: string;
+  /**
+   * Required when settlementType === 'INVOICE_TO_INVOICE' and
+   * direction === 'OUTWARD'. Mutually exclusive with saleId.
+   */
+  purchaseId?: string;
   paymentThrough: PaymentThrough;
   /**
    * Channel-level dropdown (ONLINE / OFFLINE). Sent alongside
-   * `paymentThrough`; not used for validation.
+   * paymentThrough; not used for validation.
    */
   paymentMode: PaymentMode;
+  amount: number;
   /**
    * Bank UTR / IMPS / UPI reference — populated for NEFT / RTGS / UPI
    * (and labelled "Transaction No" in the UI).
    */
   transactionRefNo?: string;
   /**
-   * Cheque or DD instrument number — populated for CHEQUE / DD
+   * Cheque / DD instrument number — populated for CHEQUE / DD
    * (and labelled "Reference No" in the UI).
    */
   referenceNo?: string;
@@ -215,10 +287,12 @@ export interface CreateTransactionPayload {
 export interface UpdateTransactionPayload {
   branchId?: string;
   direction?: TransactionDirection;
+  settlementType?: SettlementType;
   suspense?: boolean;
   agencyId?: string;
-  paymentType?: TransactionPaymentType;
   thirdPartyAgencyId?: string;
+  saleId?: string;
+  purchaseId?: string;
   amount?: number;
   paymentThrough?: PaymentThrough;
   paymentMode?: PaymentMode;
@@ -227,6 +301,51 @@ export interface UpdateTransactionPayload {
   remarks?: string;
 }
 
+export interface OutstandingInvoice {
+  id: string;
+  invoiceNo: string | null;
+  invoiceDate?: string | Date | null;
+  invoiceType: "SALE" | "PURCHASE";
+  grandTotal: number;
+  allocatedAmount: number;
+  outstandingAmount: number;
+  fullySettled: boolean;
+  partiallySettled: boolean;
+  agencyId: string;
+  branchId: string;
+}
+
+export interface FifoInvoicePreview {
+  invoiceId: string;
+  invoiceNo: string | null;
+  invoiceType: "SALE" | "PURCHASE";
+  invoiceDate: string | Date;
+  fifoOrder: number;
+  totalAmount: number;
+  outstandingAmount: number;
+  payingAmount: number;
+  remainingOutstanding: number;
+  settlementStatus: "FULLY_SETTLED" | "PARTIALLY_SETTLED";
+}
+
+export interface FifoAgencyPreview {
+  agency: { id: string; name: string };
+  requestedAmount: number;
+  allocatedAmount: number;
+  unallocatedAmount: number;
+  canProceed: boolean;
+  invoices: FifoInvoicePreview[];
+}
+
+export interface FifoPreviewResponse {
+  settlementType: "LUMPSUM";
+  direction: TransactionDirection;
+  requestedAmount: number;
+  canProceed: boolean;
+  reason: string | null;
+  primaryAgency: FifoAgencyPreview;
+  thirdPartyAgency: FifoAgencyPreview;
+}
 export interface RejectTransactionPayload {
   transactionId: string;
   remarks: string;

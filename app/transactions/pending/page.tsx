@@ -224,7 +224,7 @@ export default function PendingAuthenticationPage() {
             payload: {
               agencyId: edit.agencyId || undefined,
               thirdPartyAgencyId: edit.thirdPartyAgencyId ?? undefined,
-              paymentType: edit.paymentType,
+              settlementType: edit.settlementType,
               paymentThrough: edit.paymentThrough,
               paymentMode: edit.paymentMode,
               transactionRefNo: edit.transactionRefNo || undefined,

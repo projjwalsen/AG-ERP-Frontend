@@ -31,6 +31,8 @@ import {
   PaymentMode,
   PaymentThrough,
   PAYMENT_THROUGH_OPTIONS,
+  SETTLEMENT_TYPE_OPTIONS,
+  SettlementType,
   Transaction,
   TransactionDirection,
   requiredReferenceField,
@@ -49,7 +51,13 @@ import { AgencyBalanceStrip, BalanceMetric } from "./AgencyBalanceStrip";
 export interface AuthenticationEdit {
   agencyId: string;
   thirdPartyAgencyId: string | null;
-  paymentType: "NORMAL" | "THIRD_PARTY";
+  /**
+   * Mirrors the new flow on the create form: managers reconciling a
+   * voucher can either keep it as "Invoice to Invoice" against the
+   * invoice that was settled at creation, or flip it to "Lumpsum"
+   * (which requires a counter-party).
+   */
+  settlementType: SettlementType;
   paymentThrough: PaymentThrough;
   paymentMode: PaymentMode;
   transactionRefNo: string;
@@ -141,10 +149,18 @@ export function AuthenticationModal({
     setEdit({
       agencyId: transaction.agencyId ?? "",
       thirdPartyAgencyId: transaction.thirdPartyAgencyId ?? null,
-      paymentType: transaction.paymentType,
-      // For 3rd party the form always sends CASH. For NORMAL fall back
-      // to whatever the row carries (or CASH if neither set).
+      // Map the legacy `paymentType` field to the new settlement type
+      // so old rows still open cleanly. New rows carry `settlementType`
+      // directly and we prefer that when present.
+      settlementType:
+        transaction.settlementType ??
+        (transaction.paymentType === "THIRD_PARTY"
+          ? "LUMPSUM"
+          : "INVOICE_TO_INVOICE"),
+      // For Lumpsum the form auto-fills CASH; for Invoice-to-Invoice we
+      // keep whatever the row carries (or CASH if neither set).
       paymentThrough:
+        transaction.settlementType === "LUMPSUM" ||
         transaction.paymentType === "THIRD_PARTY"
           ? "CASH"
           : (transaction.paymentThrough as PaymentThrough) ?? "CASH",
@@ -208,14 +224,14 @@ export function AuthenticationModal({
   // switcher (branch is locked at creation time).
 
   // ------- form derivation -------
-  const isThirdParty = edit.paymentType === "THIRD_PARTY";
-  const refField = isThirdParty
+  const isLumpsum = edit.settlementType === "LUMPSUM";
+  const refField = isLumpsum
     ? null
     : edit.paymentThrough
     ? requiredReferenceField(edit.paymentThrough)
     : null;
   const transactionNoRequired =
-    !isThirdParty && edit.paymentThrough !== "CASH";
+    !isLumpsum && edit.paymentThrough !== "CASH";
 
   // Selected agency object (for the strip + 3rd-party exclusion).
   const selectedAgency = agencies.find((a) => a.id === edit.agencyId) || null;
@@ -272,7 +288,7 @@ export function AuthenticationModal({
     if (isSuspense && !edit.agencyId) {
       e.agencyId = "Please pick an agency to reconcile this suspense entry";
     }
-    if (!isThirdParty) {
+    if (!isLumpsum) {
       if (!edit.paymentThrough) {
         e.paymentThrough = "Payment Through is required";
       } else {
@@ -293,9 +309,9 @@ export function AuthenticationModal({
     if (!(edit.amount > 0)) {
       e.amount = "Amount must be greater than zero";
     }
-    if (isThirdParty && !edit.thirdPartyAgencyId) {
+    if (isLumpsum && !edit.thirdPartyAgencyId) {
       e.thirdPartyAgencyId =
-        "3rd Party Agency is mandatory for 3rd Party Transactions";
+        "Counter-party agency is required for Lumpsum settlement";
     }
     return e;
   })();
@@ -482,56 +498,50 @@ export function AuthenticationModal({
                     )}
                   </div>
 
-                  {/* Row 2: 3rd Party toggle + (optional) 3rd party select */}
+                  {/* Row 2: Settlement type toggle */}
                   <div className="space-y-1.5">
-                    <Label>3rd Party Transaction</Label>
+                    <Label>Settlement Type</Label>
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setEdit((s) =>
-                            s
-                              ? {
-                                  ...s,
-                                  paymentType: "NORMAL",
-                                  thirdPartyAgencyId: null,
-                                }
-                              : s
-                          )
-                        }
-                        className={`flex-1 flex items-center justify-center gap-2 border rounded-lg px-3 py-1.5 text-sm font-medium ${
-                          !isThirdParty
-                            ? "border-green-500 bg-green-50 text-green-700"
-                            : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                        }`}
-                      >
-                        No
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setEdit((s) =>
-                            s
-                              ? {
-                                  ...s,
-                                  paymentType: "THIRD_PARTY",
-                                  // CASH is the canonical 3rd-party mode.
-                                  paymentThrough: "CASH",
-                                }
-                              : s
-                          )
-                        }
-                        className={`flex-1 flex items-center justify-center gap-2 border rounded-lg px-3 py-1.5 text-sm font-medium ${
-                          isThirdParty
-                            ? "border-purple-500 bg-purple-50 text-purple-700"
-                            : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                        }`}
-                      >
-                        Yes — 3rd Party
-                      </button>
+                      {SETTLEMENT_TYPE_OPTIONS.map((opt) => {
+                        const active = edit.settlementType === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() =>
+                              setEdit((s) =>
+                                s
+                                  ? {
+                                      ...s,
+                                      settlementType: opt.value,
+                                      // Lumpsum auto-fills CASH as the
+                                      // canonical payment-through for
+                                      // counter-party transfers.
+                                      paymentThrough:
+                                        opt.value === "LUMPSUM"
+                                          ? "CASH"
+                                          : s.paymentThrough,
+                                      thirdPartyAgencyId:
+                                        opt.value === "LUMPSUM"
+                                          ? s.thirdPartyAgencyId
+                                          : null,
+                                    }
+                                  : s
+                              )
+                            }
+                            className={`flex-1 border rounded-lg px-3 py-1.5 text-sm font-medium ${
+                              active
+                                ? "border-green-500 bg-green-50 text-green-700"
+                                : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
                     </div>
 
-                    {isThirdParty && (
+                    {isLumpsum && (
                       <div className="space-y-1.5">
                         <select
                           value={edit.thirdPartyAgencyId ?? ""}
@@ -577,7 +587,7 @@ export function AuthenticationModal({
                 </div>
 
                 {/* Row 3: Payment block — hidden for 3rd party */}
-                {!isThirdParty && (
+                {!isLumpsum && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
@@ -795,11 +805,11 @@ export function AuthenticationModal({
                     {direction}{" "}
                     <span className="text-gray-400">•</span>{" "}
                     {paymentLabel}
-                    {transaction.thirdPartyAgencyId && !isThirdParty
+                    {transaction.thirdPartyAgencyId && !isLumpsum
                       ? " (3rd party was previously set)"
                       : null}
                   </span>
-                  {isThirdParty && (
+                  {isLumpsum && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-100 text-purple-700">
                       <Lock className="h-2.5 w-2.5" />
                       3rd Party — CASH

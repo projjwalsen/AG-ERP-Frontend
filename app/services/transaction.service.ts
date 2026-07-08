@@ -10,12 +10,29 @@ import {
   GetTransactionsParams,
   CreateTransactionPayload,
   UpdateTransactionPayload,
+  OutstandingInvoice,
+  FifoPreviewResponse,
 } from "@/app/types/transaction";
 
 export interface GetOutstandingParams {
   agencyId?: string;
   branchId?: string;
   direction?: TransactionDirection;
+}
+
+export interface GetOutstandingInvoicesParams {
+  agencyId?: string;
+  branchId?: string;
+  direction?: TransactionDirection;
+  search?: string;
+}
+
+export interface PreviewFifoParams {
+  primaryAgencyId?: string;
+  thirdPartyAgencyId?: string;
+  branchId?: string;
+  direction?: TransactionDirection;
+  amount?: number;
 }
 
 export const transactionApi = {
@@ -128,6 +145,52 @@ export const transactionApi = {
       ? `api/transactions/outstanding?${query}`
       : "api/transactions/outstanding";
     return apiFetch<AgencyOutstanding>(url);
+  },
+
+  /**
+   * GET /api/transactions/invoices?agencyId=...&branchId=...&direction=...
+   *
+   * Returns the outstanding invoices (Sales for INWARD, Purchases for
+   * OUTWARD) eligible for an invoice-to-invoice settlement against the
+   * given agency + branch. Each row carries `outstandingAmount` — the
+   * amount the form must use as the transaction total. The list is
+   * already filtered server-side to drop zero-outstanding entries.
+   *
+   * NOTE: the backend spreads the underlying Prisma row, so the wire
+   * shape is "Sale-shaped" or "Purchase-shaped". The slice / form
+   * normalises both into `OutstandingInvoice` via the field extractor
+   * (see `castInvoice` in transactionsSlice).
+   */
+  async getOutstandingInvoices(
+    params: GetOutstandingInvoicesParams
+  ): Promise<{ success: boolean; message: string; data?: OutstandingInvoice[] }> {
+    const queryParams = new URLSearchParams();
+    if (params.agencyId) queryParams.append("agencyId", params.agencyId);
+    if (params.branchId) queryParams.append("branchId", params.branchId);
+    if (params.direction) queryParams.append("direction", params.direction);
+    if (params.search) queryParams.append("search", params.search);
+    const query = queryParams.toString();
+    const url = query
+      ? `api/transactions/invoices?${query}`
+      : "api/transactions/invoices";
+    return apiFetch<OutstandingInvoice[]>(url);
+  },
+
+  /**
+   * POST /api/transactions/preview-fifo
+   *
+   * Read-only pre-flight for a lumpsum settlement: returns the FIFO
+   * allocation the backend will produce on approval, including a
+   * `canProceed` flag and a `reason` string when one of the two
+   * agencies doesn't have enough outstanding.
+   */
+  async previewFifoAllocation(
+    payload: PreviewFifoParams
+  ): Promise<{ success: boolean; message: string; data?: FifoPreviewResponse }> {
+    return apiFetch<FifoPreviewResponse>("api/transactions/preview-fifo", {
+      method: "POST",
+      body: payload,
+    });
   },
 
   // GET /api/transactions/all?export=true

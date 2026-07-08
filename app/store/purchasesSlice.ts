@@ -1,11 +1,17 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { purchaseApi } from "../services/purchase.service";
+import { purchaseApi, PurchaseTransportDetails } from "../services/purchase.service";
 import { Purchase, PurchasesListResponse } from "../types/purchase";
 
 export interface CreatePurchasePayload {
   agencyId: string;
   branchId: string;
   invoiceNo: string;
+  invoiceDate?: string;
+  supplierInvoiceDate?: string;
+  otherReference?: string;
+  roundOffAmount?: number;
+  remarks?: string;
+  transport?: PurchaseTransportDetails;
   items: {
     productId: string;
     batchNo: string;
@@ -13,7 +19,6 @@ export interface CreatePurchasePayload {
     unit: "KG" | "LTR";
     purchasePrice: number;
   }[];
-  remarks?: string;
 }
 
 export interface ApprovePurchasePayload {

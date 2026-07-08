@@ -8,6 +8,8 @@ import {
   Building2,
   Info,
   Lock,
+  Receipt,
+  Layers,
 } from "lucide-react";
 import {
   Card,
@@ -19,17 +21,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Agency,
   Branch,
   PaymentMode,
-  TransactionPaymentType as PaymentType,
   TransactionDirection,
   CreateTransactionPayload,
   AgencyOutstanding,
   PaymentThrough,
   PAYMENT_THROUGH_OPTIONS,
   requiredReferenceField,
+  SETTLEMENT_TYPE_OPTIONS,
+  SettlementType,
+  OutstandingInvoice,
+  FifoPreviewResponse,
+  FifoAgencyPreview,
+  FifoInvoicePreview,
 } from "@/app/types/transaction";
 import { AgencySelector, SUSPENSE_AGENCY_VALUE } from "./AgencySelector";
 import {
@@ -37,6 +45,7 @@ import {
   BalanceMetric,
 } from "./AgencyBalanceStrip";
 import { ThirdPartyAgencySection } from "./ThirdPartyAgencySection";
+import { formatCurrency, cn } from "@/lib/utils";
 
 export interface TransactionFormUser {
   id: string;
@@ -59,6 +68,20 @@ interface TransactionFormProps {
    * belongs to the counter-party, not the primary.
    */
   thirdPartyOutstanding: AgencyOutstanding | null;
+  /**
+   * Outstanding invoices for the *primary* agency, populated via the
+   * `/api/transactions/invoices` endpoint. Drawn as a radio list under
+   * the Invoice-to-Invoice settlement path.
+   */
+  outstandingInvoices: OutstandingInvoice[];
+  /**
+   * Latest FIFO projection for the Lumpsum settlement. When
+   * `canProceed` is false (or `reason` is set) the form shows a warning
+   * strip and disables submit. Cleared when the user edits amount /
+   * agency / 3rd-party.
+   */
+  fifoPreview: FifoPreviewResponse | null;
+  isFifoPreviewing: boolean;
   currentUser: TransactionFormUser;
   defaultBranchId?: string;
   /**
@@ -69,11 +92,29 @@ interface TransactionFormProps {
   agencyId?: string;
   isSubmitting?: boolean;
   onSubmit: (payload: CreateTransactionPayload) => void;
+  /**
+   * Called whenever the user changes a control that drives server-side
+   * data fetches (primary agency, branch, direction, settlement type,
+   * third-party agency). The page decides which thunks to dispatch.
+   */
   onContextChange?: (ctx: {
     agencyId?: string;
     branchId?: string;
     direction?: TransactionDirection;
     thirdPartyAgencyId?: string;
+    settlementType?: SettlementType;
+  }) => void;
+  /**
+   * Ask the page to preview what a lumpsum allocation will look like
+   * on approval. Debounced internally to avoid hammering the backend
+   * on every keystroke.
+   */
+  onRequestFifoPreview?: (params: {
+    primaryAgencyId?: string;
+    thirdPartyAgencyId?: string;
+    branchId?: string;
+    direction?: TransactionDirection;
+    amount?: number;
   }) => void;
 }
 
@@ -85,11 +126,150 @@ function thirdPartyMetric(direction: TransactionDirection): BalanceMetric {
   return direction === "INWARD" ? "RECEIVABLE" : "DUE";
 }
 
+/**
+ * Short debounce hook — used to throttle FIFO-preview requests as the
+ * user types into the Amount input. Falls back to invoking immediately
+ * after `delay` ms of inactivity.
+ */
+function useDebouncedCallback<A extends unknown[]>(
+  fn: (...args: A) => void,
+  delay: number
+): (...args: A) => void {
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stable = React.useRef(fn);
+  React.useEffect(() => {
+    stable.current = fn;
+  }, [fn]);
+  return React.useCallback(
+    (...args: A) => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => stable.current(...args), delay);
+    },
+    [delay]
+  );
+}
+
+function FifoPanel({
+  preview,
+  direction,
+  isLoading,
+}: {
+  preview: FifoPreviewResponse | null;
+  direction: TransactionDirection;
+  isLoading: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500">
+        Computing FIFO preview…
+      </div>
+    );
+  }
+  if (!preview) {
+    return (
+      <div className="rounded-md border border-dashed border-gray-200 p-3 text-xs text-gray-500 italic">
+        Enter an amount to preview the FIFO allocation across both
+        agencies.
+      </div>
+    );
+  }
+
+  const AgencyList = ({
+    label,
+    side,
+    data,
+  }: {
+    label: string;
+    side: "primary" | "thirdParty";
+    data: FifoAgencyPreview;
+  }) => (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs text-gray-600">
+        <span className="font-medium uppercase tracking-wide text-gray-500">
+          {label}
+        </span>
+        <span className="tabular-nums">
+          {formatCurrency(data.allocatedAmount)} /{" "}
+          {formatCurrency(data.requestedAmount)}
+        </span>
+      </div>
+      <div className="rounded-md border border-gray-200 bg-white">
+        {data.invoices.length === 0 ? (
+          <p className="px-3 py-3 text-xs text-gray-500 italic">
+            No invoices to allocate against.
+          </p>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {data.invoices.map((row: FifoInvoicePreview) => (
+              <li
+                key={row.invoiceId}
+                className="flex items-center justify-between px-3 py-2 text-xs"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-gray-700">
+                    {row.invoiceNo ?? row.invoiceId.slice(0, 8)}
+                  </span>
+                  <Badge
+                    variant="secondary"
+                    className={cn(
+                      "font-medium border-0",
+                      row.settlementStatus === "FULLY_SETTLED"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-amber-50 text-amber-700"
+                    )}
+                  >
+                    {row.settlementStatus === "FULLY_SETTLED"
+                      ? "Full"
+                      : "Partial"}
+                  </Badge>
+                </div>
+                <div className="tabular-nums text-gray-700">
+                  <span className="font-semibold text-gray-900">
+                    {formatCurrency(row.payingAmount)}
+                  </span>
+                  <span className="ml-2 text-gray-500">
+                    of {formatCurrency(row.outstandingAmount)}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-3">
+      {!preview.canProceed && preview.reason && (
+        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          {preview.reason}
+        </div>
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <AgencyList
+          label={direction === "INWARD" ? "Primary (Customer)" : "Primary (Vendor)"}
+          side="primary"
+          data={preview.primaryAgency}
+        />
+        <AgencyList
+          label={direction === "INWARD" ? "Third Party (Vendor)" : "Third Party (Customer)"}
+          side="thirdParty"
+          data={preview.thirdPartyAgency}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function TransactionForm({
   branches,
   agencies,
   outstanding,
   thirdPartyOutstanding,
+  outstandingInvoices,
+  fifoPreview,
+  isFifoPreviewing,
   currentUser,
   defaultBranchId,
   defaultDirection = "INWARD",
@@ -97,10 +277,10 @@ export function TransactionForm({
   isSubmitting = false,
   onSubmit,
   onContextChange,
+  onRequestFifoPreview,
 }: TransactionFormProps) {
   // Direction is locked to the prop — the parent decides it via
-  // `?direction=INWARD|OUTWARD` from the list-page tab. There is no
-  // in-form toggle any more.
+  // `?direction=INWARD|OUTWARD` from the list-page tab.
   const [type] = React.useState<TransactionDirection>(defaultDirection);
   const [branchId, setBranchId] = React.useState<string>(
     defaultBranchId || branches[0]?.id || ""
@@ -108,20 +288,32 @@ export function TransactionForm({
   const [agencyId, setAgencyId] = React.useState<string>(
     initialAgencyId || ""
   );
-  const [isThirdParty, setIsThirdParty] = React.useState<boolean>(false);
+
+  // -----------------------------------------------------------------
+  // Settlement type radio replaces the previous "3rd Party" toggle.
+  //
+  //   INVOICE_TO_INVOICE — single agency + single invoice (sale/purchase
+  //                        depending on direction). Amount is locked
+  //                        to invoice.outstandingAmount. No 3rd party.
+  //
+  //   LUMPSUM            — primary agency + a 3rd-party counter-party
+  //                        + free-form amount that gets FIFO-split on
+  //                        approval.
+  //
+  // The new flow removes the old `paymentType: "THIRD_PARTY"` mode.
+  // -----------------------------------------------------------------
+  const [settlementType, setSettlementType] =
+    React.useState<SettlementType>("INVOICE_TO_INVOICE");
+
   const [thirdPartyAgencyId, setThirdPartyAgencyId] = React.useState<string>("");
+
+  // INVOICE_TO_INVOICE: selected invoice id (string from the radio list).
+  const [selectedInvoiceId, setSelectedInvoiceId] = React.useState<string>("");
+
   const [paymentThrough, setPaymentThrough] =
     React.useState<PaymentThrough | "">("");
   const [paymentMode, setPaymentMode] = React.useState<PaymentMode>("ONLINE");
-  /**
-   * Bank UTR / IMPS / UPI ref. Populated for NEFT / RTGS / UPI and shown
-   * as the "Transaction No" field.
-   */
   const [transactionRefNo, setTransactionRefNo] = React.useState<string>("");
-  /**
-   * Cheque / DD instrument number. Populated for CHEQUE / DD and shown
-   * as the "Reference No" field.
-   */
   const [referenceNo, setReferenceNo] = React.useState<string>("");
   const [amount, setAmount] = React.useState<number>(0);
   const [remarks, setRemarks] = React.useState<string>("");
@@ -131,55 +323,67 @@ export function TransactionForm({
   const isSuspense = agencyId === SUSPENSE_AGENCY_VALUE;
   const realAgencyId = isSuspense ? "" : agencyId;
 
+  // For LUMPSUM the form auto-fills "CASH" as paymentThrough — the
+  // backend treats counter-party transfers as cash-equivalent.
+  const effectivePaymentThrough: PaymentThrough | "" = isSuspense
+    ? ""
+    : settlementType === "LUMPSUM"
+    ? "CASH"
+    : paymentThrough;
+
   const selectedBranch = branches.find((b) => b.id === branchId) || null;
   const selectedAgency = agencies.find((a) => a.id === realAgencyId) || null;
   const selectedThirdParty =
     agencies.find((a) => a.id === thirdPartyAgencyId) || null;
+  const selectedInvoice =
+    outstandingInvoices.find((i) => i.id === selectedInvoiceId) || null;
 
   const thirdPartyAgencies = React.useMemo(
     () => agencies.filter((a) => a.id !== realAgencyId),
     [agencies, realAgencyId]
   );
 
-  // Switching the primary agency must clear the 3rd party.
+  // Switching the primary agency must clear the 3rd party + invoice selection.
   React.useEffect(() => {
     setThirdPartyAgencyId("");
+    setSelectedInvoiceId("");
   }, [realAgencyId]);
 
-  // Suspense forces 3rd-party OFF.
+  // Switching settlement type invalidates cross-mode state.
   React.useEffect(() => {
-    if (isSuspense && isThirdParty) setIsThirdParty(false);
-  }, [isSuspense, isThirdParty]);
+    setSelectedInvoiceId("");
+    setErrors((prev) => ({ ...prev, settlementType: "" }));
+  }, [settlementType]);
 
-  // Toggling 3rd-party on clears the counterpart selection.
+  // Suspense disables settlement-type-driven fetches; clear the
+  // 3rd-party selection when suspending.
   React.useEffect(() => {
-    if (isThirdParty) {
-      setPaymentThrough("");
-      setTransactionRefNo("");
-      setReferenceNo("");
-    }
-  }, [isThirdParty]);
+    if (isSuspense) setThirdPartyAgencyId("");
+  }, [isSuspense]);
 
-  // Report the current selection up to the page so it can refetch outstanding.
-  // The key includes the 3rd-party id so a change there (even with the same
-  // primary agency) is reported — without that, the page would not know to
-  // hit `/outstanding` for the counter-party.
+  // Report context changes (including the new settlementType) up to the
+  // page so it can fan out the right thunks.
   const lastReportedKey = React.useRef<string>("");
   React.useEffect(() => {
     if (!onContextChange) return;
-    const reportedThirdPartyId = isThirdParty ? thirdPartyAgencyId : "";
-    const key = [branchId, agencyId, type, reportedThirdPartyId].join("|");
+    const reportedThirdPartyId =
+      settlementType === "LUMPSUM" ? thirdPartyAgencyId : "";
+    const key = [
+      branchId,
+      agencyId,
+      type,
+      settlementType,
+      reportedThirdPartyId,
+    ].join("|");
     if (key === lastReportedKey.current) return;
     lastReportedKey.current = key;
     onContextChange({
       branchId: branchId || undefined,
       agencyId: isSuspense ? undefined : realAgencyId || undefined,
       direction: type,
-      // Only forward the 3rd-party id when 3rd-party mode is on. When the
-      // user toggles 3rd-party off, sending an empty string tells the page
-      // to drop the previous fetch (the reducer keeps the stale value
-      // otherwise, so the strip would briefly show the old counter-party).
-      thirdPartyAgencyId: isThirdParty ? reportedThirdPartyId : undefined,
+      settlementType: isSuspense ? undefined : settlementType,
+      thirdPartyAgencyId:
+        settlementType === "LUMPSUM" ? reportedThirdPartyId || undefined : undefined,
     });
   }, [
     branchId,
@@ -187,18 +391,49 @@ export function TransactionForm({
     type,
     isSuspense,
     realAgencyId,
-    isThirdParty,
+    settlementType,
     thirdPartyAgencyId,
     onContextChange,
   ]);
 
-  // The backend's `/transactions/outstanding` endpoint returns two buckets:
-  //   - amountDue       → what the agency owes us (DUE Amount)
-  //   - amountReceivable → what we owe the agency (Amount Receivable)
-  // The mapping is fixed; the form's direction only decides *which* strip
-  // to surface (primary vs 3rd party), not which bucket feeds it.
-  // Legacy responses used `salesOutstanding` / `purchaseOutstanding` —
-  // kept as a fallback for older backend versions.
+  // ----- Lumpsum FIFO preview (debounced as the user types) -----
+  const debouncedRequestFifo = useDebouncedCallback(
+    (params: Parameters<NonNullable<typeof onRequestFifoPreview>>[0]) => {
+      onRequestFifoPreview?.(params);
+    },
+    350
+  );
+
+  React.useEffect(() => {
+    if (settlementType !== "LUMPSUM") return;
+    if (!onRequestFifoPreview) return;
+    debouncedRequestFifo({
+      primaryAgencyId: realAgencyId || undefined,
+      thirdPartyAgencyId: thirdPartyAgencyId || undefined,
+      branchId: branchId || undefined,
+      direction: type,
+      amount: Number.isFinite(amount) ? amount : 0,
+    });
+  }, [
+    settlementType,
+    realAgencyId,
+    thirdPartyAgencyId,
+    branchId,
+    type,
+    amount,
+    onRequestFifoPreview,
+    debouncedRequestFifo,
+  ]);
+
+  // ----- INVOICE_TO_INVOICE auto-fill -----
+  // Selecting an invoice locks amount = outstandingAmount and tells the
+  // user they're settling this exact bill.
+  React.useEffect(() => {
+    if (settlementType !== "INVOICE_TO_INVOICE") return;
+    if (!selectedInvoice) return;
+    setAmount(Number(selectedInvoice.outstandingAmount) || 0);
+  }, [settlementType, selectedInvoice]);
+
   const dueAmount = outstanding
     ? Number(
         outstanding.amountDue ??
@@ -209,14 +444,12 @@ export function TransactionForm({
   const pendingAmount = outstanding
     ? Number(
         outstanding.amountReceivable ??
-          (outstanding as { purchaseOutstanding?: number }).purchaseOutstanding ??
+          (outstanding as { purchaseOutstanding?: number })
+            .purchaseOutstanding ??
           0
       )
     : 0;
 
-  // 3rd-party balance comes from its own outstanding slot, fetched against
-  // the *counter-party* id — never the primary's. Until the counter-party
-  // is picked (or the response is still in flight) the strip renders 0.
   const thirdPartyDueAmount = thirdPartyOutstanding
     ? Number(
         thirdPartyOutstanding.amountDue ??
@@ -234,21 +467,19 @@ export function TransactionForm({
       )
     : 0;
 
-  // Which reference field is required (or none) for the current
-  // paymentThrough. 3rd party skips the payment block entirely.
-  const refField = isThirdParty
+  const refField = !effectivePaymentThrough
     ? null
-    : paymentThrough
-    ? requiredReferenceField(paymentThrough)
-    : null;
+    : requiredReferenceField(effectivePaymentThrough as PaymentThrough);
 
-  // Transaction No is mandatory for every Payment Through value except
-  // CASH (and the empty selection, which is handled by the
-  // `paymentThrough` required check below). For NEFT / RTGS / UPI it
-  // carries the UTR; for CHEQUE / DD it records the bank-side ref for
-  // the same instrument.
+  // Only valid for INVOICE_TO_INVOICE (no payment block on LUMPSUM
+  // since paymentThrough is CASH).
+  const showPaymentBlock =
+    !isSuspense && settlementType === "INVOICE_TO_INVOICE";
+
   const transactionNoRequired =
-    !isThirdParty && paymentThrough !== "" && paymentThrough !== "CASH";
+    showPaymentBlock &&
+    paymentThrough !== "" &&
+    paymentThrough !== "CASH";
 
   const validate = (): Record<string, string> => {
     const next: Record<string, string> = {};
@@ -256,33 +487,61 @@ export function TransactionForm({
     if (!agencyId) {
       next.agencyId = "Please select an agency or Suspense Account";
     }
-    if (amount <= 0) {
-      next.amount = "Amount must be greater than zero";
-    }
-    if (!isThirdParty) {
-      if (!paymentThrough) {
-        next.paymentThrough = "Payment Through is required";
-      } else {
-        // Transaction No is required for every payment-through value
-        // except CASH.
-        if (transactionNoRequired && !transactionRefNo.trim()) {
+
+    if (!isSuspense) {
+      // Settlement-type-specific validation.
+      if (settlementType === "INVOICE_TO_INVOICE") {
+        if (!selectedInvoiceId) {
+          next.selectedInvoiceId = "Pick an invoice to settle";
+        } else if (!selectedInvoice) {
+          next.selectedInvoiceId = "Pick a valid invoice";
+        }
+      } else if (settlementType === "LUMPSUM") {
+        if (!thirdPartyAgencyId) {
+          next.thirdPartyAgencyId =
+            "Counter-party agency is required for Lumpsum settlement";
+        } else if (thirdPartyAgencyId === realAgencyId) {
+          next.thirdPartyAgencyId =
+            "Counter-party must differ from the primary agency";
+        }
+        // Block submit when the backend preview says we can't.
+        if (fifoPreview && fifoPreview.canProceed === false) {
+          next.amount =
+            fifoPreview.reason ?? "Amount exceeds available outstanding";
+        }
+      }
+
+      if (showPaymentBlock) {
+        if (!paymentThrough) {
+          next.paymentThrough = "Payment Through is required";
+        } else if (transactionNoRequired && !transactionRefNo.trim()) {
           next.transactionRefNo =
             paymentThrough === "CHEQUE" || paymentThrough === "DD"
               ? "Transaction No is required for Cheque / DD"
               : "Transaction No is required for NEFT / RTGS / UPI";
         }
-        // Reference No is required only for CHEQUE / DD.
-        const required = requiredReferenceField(paymentThrough);
+        const required = requiredReferenceField(
+          paymentThrough as PaymentThrough
+        );
         if (required === "referenceNo" && !referenceNo.trim()) {
-          next.referenceNo =
-            "Reference No is required for Cheque / DD";
+          next.referenceNo = "Reference No is required for Cheque / DD";
         }
       }
+
+      if (amount <= 0) {
+        next.amount = "Amount must be greater than zero";
+      }
+      // INVOICE_TO_INVOICE amount is locked to invoice outstanding;
+      // backend rejects any drift.
+      if (
+        settlementType === "INVOICE_TO_INVOICE" &&
+        selectedInvoice &&
+        Math.abs(amount - Number(selectedInvoice.outstandingAmount)) > 0.01
+      ) {
+        next.amount = "Amount must equal the selected invoice's outstanding";
+      }
     }
-    if (isThirdParty && !thirdPartyAgencyId) {
-      next.thirdPartyAgencyId =
-        "3rd Party Agency is mandatory for 3rd Party Transactions";
-    }
+
     return next;
   };
 
@@ -292,26 +551,39 @@ export function TransactionForm({
     setErrors(v);
     if (Object.keys(v).length > 0) return;
 
+    // For LUMPSUM the backend ignores paymentThrough (CASH is implicit),
+    // so we don't send it. For INVOICE_TO_INVOICE we send the user's
+    // selection; for Suspense we send "CASH".
+    let paymentThroughOut: PaymentThrough;
+    if (isSuspense) paymentThroughOut = "CASH";
+    else if (settlementType === "LUMPSUM") paymentThroughOut = "CASH";
+    else
+      paymentThroughOut = paymentThrough
+        ? (paymentThrough as PaymentThrough)
+        : "CASH";
+
     const payload: CreateTransactionPayload = {
       branchId,
       direction: type,
+      settlementType: isSuspense ? "INVOICE_TO_INVOICE" : settlementType,
       suspense: isSuspense,
-      // 3rd party → CASH (the form never sends a paymentThrough in that
-      // case, but the payload type requires the field, so we hard-code
-      // CASH as the canonical value the backend will see).
-      paymentThrough: isThirdParty ? "CASH" : (paymentThrough as PaymentThrough),
+      paymentThrough: paymentThroughOut,
       paymentMode,
-      paymentType: (isThirdParty ? "THIRD_PARTY" : "NORMAL") as PaymentType,
       amount,
       ...(isSuspense || !realAgencyId ? {} : { agencyId: realAgencyId }),
-      ...(isThirdParty && thirdPartyAgencyId
+      ...(settlementType === "LUMPSUM" && !isSuspense && thirdPartyAgencyId
         ? { thirdPartyAgencyId }
         : {}),
-      // UTR / IMPS / UPI ref — populated for NEFT / RTGS / UPI.
+      ...(settlementType === "INVOICE_TO_INVOICE" &&
+      !isSuspense &&
+      selectedInvoice
+        ? type === "INWARD"
+          ? { saleId: selectedInvoice.id }
+          : { purchaseId: selectedInvoice.id }
+        : {}),
       ...(transactionRefNo.trim()
         ? { transactionRefNo: transactionRefNo.trim() }
         : {}),
-      // Cheque / DD instrument number — populated for CHEQUE / DD.
       ...(referenceNo.trim() ? { referenceNo: referenceNo.trim() } : {}),
       ...(remarks.trim() ? { remarks: remarks.trim() } : {}),
     };
@@ -391,95 +663,199 @@ export function TransactionForm({
                   }
                 />
               )}
-
-              
             </div>
           </div>
 
-          {/* Row 2: 3rd Party toggle */}
-          <div className="border-t border-gray-100 pt-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
+          {/* Row 2: Settlement type */}
+          {!isSuspense && (
+            <div className="border-t border-gray-100 pt-4">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">
+                    Settlement Type
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Pick how this payment is settled against the agency's
+                    balances.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                {SETTLEMENT_TYPE_OPTIONS.map((opt) => {
+                  const Icon =
+                    opt.value === "INVOICE_TO_INVOICE" ? Receipt : Layers;
+                  const active = settlementType === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setSettlementType(opt.value)}
+                      className={cn(
+                        "text-left border rounded-lg px-3 py-2.5 text-sm transition",
+                        active
+                          ? "border-green-500 bg-green-50"
+                          : "border-gray-200 bg-white hover:border-gray-300"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 font-medium text-gray-900">
+                        <Icon
+                          className={cn(
+                            "h-4 w-4",
+                            active ? "text-green-600" : "text-gray-500"
+                          )}
+                        />
+                        {opt.label}
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        {opt.description}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Row 3: Invoice picker (INVOICE_TO_INVOICE) */}
+          {!isSuspense && settlementType === "INVOICE_TO_INVOICE" && (
+            <div className="border-t border-gray-100 pt-4 space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">
+                    {isInward ? "Sales" : "Purchase"} Invoice
+                    <span className="text-red-500 ml-0.5">*</span>
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Pick the {isInward ? "sale" : "purchase"} invoice this
+                    transaction settles. The amount is locked to the
+                    invoice's outstanding.
+                  </p>
+                </div>
+              </div>
+              {outstandingInvoices.length === 0 ? (
+                <div className="rounded-md border border-dashed border-gray-200 p-3 text-xs text-gray-500 italic">
+                  No outstanding invoices for this agency + branch + direction.
+                </div>
+              ) : (
+                <div className="rounded-md border border-gray-200 max-h-72 overflow-y-auto divide-y divide-gray-100">
+                  {outstandingInvoices.map((inv) => {
+                    const active = selectedInvoiceId === inv.id;
+                    return (
+                      <label
+                        key={inv.id}
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2.5 cursor-pointer text-sm",
+                          active ? "bg-green-50" : "hover:bg-gray-50"
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="settlementInvoice"
+                          value={inv.id}
+                          checked={active}
+                          onChange={() => {
+                            setSelectedInvoiceId(inv.id);
+                            setErrors((prev) => ({
+                              ...prev,
+                              selectedInvoiceId: "",
+                              amount: "",
+                            }));
+                          }}
+                        />
+                        <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-2">
+                          <span className="font-mono text-xs text-gray-900">
+                            {inv.invoiceNo ?? inv.id.slice(0, 8)}
+                          </span>
+                          <span className="text-xs text-gray-600">
+                            Bill: {formatCurrency(Number(inv.grandTotal))}
+                          </span>
+                          <span className="text-xs text-gray-600">
+                            Paid: {formatCurrency(Number(inv.allocatedAmount))}
+                          </span>
+                          <span className="text-xs font-semibold text-gray-900 tabular-nums">
+                            Due: {formatCurrency(Number(inv.outstandingAmount))}
+                          </span>
+                        </div>
+                        {inv.partiallySettled && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-amber-50 text-amber-700 border-0 text-[10px]"
+                          >
+                            Partial
+                          </Badge>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              {errors.selectedInvoiceId && (
+                <p className="text-xs text-red-500">
+                  {errors.selectedInvoiceId}
+                </p>
+              )}
+
+              {selectedInvoice && (
+                <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800">
+                  <p className="font-medium">
+                    Settling {selectedInvoice.invoiceNo ?? selectedInvoice.id.slice(0, 8)}
+                  </p>
+                  <p className="text-green-700 mt-0.5">
+                    Amount locked to{" "}
+                    <span className="font-semibold tabular-nums">
+                      {formatCurrency(Number(selectedInvoice.outstandingAmount))}
+                    </span>{" "}
+                    to match the invoice's outstanding — backend enforces
+                    full settlement for this path.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Row 4: 3rd party + FIFO (LUMPSUM) */}
+          {!isSuspense && settlementType === "LUMPSUM" && (
+            <div className="border-t border-gray-100 pt-4 space-y-3">
               <div>
                 <p className="text-sm font-medium text-gray-900">
-                  3rd Party Transaction
+                  Counter-party Agency
+                  <span className="text-red-500 ml-0.5">*</span>
                 </p>
                 <p className="text-xs text-gray-500">
-                  Funds flow through a counter-party agency on behalf of the
-                  primary agency.
+                  Funds flow through this counter-party. The amount you
+                  enter below will be split (FIFO) across both agencies'
+                  outstanding invoices on approval.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isSuspense) return;
-                    setIsThirdParty(false);
-                    setErrors((prev) => ({ ...prev, thirdPartyAgencyId: "" }));
-                  }}
-                  disabled={isSuspense}
-                  className={`flex items-center justify-center gap-2 border rounded-lg px-3 py-1.5 text-sm font-medium ${
-                    !isThirdParty
-                      ? "border-green-500 bg-green-50 text-green-700"
-                      : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                  } ${isSuspense ? "opacity-50 cursor-not-allowed" : ""}`}
-                >
-                  No
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isSuspense) return;
-                    setIsThirdParty(true);
-                  }}
-                  disabled={isSuspense}
-                  title={
-                    isSuspense
-                      ? "3rd Party is not available for Suspense Account transactions"
-                      : undefined
+              <ThirdPartyAgencySection
+                agencies={thirdPartyAgencies}
+                value={thirdPartyAgencyId}
+                onChange={(v) => {
+                  setThirdPartyAgencyId(v);
+                  setErrors((prev) => ({
+                    ...prev,
+                    thirdPartyAgencyId: "",
+                    amount: "",
+                  }));
+                }}
+                error={errors.thirdPartyAgencyId}
+              />
+              {selectedThirdParty && (
+                <AgencyBalanceStrip
+                  metric={thirdPartyMetric(type)}
+                  amount={
+                    thirdPartyMetric(type) === "DUE"
+                      ? thirdPartyDueAmount
+                      : thirdPartyPendingAmount
                   }
-                  className={`flex items-center justify-center gap-2 border rounded-lg px-3 py-1.5 text-sm font-medium ${
-                    isThirdParty
-                      ? "border-purple-500 bg-purple-50 text-purple-700"
-                      : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                  } ${isSuspense ? "opacity-50 cursor-not-allowed" : ""}`}
-                >
-                  {isSuspense ? (
-                    <Lock className="h-3.5 w-3.5" />
-                  ) : (
-                    <Building2 className="h-3.5 w-3.5" />
-                  )}
-                  Yes — 3rd Party
-                </button>
-              </div>
-            </div>
-
-            {isThirdParty && (
-              <div className="mt-3 space-y-2">
-                <ThirdPartyAgencySection
-                  agencies={thirdPartyAgencies}
-                  value={thirdPartyAgencyId}
-                  onChange={(v) => {
-                    setThirdPartyAgencyId(v);
-                    setErrors((prev) => ({ ...prev, thirdPartyAgencyId: "" }));
-                  }}
-                  error={errors.thirdPartyAgencyId}
                 />
-                {selectedThirdParty && (
-                  <AgencyBalanceStrip
-                    metric={thirdPartyMetric(type)}
-                    amount={
-                      thirdPartyMetric(type) === "DUE"
-                        ? thirdPartyDueAmount
-                        : thirdPartyPendingAmount
-                    }
-                  />
-                )}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
-          {/* Row 3: Payment block — hidden for 3rd party */}
-          {!isThirdParty && (
+          {/* Row 5: Payment block — INVOICE_TO_INVOICE only */}
+          {showPaymentBlock && (
             <div className="border-t border-gray-100 pt-4 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
@@ -552,11 +928,6 @@ export function TransactionForm({
                         ? "e.g. UTR2026053100123"
                         : "Not required for the selected Payment Through"
                     }
-                    // Disabled only for CASH (and the empty selection).
-                    // Required for every other payment-through value —
-                    // including CHEQUE and DD, where the user can still
-                    // supply a UTR / IMPS / UPI ref if the instrument
-                    // was settled electronically.
                     disabled={paymentThrough === "CASH" || paymentThrough === ""}
                     required={transactionNoRequired}
                   />
@@ -629,7 +1000,7 @@ export function TransactionForm({
             </div>
           )}
 
-          {/* Row 4: Amount + Remarks */}
+          {/* Row 6: Amount + Remarks */}
           <div className="border-t border-gray-100 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="amount">
@@ -641,14 +1012,30 @@ export function TransactionForm({
                 min={0}
                 value={Number.isFinite(amount) ? amount : 0}
                 onChange={(e) => {
+                  if (
+                    settlementType === "INVOICE_TO_INVOICE" &&
+                    selectedInvoice
+                  ) {
+                    // locked to outstanding — ignore edits
+                    return;
+                  }
                   setAmount(Number(e.target.value));
                   setErrors((prev) => ({ ...prev, amount: "" }));
                 }}
                 placeholder="0.00"
                 required
+                disabled={
+                  settlementType === "INVOICE_TO_INVOICE" && !!selectedInvoice
+                }
               />
               {errors.amount && (
                 <p className="text-xs text-red-500">{errors.amount}</p>
+              )}
+              {settlementType === "INVOICE_TO_INVOICE" && selectedInvoice && (
+                <p className="text-[11px] text-gray-500">
+                  <Info className="inline h-3 w-3 mr-0.5 -mt-0.5" />
+                  Locked to the selected invoice's outstanding.
+                </p>
               )}
             </div>
 
@@ -664,7 +1051,26 @@ export function TransactionForm({
             </div>
           </div>
 
-          {/* Row 5: Audit line + Submit */}
+          {/* Row 6b: FIFO preview (LUMPSUM only) */}
+          {settlementType === "LUMPSUM" && !isSuspense && (
+            <div className="border-t border-gray-100 pt-4">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <p className="text-sm font-medium text-gray-900">
+                  FIFO Allocation Preview
+                </p>
+                <span className="text-[11px] text-gray-500">
+                  What approval will look like
+                </span>
+              </div>
+              <FifoPanel
+                preview={fifoPreview}
+                direction={type}
+                isLoading={isFifoPreviewing}
+              />
+            </div>
+          )}
+
+          {/* Row 7: Audit line + Submit */}
           <div className="border-t border-gray-100 pt-4 flex items-center justify-between gap-3 flex-wrap">
             <p className="text-xs text-gray-500">
               Created by{" "}
@@ -678,6 +1084,17 @@ export function TransactionForm({
                   • Branch:{" "}
                   <span className="font-medium text-gray-700">
                     {selectedBranch.name}
+                  </span>
+                </>
+              )}
+              {!isSuspense && (
+                <>
+                  {" "}
+                  • Settlement:{" "}
+                  <span className="font-medium text-gray-700">
+                    {settlementType === "INVOICE_TO_INVOICE"
+                      ? "Invoice to Invoice"
+                      : "Lumpsum"}
                   </span>
                 </>
               )}

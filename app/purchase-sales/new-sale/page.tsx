@@ -15,20 +15,78 @@ import { agencyApi } from "@/app/services/agency.service";
 import { productApi } from "@/app/services/product.service";
 import { branchApi } from "@/app/services/branch.service";
 import { inventoryApi } from "@/app/services/inventory.service";
+import type { SaleTransportDetails } from "@/app/services/sales.service";
 import { Agency } from "@/app/types/agency";
 import { Product } from "@/app/types/product";
 import { Branch } from "@/app/types/branch";
+import type { AvailableBatch } from "@/app/types/inventory";
 import { useRouter } from "next/navigation";
+
+/**
+ * Per-product card carries a list of (batchId, quantity) allocations.
+ * Allocations default to the full set of available batches for the
+ * product (filtered to non-zero stock); the user types a quantity per
+ * batch and may remove the rows they don't want.
+ */
+interface SaleBatchAllocation {
+  id: string;
+  batchId: string;
+  batchNo: string;
+  availableQtyKG?: number;
+  availableQtyLTR?: number;
+  quantity: number;
+}
 
 interface SaleItem {
   id: string;
   productId: string;
-  batchId: string;
-  quantity: number;
   unit: "KG" | "LTR";
-  sellPrice: number;
+  /** Display-only: name of the currently selected product. */
+  productName?: string;
+  /** Sale price per unit; sent to the backend as the optional
+   * `unitPrice` override. */
+  salePrice: number;
+  /** Backend-computed; we keep it on the UI for the summary totals. */
   gst: number | null;
+  /** Default qty to spread across all available batches when the
+   *  user hasn't entered any per-batch quantities yet. */
+  batches: SaleBatchAllocation[];
+}
 
+const emptyTransport: SaleTransportDetails = {
+  purchaseOrderNo: "",
+  purchaseOrderDate: "",
+  receiptNoteNo: "",
+  receiptNoteDate: "",
+  lrNo: "",
+  dispatchThrough: "",
+  destination: "",
+  vehicleOrFlightNo: "",
+  portOfLoading: "",
+  portOfDischarge: "",
+  countryTo: "",
+  billOfEntryNo: "",
+  billOfEntryDate: "",
+  portCode: "",
+};
+
+function compactTransport(
+  t: SaleTransportDetails
+): SaleTransportDetails | undefined {
+  const cleaned: SaleTransportDetails = {};
+  let dirty = false;
+  (Object.keys(emptyTransport) as Array<keyof SaleTransportDetails>).forEach(
+    (k) => {
+      const v = t[k];
+      if (typeof v === "string" && v.trim() !== "") {
+        cleaned[k] = v.trim();
+        dirty = true;
+      } else if (typeof v === "string") {
+        cleaned[k] = "";
+      }
+    }
+  );
+  return dirty ? cleaned : undefined;
 }
 
 export default function NewSalePage() {
@@ -39,20 +97,13 @@ export default function NewSalePage() {
   const [agencies, setAgencies] = React.useState<Agency[]>([]);
   const [products, setProducts] = React.useState<Product[]>([]);
   const [branches, setBranches] = React.useState<Branch[]>([]);
-  const [availableBatches, setAvailableBatches] = React.useState<{ [key: string]: any[] }>({});
-  const [loadingBatches, setLoadingBatches] = React.useState<{ [key: string]: boolean }>({});
+  const [availableBatches, setAvailableBatches] = React.useState<{
+    [key: string]: AvailableBatch[];
+  }>({});
+  const [loadingBatches, setLoadingBatches] = React.useState<{
+    [key: string]: boolean;
+  }>({});
   const [loading, setLoading] = React.useState(false);
-
-  // Build "today" in the local timezone as YYYY-MM-DD (the value expected
-  // by <input type="date">). `new Date().toISOString().slice(0, 10)` would
-  // produce UTC, which can be off by a day in non-UTC zones.
-  const todayLocalDate = (): string => {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  };
 
   const [formData, setFormData] = React.useState({
     agencyId: "",
@@ -67,18 +118,23 @@ export default function NewSalePage() {
     despatchDocDate: "",
     despatchThrough: "",
     destination: "",
-    invoiceDate: todayLocalDate(),
+    invoiceDate: "",
+    supplierInvoiceDate: "",
+    roundOffAmount: "" as string,
   });
+
+  const [transport, setTransport] =
+    React.useState<SaleTransportDetails>({ ...emptyTransport });
 
   const [items, setItems] = React.useState<SaleItem[]>([
     {
       id: "1",
       productId: "",
-      batchId: "",
-      quantity: 0,
+      productName: "",
       unit: "KG" as "KG" | "LTR",
-      sellPrice: 0,
+      salePrice: 0,
       gst: null,
+      batches: [],
     },
   ]);
 
@@ -111,22 +167,23 @@ export default function NewSalePage() {
     }
   };
 
-  const fetchAvailableBatches = async (branchId: string, productId: string, itemId: string) => {
+  const fetchAvailableBatches = async (
+    branchId: string,
+    productId: string,
+    itemId: string
+  ) => {
     if (!productId || !branchId) return;
     setLoadingBatches((prev) => ({ ...prev, [itemId]: true }));
     try {
       const response = await inventoryApi.getAvailableBatches({ productId, branchId });
       if (response.success) {
         const batches = response.data || [];
-        const filtered = batches.filter((b: any) => {
+        const filtered = batches.filter((b) => {
           const qtyKG = Number(b.availableQtyKG) || 0;
           const qtyLTR = Number(b.availableQtyLTR) || 0;
           return qtyKG > 0 || qtyLTR > 0;
         });
         setAvailableBatches((prev) => ({ ...prev, [itemId]: filtered }));
-        if (filtered.length > 0) {
-          handleItemChange(itemId, "batchId", filtered[0].id);
-        }
       }
     } catch (err) {
       console.error("Failed to fetch batches:", err);
@@ -153,17 +210,9 @@ export default function NewSalePage() {
     return product && product.applicableGST ? Number(product.applicableGST) : null;
   };
 
-  const calculateTotalAmount = (quantity: number, price: number): number => {
-    return quantity * price;
-  };
-
-  const calculateGSTAmount = (totalAmount: number, gstPercentage: number | null): number => {
-    if (!gstPercentage) return 0;
-    return (totalAmount * gstPercentage) / 100;
-  };
-
-  const calculateTotalWithGST = (totalAmount: number, gstAmount: number): number => {
-    return totalAmount + gstAmount;
+  const splitGst = (gst: number | null): { cgst: number; sgst: number; igst: number } => {
+    if (!gst) return { cgst: 0, sgst: 0, igst: 0 };
+    return { cgst: gst / 2, sgst: gst / 2, igst: 0 };
   };
 
   const handleAddItem = () => {
@@ -173,11 +222,11 @@ export default function NewSalePage() {
       {
         id: newId,
         productId: "",
-        batchId: "",
-        quantity: 0,
+        productName: "",
         unit: "KG" as "KG" | "LTR",
-        sellPrice: 0,
+        salePrice: 0,
         gst: null,
+        batches: [],
       },
     ]);
   };
@@ -190,33 +239,153 @@ export default function NewSalePage() {
     setItems(items.filter((item) => item.id !== id));
   };
 
-  const handleItemChange = (id: string, field: keyof SaleItem, value: any) => {
+  /**
+   * Auto-allocate every available batch for the picked product. We
+   * don't have the response yet here (it's loaded async), so we set
+   * the batches once the API responds — see the `useEffect` that
+   * watches `availableBatches[item.id]`. For UX we still need to
+   * reset the previous product's allocations here so stale rows from
+   * the previous product don't linger.
+   */
+  const handleItemChange = (
+    id: string,
+    field: keyof SaleItem | "batches",
+    value: unknown
+  ) => {
     setItems((prevItems) =>
       prevItems.map((item) => {
-        if (item.id === id) {
-          if (field === "productId") {
-            const price = getProductPrice(value, item.unit);
-            const gst = getProductGST(value);
-            if (formData.branchId) {
-              fetchAvailableBatches(formData.branchId, value, id);
-            }
-            return { ...item, [field]: value, sellPrice: price, gst, batchId: "" };
+        if (item.id !== id) return item;
+
+        if (field === "productId") {
+          const next = value as string;
+          const price = getProductPrice(next, item.unit);
+          const gst = getProductGST(next);
+          const product = products.find((p) => p.id === next);
+          if (formData.branchId) {
+            fetchAvailableBatches(formData.branchId, next, id);
           }
-          // When the user toggles KG <-> LTR, re-resolve the price
-          // against the right per-unit field so the input reflects the
-          // new unit's default price rather than the previous unit's.
-          if (field === "unit") {
-            const nextUnit = value as "KG" | "LTR";
-            const price = item.productId
-              ? getProductPrice(item.productId, nextUnit)
-              : item.sellPrice;
-            return { ...item, [field]: nextUnit, sellPrice: price };
-          }
-          return { ...item, [field]: value };
+          return {
+            ...item,
+            productId: next,
+            productName: product?.name ?? "",
+            salePrice: price,
+            gst,
+            batches: [],
+          };
         }
-        return item;
+        if (field === "unit") {
+          const nextUnit = value as "KG" | "LTR";
+          const price = item.productId
+            ? getProductPrice(item.productId, nextUnit)
+            : item.salePrice;
+          return { ...item, unit: nextUnit, salePrice: price };
+        }
+        if (field === "batches") {
+          return { ...item, batches: value as SaleBatchAllocation[] };
+        }
+        return { ...item, [field]: value as never };
       })
     );
+  };
+
+  /**
+   * When availableBatches[index] arrives after a product selection,
+   * populate that line's allocations with one row per available batch
+   * (qty default 0). The user can then enter quantities directly per
+   * batch or delete unwanted rows — no extra "Add Batch" step.
+   */
+  React.useEffect(() => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (!item.productId) return item;
+        const list = availableBatches[item.id];
+        if (!list || list.length === 0) return item;
+        // Skip if the item already has allocations that match the
+        // current available list (avoids re-populating on unrelated
+        // re-renders).
+        const candidateIds = new Set(list.map((b) => String(b.id)));
+        const sameAsList =
+          item.batches.length === list.length &&
+          item.batches.every((b) => candidateIds.has(b.batchId));
+        if (sameAsList) return item;
+        return {
+          ...item,
+          batches: list.map((b) => ({
+            id: String(Math.floor(Math.random() * 1e9)),
+            batchId: String(b.id),
+            batchNo: String(b.batchNo ?? b.id),
+            availableQtyKG: Number(b.availableQtyKG) || 0,
+            availableQtyLTR: Number(b.availableQtyLTR) || 0,
+            quantity: 0,
+          })),
+        };
+      })
+    );
+  }, [availableBatches]);
+
+  const handleRemoveBatch = (itemId: string, allocId: string) => {
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === itemId
+          ? { ...item, batches: item.batches.filter((b) => b.id !== allocId) }
+          : item
+      )
+    );
+  };
+
+  /**
+   * Distribute a single quantity total across all currently-visible
+   * batch allocations equally. Handy when the user types the line
+   * total once and wants the backend to split FIFO-wise — we ignore
+   * availability caps (the form does too, backend may reject if the
+   * per-batch stock is insufficient).
+   */
+  const distributeTotalAcrossBatches = (itemId: string, total: number) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item;
+        if (item.batches.length === 0) return item;
+        // Allocate round-robin until the total is fully distributed.
+        let remaining = total;
+        const cap = Math.max(1, item.batches.length);
+        return {
+          ...item,
+          batches: item.batches.map((b) => {
+            if (remaining <= 0) return { ...b, quantity: 0 };
+            const each = Math.floor((remaining / cap) * 100) / 100;
+            const take = Math.min(each, remaining);
+            remaining = Math.max(0, +(remaining - take).toFixed(2));
+            return { ...b, quantity: take };
+          }),
+        };
+      })
+    );
+  };
+
+  const handleBatchChange = (
+    itemId: string,
+    allocId: string,
+    patch: Partial<SaleBatchAllocation>
+  ) => {
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              batches: item.batches.map((b) =>
+                b.id === allocId ? { ...b, ...patch } : b
+              ),
+            }
+          : item
+      )
+    );
+  };
+
+  const handleTransportChange = (
+    field: keyof SaleTransportDetails,
+    value: string
+  ) => {
+    setTransport((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -231,43 +400,98 @@ export default function NewSalePage() {
       return;
     }
 
-    const validItems = items.filter((item) => item.productId && item.batchId && item.quantity);
-    if (validItems.length === 0) {
-      addToast("Please add at least one valid product item", "error");
+    /**
+     * Flatten the per-card (product + N batches) model down to the
+     * backend's flat "one item per (product, batch)" shape. Empty
+     * allocations (qty 0) are dropped — the backend would reject
+     * them on insufficient stock.
+     */
+    const lineAllocations: {
+      productId: string;
+      batchId: string;
+      quantity: number;
+      unit: "KG" | "LTR";
+      salePrice: number;
+    }[] = [];
+    for (const item of items) {
+      if (!item.productId) continue;
+      for (const b of item.batches) {
+        const qty = Number(b.quantity) || 0;
+        if (qty <= 0) continue;
+        lineAllocations.push({
+          productId: item.productId,
+          batchId: b.batchId,
+          quantity: qty,
+          unit: item.unit,
+          salePrice: item.salePrice,
+        });
+      }
+    }
+
+    if (lineAllocations.length === 0) {
+      addToast(
+        "Each line needs at least one batch with a quantity greater than zero.",
+        "error"
+      );
       return;
     }
 
     setLoading(true);
     try {
+      const roundOffParsed = formData.roundOffAmount.trim() === ""
+        ? undefined
+        : Number(formData.roundOffAmount);
+
+      // Use the FIRST product+batch row's salePrice as the unrolled
+      // unitPrice for every line item; the backend treats that as a
+      // per-line override but we share the price across batches of
+      // the same product. (If you need per-batch pricing, drop the
+      // override entirely and let the backend read the product
+      // default.)
+      const firstRow = lineAllocations[0];
+
       await dispatch(
         createSale({
           agencyId: formData.agencyId,
           branchId: formData.branchId,
-          items: validItems.map((item) => ({
-            productId: item.productId,
-            batchId: item.batchId,
-            quantity: item.quantity,
-            unit: item.unit,
-            unitPrice: item.sellPrice,
-          })),
-          remarks: formData.remarks,
-          deliveryNote: formData.deliveryNote,
-          suppliersRef: formData.suppliersRef,
-          otherReference: formData.otherReference,
-          buyerOrderNo: formData.buyerOrderNo,
-          buyerOrderDate: formData.buyerOrderDate,
-          despatchDocNo: formData.despatchDocNo,
-          despatchDocDate: formData.despatchDocDate,
-          despatchThrough: formData.despatchThrough,
-          destination: formData.destination,
           invoiceDate: formData.invoiceDate,
+          otherReference: formData.otherReference.trim() || undefined,
+          roundOffAmount:
+            roundOffParsed !== undefined && Number.isFinite(roundOffParsed)
+              ? roundOffParsed
+              : undefined,
+          remarks: formData.remarks.trim() || undefined,
+          deliveryNote: formData.deliveryNote.trim() || undefined,
+          suppliersRef: formData.suppliersRef.trim() || undefined,
+          buyerOrderNo: formData.buyerOrderNo.trim() || undefined,
+          buyerOrderDate: formData.buyerOrderDate || undefined,
+          despatchDocNo: formData.despatchDocNo.trim() || undefined,
+          despatchDocDate: formData.despatchDocDate || undefined,
+          despatchThrough: formData.despatchThrough.trim() || undefined,
+          destination: formData.destination.trim() || undefined,
+          transport: compactTransport(transport),
+          items: lineAllocations.map((l) => ({
+            productId: l.productId,
+            batchId: l.batchId,
+            quantity: l.quantity,
+            unit: l.unit,
+            ...(l.salePrice && l.salePrice > 0 && l === firstRow
+              ? { unitPrice: l.salePrice }
+              : {}),
+          })),
         })
       ).unwrap();
 
       addToast("Sales invoice created successfully", "success");
       router.push("/purchase-sales?tab=sale");
-    } catch (err: any) {
-      addToast(err || "Failed to create sales invoice", "error");
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === "string"
+          ? err
+          : "Failed to create sales invoice";
+      addToast(msg, "error");
     } finally {
       setLoading(false);
     }
@@ -278,8 +502,14 @@ export default function NewSalePage() {
     let totalGSTAmount = 0;
 
     items.forEach((item) => {
-      const amount = calculateTotalAmount(item.quantity, item.sellPrice);
-      const gstAmount = calculateGSTAmount(amount, item.gst);
+      if (!item.productId) return;
+      const itemTotal = item.batches.reduce(
+        (sum, b) => sum + (Number(b.quantity) || 0),
+        0
+      );
+      const amount = itemTotal * item.salePrice;
+      const { cgst, sgst } = splitGst(item.gst);
+      const gstAmount = (amount * (cgst + sgst)) / 100;
       totalAmount += amount;
       totalGSTAmount += gstAmount;
     });
@@ -330,7 +560,9 @@ export default function NewSalePage() {
                   options={branches.map<DataSelectOption>((branch) => ({
                     value: branch.id,
                     label: branch.name,
-                    description: [branch.code, branch.city, branch.state].filter(Boolean).join(" • "),
+                    description: [branch.code, branch.city, branch.state]
+                      .filter(Boolean)
+                      .join(" • "),
                   }))}
                 />
               </div>
@@ -361,8 +593,49 @@ export default function NewSalePage() {
                   id="invoiceDate"
                   type="date"
                   value={formData.invoiceDate}
-                  onChange={(e) => setFormData({ ...formData, invoiceDate: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, invoiceDate: e.target.value })
+                  }
                   required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="supplierInvoiceDate">Supplier Invoice Date</Label>
+                <Input
+                  id="supplierInvoiceDate"
+                  type="date"
+                  value={formData.supplierInvoiceDate}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      supplierInvoiceDate: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="roundOffAmount">Round Off</Label>
+                <Input
+                  id="roundOffAmount"
+                  type="number"
+                  step="0.01"
+                  value={formData.roundOffAmount}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      roundOffAmount: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="otherReference">Other Reference</Label>
+                <Input
+                  id="otherReference"
+                  value={formData.otherReference}
+                  onChange={(e) =>
+                    setFormData({ ...formData, otherReference: e.target.value })
+                  }
                 />
               </div>
             </div>
@@ -383,141 +656,219 @@ export default function NewSalePage() {
                 </Button>
               </div>
 
-              {/* Items Table */}
-              <div className="overflow-x-auto border rounded-lg">
-                <table className="w-full text-sm min-w-[1180px]">
-                  <thead className="bg-gray-100 border-b">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-semibold w-[400px]">Product</th>
-                      <th className="px-4 py-3 text-left font-semibold w-[280px]">Batch (Available Qty)</th>
-                      <th className="px-4 py-3 text-right font-semibold w-[110px]">Qty</th>
-                      <th className="px-4 py-3 text-left font-semibold w-[100px]">Unit</th>
-                      <th className="px-4 py-3 text-right font-semibold w-[130px]">
-                        Sell Price / Unit
-                      </th>
-                      <th className="px-4 py-3 text-right font-semibold w-[120px]">Amount</th>
-                      <th className="px-4 py-3 text-right font-semibold text-nowrap w-[80px]">GST %</th>
-                      <th className="px-4 py-3 text-right font-semibold text-nowrap w-[130px]">Total w/ GST</th>
-                      <th className="px-4 py-3 text-center font-semibold w-[80px]">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item) => {
-                      const amount = calculateTotalAmount(item.quantity, item.sellPrice);
-                      const gstAmount = calculateGSTAmount(amount, item.gst);
-                      const totalWithGST = calculateTotalWithGST(amount, gstAmount);
+              <div className="space-y-4">
+                {items.map((item) => {
+                  const allocated = item.batches.reduce(
+                    (sum, b) => sum + (Number(b.quantity) || 0),
+                    0
+                  );
+                  const isLoading =
+                    item.productId && loadingBatches[item.id];
 
-                      return (
-                        <tr key={item.id} className="border-b hover:bg-gray-50">
-                          <td className="px-3 py-2">
-                            <DataSelect
-                              value={item.productId}
-                              onChange={(v) => handleItemChange(item.id, "productId", v)}
-                              placeholder="Select Product"
-                              required
-                              searchable
-                              triggerClassName="h-10 px-2 text-base"
-                              panelClassName="w-[640px]"
-                              options={products.map<DataSelectOption>((product) => ({
-                                value: product.id,
-                                label: product.name,
-                                description: product.sku ? `SKU: ${product.sku}` : undefined,
-                                badge: product.baseUnit,
-                              }))}
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <DataSelect
-                              value={item.batchId}
-                              onChange={(v) => handleItemChange(item.id, "batchId", v)}
-                              placeholder="Select Batch"
-                              required
-                              searchable
-                              disabled={!item.productId || !formData.branchId || loadingBatches[item.id]}
-                              triggerClassName="h-9 px-2"
-                              panelClassName="w-[360px]"
-                              options={(availableBatches[item.id] || []).map<DataSelectOption>((batch) => {
-                                const qtyKG = Number(batch.availableQtyKG || 0);
-                                const qtyLTR = Number(batch.availableQtyLTR || 0);
-                                const qtyText =
-                                  qtyKG > 0 && qtyLTR > 0
-                                    ? `${qtyKG} KG / ${qtyLTR} LTR`
-                                    : qtyKG > 0
-                                    ? `${qtyKG} KG`
-                                    : qtyLTR > 0
-                                    ? `${qtyLTR} LTR`
-                                    : "0";
-                                return {
-                                  value: batch.id,
-                                  label: `Batch ${batch.batchNo}`,
-                                  description: `Available: ${qtyText}`,
-                                  badge: batch.status,
-                                };
-                              })}
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <Input
-                              type="number"
-                              min="0.01"
-                              step="0.01"
-                              value={item.quantity || ""}
-                              onChange={(e) => handleItemChange(item.id, "quantity", parseFloat(e.target.value) || 0)}
-                              className="h-9 text-sm text-right px-2"
-                              required
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <DataSelect
-                              value={item.unit}
-                              onChange={(v) => handleItemChange(item.id, "unit", v)}
-                              required
-                              triggerClassName="h-9 px-2"
-                              panelClassName="w-[140px]"
-                              options={[
-                                { value: "KG", label: "KG" },
-                                { value: "LTR", label: "LTR" },
-                              ]}
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.sellPrice || ""}
-                              onChange={(e) =>
-                                handleItemChange(item.id, "sellPrice", parseFloat(e.target.value) || 0)
-                              }
-                              className="h-9 text-sm text-right px-2"
-                              title={`Default is the product's sell price per ${item.unit === "KG" ? "unit" : "litre"}; override as needed`}
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-right font-semibold text-nowrap">
-                            ₹ {amount.toFixed(2)}
-                          </td>
-                          <td className="px-4 py-3 text-right font-semibold text-gray-600">
-                            {item.gst ? `${item.gst}%` : "N/A"}
-                          </td>
-                          <td className="px-4 py-3 text-right font-semibold text-green-600 text-nowrap">
-                            ₹ {totalWithGST.toFixed(2)}
-                          </td>
-                          <td className="px-3 py-2 text-center">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveItem(item.id)}
-                              className="text-red-600 hover:text-red-800 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                  return (
+                    <div
+                      key={item.id}
+                      className="border rounded-lg overflow-hidden"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 p-3 bg-gray-50">
+                        <div className="md:col-span-4">
+                          <Label className="text-xs text-gray-500">Product</Label>
+                          <DataSelect
+                            value={item.productId}
+                            onChange={(v) =>
+                              handleItemChange(item.id, "productId", v)
+                            }
+                            placeholder="Select Product"
+                            required
+                            searchable
+                            triggerClassName="h-10 px-2 text-base"
+                            panelClassName="w-[640px]"
+                            options={products.map<DataSelectOption>((product) => ({
+                              value: product.id,
+                              label: product.name,
+                              description: product.sku
+                                ? `SKU: ${product.sku}`
+                                : undefined,
+                              badge: product.baseUnit,
+                            }))}
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label className="text-xs text-gray-500">Unit</Label>
+                          <DataSelect
+                            value={item.unit}
+                            onChange={(v) =>
+                              handleItemChange(item.id, "unit", v)
+                            }
+                            required
+                            triggerClassName="h-10 px-2"
+                            panelClassName="w-[140px]"
+                            options={[
+                              { value: "KG", label: "KG" },
+                              { value: "LTR", label: "LTR" },
+                            ]}
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label className="text-xs text-gray-500">
+                            Sale Price / {item.unit === "KG" ? "Unit" : "Litre"}
+                          </Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.salePrice || ""}
+                            onChange={(e) =>
+                              handleItemChange(
+                                item.id,
+                                "salePrice",
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            className="h-10 text-sm text-right px-2"
+                            required
+                          />
+                        </div>
+                        <div className="md:col-span-2 flex items-end gap-2">
+                          <div className="flex-1">
+                            <Label className="text-xs text-gray-500">
+                              GST %
+                            </Label>
+                            <div className="h-10 px-3 inline-flex items-center rounded-md border bg-white text-sm text-gray-700">
+                              {item.gst ? `${item.gst}%` : "N/A"}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="md:col-span-2 flex items-end gap-2">
+                          <div className="flex-1 text-xs text-gray-600">
+                            <Label className="text-xs text-gray-500">
+                              Allocated
+                            </Label>
+                            <div className="h-10 px-3 inline-flex items-center rounded-md border bg-white text-sm text-gray-900 tabular-nums">
+                              {allocated.toFixed(2)} {item.unit}
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveItem(item.id)}
+                            className="text-red-600 hover:text-red-800 hover:bg-red-50 self-end"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Batch allocations — auto-populated once the
+                          available batches response arrives for this
+                          product. The user only enters a quantity per
+                          row (or removes the row entirely). */}
+                      <div className="p-3 border-t bg-white space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Batch allocations
+                          </p>
+                          <span className="text-[11px] text-gray-500">
+                            {item.batches.length} batch
+                            {item.batches.length === 1 ? "" : "es"} available
+                          </span>
+                        </div>
+                        {isLoading ? (
+                          <p className="text-xs text-gray-500 italic">
+                            Loading batches…
+                          </p>
+                        ) : item.productId && item.batches.length === 0 ? (
+                          <p className="text-xs text-gray-500 italic">
+                            No outstanding batches for this product in
+                            the selected branch. Pick a different branch
+                            or product.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {item.batches.map((alloc) => {
+                              const cap =
+                                item.unit === "KG"
+                                  ? alloc.availableQtyKG ?? 0
+                                  : alloc.availableQtyLTR ?? 0;
+                              return (
+                                <div
+                                  key={alloc.id}
+                                  className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end"
+                                >
+                                  <div className="md:col-span-7">
+                                    <Label className="text-xs text-gray-500">
+                                      Batch
+                                    </Label>
+                                    <div className="h-9 px-3 inline-flex w-full items-center justify-between rounded-md border bg-gray-50 text-sm text-gray-700">
+                                      <span className="font-mono">
+                                        Batch{" "}
+                                        {alloc.batchNo || alloc.batchId.slice(0, 8)}
+                                      </span>
+                                      <span className="text-[11px] text-gray-500">
+                                        Available:{" "}
+                                        {cap > 0
+                                          ? `${cap} ${item.unit}`
+                                          : "0"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="md:col-span-4">
+                                    <Label className="text-xs text-gray-500">
+                                      Quantity {item.unit}
+                                    </Label>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={alloc.quantity || ""}
+                                      onChange={(e) =>
+                                        handleBatchChange(item.id, alloc.id, {
+                                          quantity:
+                                            parseFloat(e.target.value) || 0,
+                                        })
+                                      }
+                                      className="h-9 text-sm text-right px-2"
+                                    />
+                                  </div>
+                                  <div className="md:col-span-1 flex justify-end">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() =>
+                                        handleRemoveBatch(item.id, alloc.id)
+                                      }
+                                      className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                                      title="Exclude this batch"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            <div className="flex justify-end text-xs text-gray-600">
+                              <span
+                                className={
+                                  allocated > 0
+                                    ? "text-emerald-600"
+                                    : "text-gray-500"
+                                }
+                              >
+                                Total allocated:{" "}
+                                <strong>
+                                  {allocated.toFixed(2)} {item.unit}
+                                </strong>
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -540,17 +891,156 @@ export default function NewSalePage() {
               </div>
             </div>
 
-            {/* Reference Fields */}
+            {/* Transport & Reference */}
             <div className="space-y-4">
-              <h4 className="font-semibold text-gray-900">Shipment & Reference Details</h4>
-              <div className="grid grid-cols-2 gap-4">
+              <h4 className="font-semibold text-gray-900">Transport & Reference</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="purchaseOrderNo">Purchase Order No</Label>
+                  <Input
+                    id="purchaseOrderNo"
+                    value={transport.purchaseOrderNo ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("purchaseOrderNo", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="purchaseOrderDate">Purchase Order Date</Label>
+                  <Input
+                    id="purchaseOrderDate"
+                    type="date"
+                    value={transport.purchaseOrderDate ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("purchaseOrderDate", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="receiptNoteNo">Receipt Note No</Label>
+                  <Input
+                    id="receiptNoteNo"
+                    value={transport.receiptNoteNo ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("receiptNoteNo", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="receiptNoteDate">Receipt Note Date</Label>
+                  <Input
+                    id="receiptNoteDate"
+                    type="date"
+                    value={transport.receiptNoteDate ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("receiptNoteDate", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lrNo">LR No</Label>
+                  <Input
+                    id="lrNo"
+                    value={transport.lrNo ?? ""}
+                    onChange={(e) => handleTransportChange("lrNo", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dispatchThrough">Dispatch Through</Label>
+                  <Input
+                    id="dispatchThrough"
+                    value={transport.dispatchThrough ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("dispatchThrough", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vehicleOrFlightNo">Vehicle / Flight No</Label>
+                  <Input
+                    id="vehicleOrFlightNo"
+                    value={transport.vehicleOrFlightNo ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("vehicleOrFlightNo", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="portOfLoading">Port of Loading</Label>
+                  <Input
+                    id="portOfLoading"
+                    value={transport.portOfLoading ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("portOfLoading", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="portOfDischarge">Port of Discharge</Label>
+                  <Input
+                    id="portOfDischarge"
+                    value={transport.portOfDischarge ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("portOfDischarge", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="countryTo">Country (To)</Label>
+                  <Input
+                    id="countryTo"
+                    value={transport.countryTo ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("countryTo", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="billOfEntryNo">Bill of Entry No</Label>
+                  <Input
+                    id="billOfEntryNo"
+                    value={transport.billOfEntryNo ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("billOfEntryNo", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="billOfEntryDate">Bill of Entry Date</Label>
+                  <Input
+                    id="billOfEntryDate"
+                    type="date"
+                    value={transport.billOfEntryDate ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("billOfEntryDate", e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="portCode">Port Code</Label>
+                  <Input
+                    id="portCode"
+                    value={transport.portCode ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("portCode", e.target.value)
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Reference Details */}
+            <div className="space-y-4">
+              <h4 className="font-semibold text-gray-900">Reference Details</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="buyerOrderNo">Buyer Order No</Label>
                   <Input
                     id="buyerOrderNo"
                     value={formData.buyerOrderNo}
-                    onChange={(e) => setFormData({ ...formData, buyerOrderNo: e.target.value })}
-                    placeholder="BO-2026-001"
+                    onChange={(e) =>
+                      setFormData({ ...formData, buyerOrderNo: e.target.value })
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -559,7 +1049,12 @@ export default function NewSalePage() {
                     id="buyerOrderDate"
                     type="date"
                     value={formData.buyerOrderDate}
-                    onChange={(e) => setFormData({ ...formData, buyerOrderDate: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        buyerOrderDate: e.target.value,
+                      })
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -567,8 +1062,9 @@ export default function NewSalePage() {
                   <Input
                     id="despatchDocNo"
                     value={formData.despatchDocNo}
-                    onChange={(e) => setFormData({ ...formData, despatchDocNo: e.target.value })}
-                    placeholder="DESP-4455"
+                    onChange={(e) =>
+                      setFormData({ ...formData, despatchDocNo: e.target.value })
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -577,7 +1073,12 @@ export default function NewSalePage() {
                     id="despatchDocDate"
                     type="date"
                     value={formData.despatchDocDate}
-                    onChange={(e) => setFormData({ ...formData, despatchDocDate: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        despatchDocDate: e.target.value,
+                      })
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -585,17 +1086,9 @@ export default function NewSalePage() {
                   <Input
                     id="suppliersRef"
                     value={formData.suppliersRef}
-                    onChange={(e) => setFormData({ ...formData, suppliersRef: e.target.value })}
-                    placeholder="SUP-REF-001"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="otherReference">Other Reference</Label>
-                  <Input
-                    id="otherReference"
-                    value={formData.otherReference}
-                    onChange={(e) => setFormData({ ...formData, otherReference: e.target.value })}
-                    placeholder="Internal Office Ref"
+                    onChange={(e) =>
+                      setFormData({ ...formData, suppliersRef: e.target.value })
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -603,8 +1096,12 @@ export default function NewSalePage() {
                   <Input
                     id="despatchThrough"
                     value={formData.despatchThrough}
-                    onChange={(e) => setFormData({ ...formData, despatchThrough: e.target.value })}
-                    placeholder="Road Transport"
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        despatchThrough: e.target.value,
+                      })
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -612,8 +1109,9 @@ export default function NewSalePage() {
                   <Input
                     id="destination"
                     value={formData.destination}
-                    onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
-                    placeholder="Kolkata Warehouse"
+                    onChange={(e) =>
+                      setFormData({ ...formData, destination: e.target.value })
+                    }
                   />
                 </div>
               </div>
@@ -625,8 +1123,9 @@ export default function NewSalePage() {
               <Textarea
                 id="deliveryNote"
                 value={formData.deliveryNote}
-                onChange={(e) => setFormData({ ...formData, deliveryNote: e.target.value })}
-                placeholder="Delivery note details"
+                onChange={(e) =>
+                  setFormData({ ...formData, deliveryNote: e.target.value })
+                }
                 rows={2}
               />
             </div>
@@ -637,15 +1136,20 @@ export default function NewSalePage() {
               <Textarea
                 id="remarks"
                 value={formData.remarks}
-                onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
-                placeholder="Optional remarks"
+                onChange={(e) =>
+                  setFormData({ ...formData, remarks: e.target.value })
+                }
                 rows={3}
               />
             </div>
 
             {/* Actions */}
             <div className="flex items-center gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => router.push("/purchase-sales")}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.push("/purchase-sales")}
+              >
                 Cancel
               </Button>
               <Button type="submit" loading={loading}>

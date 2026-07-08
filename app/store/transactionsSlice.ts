@@ -2,11 +2,15 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import {
   transactionApi,
   GetOutstandingParams,
+  GetOutstandingInvoicesParams,
+  PreviewFifoParams,
 } from "../services/transaction.service";
 import {
   AgencyOutstanding,
   CreateTransactionPayload,
+  FifoPreviewResponse,
   GetTransactionsParams,
+  OutstandingInvoice,
   PaginationMeta,
   Transaction,
   TransactionsListResponse,
@@ -32,6 +36,20 @@ export interface TransactionsState {
    */
   thirdPartyOutstanding: AgencyOutstanding | null;
   /**
+   * Outstanding invoices for the *primary* agency — drives the
+   * invoice picker on the "Invoice to Invoice" settlement path.
+   * Recomputed via `fetchOutstandingInvoices` whenever the primary
+   * agency, branch, or direction changes.
+   */
+  outstandingInvoices: OutstandingInvoice[];
+  /**
+   * Last FIFO pre-flight computed for a lumpsum settlement, used by
+   * the form to render the row-by-row preview before submit. Cleared
+   * whenever the primary/3rd-party/amount changes.
+   */
+  fifoPreview: FifoPreviewResponse | null;
+  isFifoPreviewing: boolean;
+  /**
    * Server-side count of PENDING transactions, kept in a separate slot so the
    * list page can render the "Pending Authentication" stat card without
    * overwriting `transactions` (which would otherwise happen every time a
@@ -49,6 +67,9 @@ const initialState: TransactionsState = {
   currentTransaction: null,
   outstanding: null,
   thirdPartyOutstanding: null,
+  outstandingInvoices: [],
+  fifoPreview: null,
+  isFifoPreviewing: false,
   pendingTotal: null,
   isLoading: false,
   isSubmitting: false,
@@ -77,6 +98,54 @@ function castTransaction(t: Transaction): Transaction {
 
 function castTransactions(list: Transaction[]): Transaction[] {
   return list.map(castTransaction);
+}
+
+/**
+ * Normalise a single invoice returned from `/api/transactions/invoices`.
+ *
+ * The backend spreads the underlying Sale / Purchase model plus the
+ * computed `allocatedAmount`, `outstandingAmount`, `fullySettled`,
+ * `partiallySettled` flags. Decimal-typed fields (grandTotal etc.)
+ * arrive as strings — we cast them here so the form can compare
+ * outstanding against the input amount and so the FIFOs at preview
+ * time render numbers, not "1984360".
+ */
+function castInvoice(raw: OutstandingInvoice): OutstandingInvoice {
+  return {
+    ...raw,
+    grandTotal: toNumber(raw.grandTotal as unknown),
+    allocatedAmount: toNumber(raw.allocatedAmount as unknown),
+    outstandingAmount: toNumber(raw.outstandingAmount as unknown),
+  };
+}
+
+/**
+ * Same conversion for the FIFO preview tree — every numeric field on
+ * `FifoInvoicePreview` and `FifoAgencyPreview` may arrive serialised.
+ */
+function castFifoPreview(raw: FifoPreviewResponse): FifoPreviewResponse {
+  const castInvoiceLine = (i: FifoPreviewResponse["primaryAgency"]["invoices"][number]) => ({
+    ...i,
+    totalAmount: toNumber(i.totalAmount as unknown),
+    outstandingAmount: toNumber(i.outstandingAmount as unknown),
+    payingAmount: toNumber(i.payingAmount as unknown),
+    remainingOutstanding: toNumber(i.remainingOutstanding as unknown),
+  });
+  const castAgency = (
+    a: FifoPreviewResponse["primaryAgency"]
+  ): FifoPreviewResponse["primaryAgency"] => ({
+    ...a,
+    requestedAmount: toNumber(a.requestedAmount as unknown),
+    allocatedAmount: toNumber(a.allocatedAmount as unknown),
+    unallocatedAmount: toNumber(a.unallocatedAmount as unknown),
+    invoices: (a.invoices || []).map(castInvoiceLine),
+  });
+  return {
+    ...raw,
+    requestedAmount: toNumber(raw.requestedAmount as unknown),
+    primaryAgency: castAgency(raw.primaryAgency),
+    thirdPartyAgency: castAgency(raw.thirdPartyAgency),
+  };
 }
 
 function castOutstanding(o: AgencyOutstanding): AgencyOutstanding {
@@ -279,6 +348,61 @@ export const fetchOutstanding = createAsyncThunk<
   }
 });
 
+/**
+ * GET /api/transactions/invoices — drives the invoice picker on the
+ * "Invoice to Invoice" settlement path. The form dispatches this when
+ * the primary agency + branch + direction are all known; switching any
+ * of those (or moving off Invoice-to-Invoice) clears the slot.
+ */
+export const fetchOutstandingInvoices = createAsyncThunk<
+  OutstandingInvoice[],
+  GetOutstandingInvoicesParams,
+  { rejectValue: string }
+>("transactions/fetchOutstandingInvoices", async (params, { rejectWithValue }) => {
+  try {
+    const response = await transactionApi.getOutstandingInvoices(params);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    return rejectWithValue(
+      response.message || "Failed to fetch outstanding invoices"
+    );
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to fetch outstanding invoices";
+    return rejectWithValue(message);
+  }
+});
+
+/**
+ * POST /api/transactions/preview-fifo — read-only simulation of what the
+ * backend will do on approval of a lumpsum settlement. Returns the FIFO
+ * row breakdown across both primary and third-party agencies plus a
+ * `canProceed` boolean. Used by the form to render the per-invoice
+ * preview BEFORE the user commits.
+ */
+export const previewFifoAllocation = createAsyncThunk<
+  FifoPreviewResponse,
+  PreviewFifoParams,
+  { rejectValue: string }
+>("transactions/previewFifoAllocation", async (payload, { rejectWithValue }) => {
+  try {
+    const response = await transactionApi.previewFifoAllocation(payload);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    return rejectWithValue(response.message || "Failed to preview FIFO allocation");
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to preview FIFO allocation";
+    return rejectWithValue(message);
+  }
+});
+
 // =================== SLICE ===================
 
 const transactionsSlice = createSlice({
@@ -297,11 +421,26 @@ const transactionsSlice = createSlice({
     clearThirdPartyOutstanding: (state) => {
       state.thirdPartyOutstanding = null;
     },
+    /**
+     * Wipe the invoice picker + FIFO preview slots. The form dispatches
+     * this whenever the primary agency, branch, direction, or settlement
+     * type changes — keeping stale invoices (or a stale FIFO projection)
+     * from popping up after the user switches context.
+     */
+    clearInvoiceAndFifoSlots: (state) => {
+      state.outstandingInvoices = [];
+      state.fifoPreview = null;
+      state.isFifoPreviewing = false;
+    },
     resetTransactionsState: (state) => {
       state.transactions = [];
       state.currentTransaction = null;
       state.outstanding = null;
       state.thirdPartyOutstanding = null;
+      state.outstandingInvoices = [];
+      state.fifoPreview = null;
+      state.isFifoPreviewing = false;
+      state.pendingTotal = null;
       state.isLoading = false;
       state.isSubmitting = false;
       state.error = null;
@@ -466,6 +605,36 @@ const transactionsSlice = createSlice({
       })
       .addCase(fetchOutstanding.rejected, (state, action) => {
         state.error = action.payload || "Failed to fetch outstanding";
+      })
+      // ----- Outstanding invoices (Invoice-to-Invoice picker) -----
+      .addCase(fetchOutstandingInvoices.pending, (state) => {
+        // Don't set a global isLoading flag — the picker has its own
+        // micro-skeleton. Just blank the slot so the previous agency's
+        // list doesn't bleed through while the new one is in flight.
+        state.outstandingInvoices = [];
+      })
+      .addCase(fetchOutstandingInvoices.fulfilled, (state, action) => {
+        state.outstandingInvoices = (action.payload || []).map(castInvoice);
+      })
+      .addCase(fetchOutstandingInvoices.rejected, (state, action) => {
+        state.outstandingInvoices = [];
+        // Surfaced as a non-fatal toast by the form; doesn't touch
+        // `state.error` so the rest of the page keeps rendering.
+        state.error = action.payload || "Failed to fetch outstanding invoices";
+      })
+      // ----- FIFO preview (Lumpsum settlement) -----
+      .addCase(previewFifoAllocation.pending, (state) => {
+        state.isFifoPreviewing = true;
+        state.fifoPreview = null;
+      })
+      .addCase(previewFifoAllocation.fulfilled, (state, action) => {
+        state.isFifoPreviewing = false;
+        state.fifoPreview = castFifoPreview(action.payload);
+      })
+      .addCase(previewFifoAllocation.rejected, (state, action) => {
+        state.isFifoPreviewing = false;
+        state.fifoPreview = null;
+        state.error = action.payload || "Failed to preview FIFO allocation";
       });
   },
 });
@@ -475,6 +644,7 @@ export const {
   clearCurrentTransaction,
   clearOutstanding,
   clearThirdPartyOutstanding,
+  clearInvoiceAndFifoSlots,
   resetTransactionsState,
 } = transactionsSlice.actions;
 
