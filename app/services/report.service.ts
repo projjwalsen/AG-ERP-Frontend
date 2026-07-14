@@ -15,6 +15,7 @@ import { fetchBlob } from "@/lib/download";
 import {
   OutstandingReportResponse,
   GetOutstandingReportParams,
+  OutstandingBackendType,
   DayBookResponse,
   GetDayBookParams,
   GSTR1ReportResponse,
@@ -119,7 +120,7 @@ export const reportApi = {
 
   /** GET /api/reports/outstanding-report?export=true&branchId=&type= */
   async exportOutstandingExcel(
-    params?: GetOutstandingReportParams
+    params?: { branchId?: string; type?: OutstandingBackendType }
   ): Promise<{ blob: Blob; filename: string }> {
     const queryParams = new URLSearchParams();
     queryParams.append("export", "true");
@@ -128,6 +129,68 @@ export const reportApi = {
     return fetchBlob(
       `api/reports/outstanding-report?${queryParams.toString()}`,
       "outstanding-report.xlsx"
+    );
+  },
+
+  /**
+   * GET /api/reports/outstanding-report/agency/export?agencyId=&type=
+   *
+   * Returns the JSON bucket breakdown for a single agency. The route
+   * name says "export" but the backend's controller is wired to the
+   * same `getOutstandingReport` handler, so without an `export=...`
+   * flag it returns the structured JSON payload (rows + summary +
+   * detailRows) instead of an .xlsx stream.
+   *
+   * Used by /reports/outstanding-report/:agencyId to load the bucket
+   * detail for one agency in isolation. The agencyId is also sent
+   * via the X-Agency-Id header so server-side audit logs can
+   * attribute the request.
+   */
+  async getAgencyOutstanding(params: {
+    agencyId: string;
+    branchId?: string;
+    type: OutstandingBackendType;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    data?: OutstandingReportResponse;
+  }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("agencyId", params.agencyId);
+    queryParams.append("type", params.type);
+    if (params.branchId) queryParams.append("branchId", params.branchId);
+    return apiFetch<OutstandingReportResponse>(
+      `api/reports/outstanding-report/agency/export?${queryParams.toString()}`,
+      {
+        method: "GET",
+        headers: { "X-Agency-Id": params.agencyId },
+      }
+    );
+  },
+
+  /**
+   * GET /api/reports/outstanding-report/agency/export?agencyId=&type=&export=DETAILS
+   * Streams an Excel file with the per-invoice detail rows for a single
+   * agency. The agencyId is also forwarded via the X-Agency-Id header
+   * so backend audit logs can attribute the export to the agency.
+   */
+  async exportAgencyOutstandingExcel(params: {
+    agencyId: string;
+    branchId?: string;
+    type: OutstandingBackendType;
+  }): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("agencyId", params.agencyId);
+    queryParams.append("type", params.type);
+    if (params.branchId) queryParams.append("branchId", params.branchId);
+    // `export=DETAILS` tells the controller to return the per-invoice
+    // export shape (one row per bill). The backend honours the same
+    // query string the summary export uses.
+    queryParams.append("export", "DETAILS");
+    return fetchBlob(
+      `api/reports/outstanding-report/agency/export?${queryParams.toString()}`,
+      `outstanding-${params.agencyId}.xlsx`,
+      { "X-Agency-Id": params.agencyId }
     );
   },
 

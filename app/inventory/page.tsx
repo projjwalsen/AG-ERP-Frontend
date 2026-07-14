@@ -239,7 +239,6 @@ function ProductsTab() {
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Product</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">SKU</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Unit (KG)</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Price</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -256,14 +255,16 @@ function ProductsTab() {
                           </div>
                           <div>
                             <p className="font-medium text-gray-900">{product.name}</p>
+                            {product.sku && (
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                SKU: <span className="font-mono">{product.sku}</span>
+                              </p>
+                            )}
                             {product.description && (
                               <p className="text-xs text-gray-500 truncate max-w-xs">{product.description}</p>
                             )}
                           </div>
                         </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <code className="text-sm text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{product.sku}</code>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1 text-sm text-gray-600">

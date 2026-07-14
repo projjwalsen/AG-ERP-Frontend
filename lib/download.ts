@@ -13,10 +13,14 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5100";
  *                   (e.g. "api/agencies/all?export=true")
  * @param defaultName - fallback filename when the server doesn't send a
  *                      Content-Disposition header
+ * @param headers - optional extra request headers (e.g. `X-Agency-Id`
+ *                  for agency-scoped exports so the backend can
+ *                  attribute the export to a specific agency in logs)
  */
 export async function fetchBlob(
   endpoint: string,
-  defaultName: string
+  defaultName: string,
+  headers?: Record<string, string>
 ): Promise<{ blob: Blob; filename: string }> {
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint.slice(1) : endpoint;
   const url = `${API_BASE_URL}/${cleanEndpoint}`;
@@ -24,6 +28,7 @@ export async function fetchBlob(
   const response = await fetch(url, {
     method: "GET",
     credentials: "include",
+    headers: headers ?? {},
   });
 
   if (!response.ok) {
@@ -86,8 +91,9 @@ export function downloadBlob(blob: Blob, filename: string): void {
  */
 export async function downloadFile(
   endpoint: string,
-  defaultName: string
+  defaultName: string,
+  headers?: Record<string, string>
 ): Promise<void> {
-  const { blob, filename } = await fetchBlob(endpoint, defaultName);
+  const { blob, filename } = await fetchBlob(endpoint, defaultName, headers);
   downloadBlob(blob, filename);
 }

@@ -13,6 +13,13 @@ import type { Branch } from "./branch";
 // =====================================================================
 
 export type OutstandingType = "AR" | "AP";
+/**
+ * Backend's wire-level type. The frontend keeps the AR/AP union for
+ * tab labels, but the GET endpoint expects one of these long-form
+ * values. The page maps AR → RECEIVABLE and AP → PAYABLE before
+ * hitting the wire.
+ */
+export type OutstandingBackendType = "RECEIVABLE" | "PAYABLE";
 export type OutstandingSettlementStatus =
   | "UNPAID"
   | "PARTIALLY_SETTLED"
@@ -129,13 +136,28 @@ export interface OutstandingReportResponse {
   reportName: string;
   generatedAt: string | Date;
   summary: OutstandingSummary;
-  rows: OutstandingRow[];
-  detailRows: OutstandingDetailRow[];
+  rows?: OutstandingRow[];
+  detailRows?: OutstandingDetailRow[];
+  /**
+   * Single-agency bucket breakdown. Populated only when the request
+   * hits the agency-scoped endpoint with `agencyId` and no
+   * `export=...` flag. In that mode `rows` is omitted entirely — the
+   * single agency lives here instead.
+   */
+  agencyDetails?: OutstandingRow;
+  /**
+   * Backend echoes back the agency id that was filtered on (and the
+   * agency name). Helpful when the page drives directly off the
+   * agency-scoped endpoint.
+   */
+  agencyId?: string;
+  agency?: { id: string; name: string };
+  branchId?: string | null;
 }
 
 export interface GetOutstandingReportParams {
   branchId?: string;
-  type?: OutstandingType;
+  type?: OutstandingBackendType;
 }
 
 // =====================================================================

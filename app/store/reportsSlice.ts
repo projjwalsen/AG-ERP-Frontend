@@ -2,6 +2,9 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { reportApi } from "@/app/services/report.service";
 import {
   OutstandingReportResponse,
+  OutstandingRow,
+  OutstandingDetailRow,
+  OutstandingBucket,
   GetOutstandingReportParams,
   DayBookResponse,
   GetDayBookParams,
@@ -81,8 +84,8 @@ function toNumber(v: unknown): number {
  * but the page doesn't read them — it's safe to leave them.
  */
 function castBucket(
-  bucket: OutstandingReportResponse["rows"][number]["bucket_0_30_days"]
-): OutstandingReportResponse["rows"][number]["bucket_0_30_days"] {
+  bucket: OutstandingBucket | undefined
+): OutstandingBucket {
   return {
     amount: toNumber(bucket?.amount),
     invoices: (bucket?.invoices || []).map((inv) => ({
@@ -96,8 +99,8 @@ function castBucket(
 }
 
 function castRow(
-  row: OutstandingReportResponse["rows"][number]
-): OutstandingReportResponse["rows"][number] {
+  row: OutstandingRow
+): OutstandingRow {
   return {
     ...row,
     totalOutstanding: toNumber(row.totalOutstanding),
@@ -109,8 +112,8 @@ function castRow(
 }
 
 function castDetailRow(
-  row: OutstandingReportResponse["detailRows"][number]
-): OutstandingReportResponse["detailRows"][number] {
+  row: OutstandingDetailRow
+): OutstandingDetailRow {
   return {
     ...row,
     billAmount: toNumber(row.billAmount),
@@ -224,13 +227,24 @@ function castInventory(r: InventoryReportResponse): InventoryReportResponse {
 // THUNKS
 // =====================================================================
 
+/**
+ * The slice's `params.type` is already in the backend's wire-level
+ * union (RECEIVABLE / PAYABLE) — callers (the page, the bucket page)
+ * are responsible for the AR / AP → RECEIVABLE / PAYABLE conversion
+ * before dispatching. Keeping the conversion at the call site means
+ * tab labels stay in the AR / AP vocabulary but the backend only
+ * ever sees the long-form values it expects.
+ */
 export const fetchOutstandingReport = createAsyncThunk<
   OutstandingReportResponse,
   GetOutstandingReportParams | undefined,
   { rejectValue: string }
 >("reports/fetchOutstanding", async (params, { rejectWithValue }) => {
   try {
-    const response = await reportApi.getOutstandingReport(params);
+    const response = await reportApi.getOutstandingReport({
+      branchId: params?.branchId,
+      type: params?.type,
+    });
     if (response.success && response.data) {
       return response.data;
     }

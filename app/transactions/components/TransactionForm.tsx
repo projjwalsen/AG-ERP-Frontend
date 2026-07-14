@@ -10,6 +10,7 @@ import {
   Lock,
   Receipt,
   Layers,
+  Landmark,
 } from "lucide-react";
 import {
   Card,
@@ -45,6 +46,7 @@ import {
   BalanceMetric,
 } from "./AgencyBalanceStrip";
 import { ThirdPartyAgencySection } from "./ThirdPartyAgencySection";
+import { bankApi, BankAccount } from "@/app/services/bank.service";
 import { formatCurrency, cn } from "@/lib/utils";
 
 export interface TransactionFormUser {
@@ -305,6 +307,17 @@ export function TransactionForm({
   const [settlementType, setSettlementType] =
     React.useState<SettlementType>("INVOICE_TO_INVOICE");
 
+  // Bank accounts active under the currently selected branch. Populated
+  // via `/api/bank/branch/:branchId` whenever `branchId` changes — the
+  // backend already filters out inactive accounts for that endpoint.
+  // Rendered under the "Payment Through" picker so users can attach the
+  // transaction to a specific bank account (the value is sent to the
+  // backend as `bankAccountId` in the create payload).
+  const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
+  const [bankAccountsLoading, setBankAccountsLoading] =
+    React.useState(false);
+  const [bankAccountId, setBankAccountId] = React.useState<string>("");
+
   const [thirdPartyAgencyId, setThirdPartyAgencyId] = React.useState<string>("");
 
   // INVOICE_TO_INVOICE: selected invoice id (string from the radio list).
@@ -360,6 +373,45 @@ export function TransactionForm({
   React.useEffect(() => {
     if (isSuspense) setThirdPartyAgencyId("");
   }, [isSuspense]);
+
+  // Fetch active bank accounts for the selected branch. The backend's
+  // `/api/bank/branch/:branchId` returns only active rows, so the
+  // picker is always a list of accounts the user can actually post
+  // to. Resetting `bankAccountId` when the branch changes avoids
+  // posting a stale id.
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!branchId || isSuspense) {
+      setBankAccounts([]);
+      setBankAccountId("");
+      return () => {
+        cancelled = true;
+      };
+    }
+    setBankAccountsLoading(true);
+    (async () => {
+      try {
+        const res = await bankApi.getByBranch(branchId);
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setBankAccounts(res.data);
+        } else {
+          setBankAccounts([]);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Failed to load bank accounts", err);
+          setBankAccounts([]);
+        }
+      } finally {
+        if (!cancelled) setBankAccountsLoading(false);
+      }
+    })();
+    setBankAccountId("");
+    return () => {
+      cancelled = true;
+    };
+  }, [branchId, isSuspense]);
 
   // Report context changes (including the new settlementType) up to the
   // page so it can fan out the right thunks.
@@ -585,6 +637,7 @@ export function TransactionForm({
         ? { transactionRefNo: transactionRefNo.trim() }
         : {}),
       ...(referenceNo.trim() ? { referenceNo: referenceNo.trim() } : {}),
+      ...(bankAccountId ? { bankAccountId } : {}),
       ...(remarks.trim() ? { remarks: remarks.trim() } : {}),
     };
     onSubmit(payload);
@@ -967,6 +1020,48 @@ export function TransactionForm({
                   )}
                 </div>
               </div>
+
+              {/* Bank account — shown once a branch is picked and the
+                  user has selected a non-cash Payment Through. Helps the
+                  user attach the transaction to the bank account it
+                  came from / went to. Driven by `bankAccounts`
+                  populated from /api/bank/branch/:branchId. */}
+              {branchId && paymentThrough && paymentThrough !== "CASH" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="bankAccount" className="flex items-center gap-1.5">
+                    <Landmark className="h-3.5 w-3.5 text-blue-600" />
+                    Bank Account
+                    <span className="text-gray-500 font-normal">
+                      (optional)
+                    </span>
+                  </Label>
+                  <select
+                    id="bankAccount"
+                    value={bankAccountId}
+                    onChange={(e) => setBankAccountId(e.target.value)}
+                    className="flex h-9 w-full border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    disabled={bankAccountsLoading}
+                  >
+                    <option value="">
+                      {bankAccountsLoading
+                        ? "Loading bank accounts…"
+                        : bankAccounts.length === 0
+                        ? "No bank accounts for this branch"
+                        : "Select bank account"}
+                    </option>
+                    {bankAccounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.bankName} — {acc.accountNumber}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-gray-500">
+                    Add a bank account for this branch from the{" "}
+                    <span className="font-mono">Branches → Bank Accounts</span>{" "}
+                    tab if the list is empty.
+                  </p>
+                </div>
+              )}
 
               {paymentThrough && (
                 <p className="text-[11px] text-gray-500">

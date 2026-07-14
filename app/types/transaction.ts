@@ -281,6 +281,13 @@ export interface CreateTransactionPayload {
    * (and labelled "Reference No" in the UI).
    */
   referenceNo?: string;
+  /**
+   * Bank account the transaction posts against. Populated when the
+   * user picks a non-cash Payment Through and an account under the
+   * selected branch. Optional — backend accepts transactions
+   * without it.
+   */
+  bankAccountId?: string;
   remarks?: string;
 }
 

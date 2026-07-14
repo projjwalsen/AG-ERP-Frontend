@@ -17,14 +17,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   ReportLayout,
   ReportTable,
   ReportFilters,
@@ -41,7 +33,6 @@ import {
   OutstandingRow,
   OutstandingType,
   OutstandingBucketKey,
-  OutstandingBucketInvoice,
 } from "@/app/types/report";
 import { formatCurrency, cn } from "@/lib/utils";
 
@@ -70,187 +61,9 @@ function formatDate(d: string | Date | null | undefined): string {
   });
 }
 
-function SettlementBadge({ status }: { status: string }) {
-  const variant =
-    status === "SETTLED"
-      ? "bg-emerald-50 text-emerald-700"
-      : status === "PARTIALLY_SETTLED"
-      ? "bg-amber-50 text-amber-700"
-      : "bg-rose-50 text-rose-700";
-  const label =
-    status === "PARTIALLY_SETTLED" ? "Partial" : status === "UNPAID" ? "Unpaid" : status;
-  return (
-    <Badge
-      variant="secondary"
-      className={cn("font-medium border-0", variant)}
-    >
-      {label}
-    </Badge>
-  );
-}
-
-function BucketInvoiceTable({
-  invoices,
-}: {
-  invoices: OutstandingBucketInvoice[];
-}) {
-  const columns: ColumnDef<OutstandingBucketInvoice>[] = React.useMemo(
-    () => [
-      {
-        accessorKey: "invoiceNo",
-        header: "Invoice #",
-        cell: ({ row }) => (
-          <span className="font-mono text-xs text-gray-900">
-            {row.original.invoiceNo ?? "-"}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "invoiceDate",
-        header: "Bill Date",
-        cell: ({ row }) => (
-          <span className="text-gray-700">{formatDate(row.original.invoiceDate)}</span>
-        ),
-      },
-      {
-        accessorKey: "invoiceAgeDays",
-        header: "Age (days)",
-        cell: ({ row }) => (
-          <span className="tabular-nums text-gray-700">
-            {row.original.invoiceAgeDays}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "grandTotal",
-        header: "Bill Amount",
-        cell: ({ row }) => (
-          <span className="tabular-nums font-medium text-gray-900">
-            {formatCurrency(row.original.grandTotal)}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "allocatedAmount",
-        header: "Paid",
-        cell: ({ row }) => (
-          <span className="tabular-nums text-gray-700">
-            {formatCurrency(row.original.allocatedAmount)}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "outstandingAmount",
-        header: "Outstanding",
-        cell: ({ row }) => (
-          <span className="tabular-nums font-semibold text-gray-900">
-            {formatCurrency(row.original.outstandingAmount)}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "settlementStatus",
-        header: "Status",
-        cell: ({ row }) => <SettlementBadge status={row.original.settlementStatus} />,
-      },
-    ],
-    []
-  );
-
-  return (
-    <div className="rounded-md border border-gray-200 bg-white">
-      <ReportTable
-        columns={columns}
-        data={invoices}
-        showSearch={false}
-        showColumnVisibility={false}
-      />
-    </div>
-  );
-}
-
-interface BucketsDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  row: OutstandingRow | null;
-  partyLabel: string; // "Customer" or "Vendor"
-}
-
-function BucketsDialog({ open, onOpenChange, row, partyLabel }: BucketsDialogProps) {
-  if (!row) return null;
-
-  const totalInvoices = BUCKET_COLUMNS.reduce(
-    (sum, { key }) => sum + (row[key]?.invoices?.length ?? 0),
-    0
-  );
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <Building2 className="h-4 w-4 text-gray-500" />
-            {row.agencyName}
-            {row.vendorCode && (
-              <span className="font-mono text-xs text-gray-500">
-                ({row.vendorCode})
-              </span>
-            )}
-          </DialogTitle>
-          <DialogDescription>
-            Aging-bucket breakdown · {row.totalOutstanding !== undefined
-              ? formatCurrency(row.totalOutstanding)
-              : "-"}{" "}
-            total outstanding · {totalInvoices}{" "}
-            {totalInvoices === 1 ? "invoice" : "invoices"}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-          {BUCKET_COLUMNS.map(({ key, label }) => {
-            const bucket = row[key];
-            const invoices = bucket?.invoices ?? [];
-            const amount = bucket?.amount ?? 0;
-            return (
-              <div key={key} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    {label}
-                  </p>
-                  <p className="text-xs text-gray-600 tabular-nums">
-                    {invoices.length}{" "}
-                    {invoices.length === 1 ? "invoice" : "invoices"} ·{" "}
-                    <span
-                      className={cn(
-                        "font-medium",
-                        amount === 0 ? "text-gray-400" : "text-gray-900"
-                      )}
-                    >
-                      {formatCurrency(amount)}
-                    </span>
-                  </p>
-                </div>
-                {invoices.length === 0 ? (
-                  <div className="rounded-md border border-dashed border-gray-200 bg-gray-50 px-3 py-6 text-center text-xs text-gray-500">
-                    No {partyLabel.toLowerCase()} outstanding invoices in this bucket.
-                  </div>
-                ) : (
-                  <BucketInvoiceTable invoices={invoices} />
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// Bucket breakdown now lives on its own page at
+// /reports/outstanding-report/:agencyId — the modal that used to live
+// here (BucketsDialog + BucketInvoiceTable) was removed.
 
 export default function OutstandingReportPage() {
   const dispatch = useAppDispatch();
@@ -264,14 +77,20 @@ export default function OutstandingReportPage() {
   const [outstandingType, setOutstandingType] =
     React.useState<OutstandingType>("AR");
   const [viewMode, setViewMode] = React.useState<ViewMode>("agency");
-  const [modalRow, setModalRow] = React.useState<OutstandingRow | null>(null);
-  const [modalOpen, setModalOpen] = React.useState(false);
   const [filters, setFilters] = React.useState<ReportFilterValues>({});
+
+  // The on-screen tabs are AR/AP but the backend expects
+  // RECEIVABLE/PAYABLE. Map at the wire boundary so the tab labels
+  // (and the OutstandingType union on the frontend) stay unchanged.
+  const toBackendType = (t: OutstandingType): "RECEIVABLE" | "PAYABLE" =>
+    t === "AR" ? "RECEIVABLE" : "PAYABLE";
 
   const load = React.useCallback(
     (overrides?: { type?: OutstandingType; branchId?: string }) => {
       const params = {
-        type: (overrides?.type ?? outstandingType) as OutstandingType,
+        // Frontend value stays as AR/AP; the slice remaps to
+        // RECEIVABLE/PAYABLE before hitting the backend.
+        type: toBackendType(overrides?.type ?? outstandingType),
         branchId: overrides?.branchId ?? filters.branchId,
       };
       dispatch(fetchOutstandingReport(params))
@@ -283,8 +102,6 @@ export default function OutstandingReportPage() {
 
   React.useEffect(() => {
     load({ type: outstandingType });
-    setModalOpen(false);
-    setModalRow(null);
     // Only re-run when the tab or branch filter changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outstandingType]);
@@ -357,13 +174,15 @@ export default function OutstandingReportPage() {
       : detailRows.length === 0;
 
   const openBuckets = (row: OutstandingRow) => {
-    setModalRow(row);
-    setModalOpen(true);
-  };
-
-  const closeBuckets = (open: boolean) => {
-    setModalOpen(open);
-    if (!open) setModalRow(null);
+    // View bucket now opens a dedicated page at
+    // /reports/outstanding-report/:agencyId instead of a modal.
+    // The page re-uses the same Redux thunk + filter context.
+    const params = new URLSearchParams();
+    params.set("type", outstandingType);
+    if (filters.branchId) params.set("branchId", filters.branchId);
+    router.push(
+      `/reports/outstanding-report/${row.agencyId}?${params.toString()}`
+    );
   };
 
   const agencyColumns: ColumnDef<OutstandingRow>[] = React.useMemo(
@@ -634,7 +453,7 @@ export default function OutstandingReportPage() {
           onExport={() =>
             reportApi.exportOutstandingExcel({
               branchId: filters.branchId,
-              type: outstandingType,
+              type: toBackendType(outstandingType),
             })
           }
         />
@@ -664,23 +483,20 @@ export default function OutstandingReportPage() {
           columns={agencyColumns}
           data={agencyRows}
           isLoading={isLoading}
-         
+
         />
       ) : (
         <ReportTable
           columns={detailColumns}
           data={detailRows}
           isLoading={isLoading}
-         
+
         />
       )}
 
-      <BucketsDialog
-        open={modalOpen}
-        onOpenChange={closeBuckets}
-        row={modalRow}
-        partyLabel={isReceivable ? "Customer" : "Vendor"}
-      />
+      {/* Bucket breakdown moved to a dedicated page at
+          /reports/outstanding-report/:agencyId — see that route for
+          the full breakdown + Excel export. */}
     </ReportLayout>
   );
 }
