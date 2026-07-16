@@ -215,6 +215,13 @@ export interface GetDayBookParams {
   branchId: string;
   startDate?: string;
   endDate?: string;
+  /**
+   * When set, the backend scopes the day-book to transactions that
+   * posted against this bank account under the selected branch.
+   * Mirrors `bankAccountId` in
+   * `AG-ERP-Backend/src/modules/reports/reporting.routes.ts`.
+   */
+  bankAccountId?: string;
 }
 
 // =====================================================================

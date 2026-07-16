@@ -29,6 +29,7 @@ import {
 import { TransactionForm } from "../components/TransactionForm";
 import { Lock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { ImportButton } from "@/app/components/import/ImportButton";
 
 export default function NewTransactionPage() {
   // `useSearchParams` requires a Suspense boundary during static rendering.
@@ -329,13 +330,18 @@ function NewTransactionContent() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <Link href="/transactions">
           <Button variant="ghost" size="sm" className="gap-1.5 text-gray-500">
             <ArrowLeft className="h-4 w-4" />
             Back to Transactions
           </Button>
         </Link>
+        <ImportButton
+          registerType="PURCHASE"
+          label="Import"
+          variant="outline"
+        />
       </div>
 
       <PageHeader

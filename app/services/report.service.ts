@@ -44,7 +44,13 @@ export const reportApi = {
   },
 
   /**
-   * GET /api/reports/branch/:branchId/day-book?startDate=&endDate=
+   * GET /api/reports/branch/:branchId/day-book?startDate=&endDate=&bankAccountId=
+   *
+   * If `bankAccountId` is supplied the backend scopes the day-book to
+   * transactions that posted against that bank account under the
+   * selected branch. The mirror `bankAccountId` query parameter is
+   * defined in the OpenAPI scalar under
+   * `AG-ERP-Backend/src/modules/reports/reporting.routes.ts`.
    */
   async getBranchDayBook(
     params: GetDayBookParams
@@ -52,6 +58,7 @@ export const reportApi = {
     const queryParams = new URLSearchParams();
     if (params.startDate) queryParams.append("startDate", params.startDate);
     if (params.endDate) queryParams.append("endDate", params.endDate);
+    if (params.bankAccountId) queryParams.append("bankAccountId", params.bankAccountId);
     const query = queryParams.toString();
     const url = query
       ? `api/reports/branch/${params.branchId}/day-book?${query}`
@@ -195,7 +202,7 @@ export const reportApi = {
   },
 
   /**
-   * GET /api/reports/branch/:branchId/day-book?export=true&startDate=&endDate=
+   * GET /api/reports/branch/:branchId/day-book?export=true&startDate=&endDate=&bankAccountId=
    * Note: branchId is in the path, not the query.
    */
   async exportDayBookExcel(
@@ -205,6 +212,8 @@ export const reportApi = {
     queryParams.append("export", "true");
     if (params.startDate) queryParams.append("startDate", params.startDate);
     if (params.endDate) queryParams.append("endDate", params.endDate);
+    if (params.bankAccountId)
+      queryParams.append("bankAccountId", params.bankAccountId);
     return fetchBlob(
       `api/reports/branch/${params.branchId}/day-book?${queryParams.toString()}`,
       "day-book.xlsx"

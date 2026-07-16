@@ -17,6 +17,7 @@ import { fetchAllPurchases } from "@/app/store/purchasesSlice";
 import { fetchAllSales } from "@/app/store/salesSlice";
 import { purchaseApi } from "@/app/services/purchase.service";
 import { salesApi } from "@/app/services/sales.service";
+import { ImportButton } from "@/app/components/import/ImportButton";
 import { Purchase } from "@/app/types/purchase";
 import { Sales } from "@/app/types/sales";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
@@ -181,10 +182,18 @@ function PurchaseTab() {
             Pending Approvals
           </Button>
           {canPurchaseWrite && (
-            <Button onClick={() => router.push("/purchase-sales/new")} className="gap-2">
-              <Plus className="h-4 w-4" />
-              New Purchase
-            </Button>
+            <>
+              <ImportButton
+                registerType="PURCHASE"
+                label="Import"
+                variant="outline"
+                onCompleted={() => fetchPurchases(currentPage, statusFilter)}
+              />
+              <Button onClick={() => router.push("/purchase-sales/new")} className="gap-2">
+                <Plus className="h-4 w-4" />
+                New Purchase
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -714,10 +723,18 @@ function SalesTab() {
             Pending Approvals
           </Button>
           {canSaleWrite && (
-            <Button onClick={() => router.push("/purchase-sales/new-sale")} className="gap-2">
-              <Plus className="h-4 w-4" />
-              New Sale
-            </Button>
+            <>
+              <ImportButton
+                registerType="SALE"
+                label="Import"
+                variant="outline"
+                onCompleted={() => fetchSales(currentPage, statusFilter)}
+              />
+              <Button onClick={() => router.push("/purchase-sales/new-sale")} className="gap-2">
+                <Plus className="h-4 w-4" />
+                New Sale
+              </Button>
+            </>
           )}
         </div>
       </div>

@@ -29,6 +29,7 @@ import { downloadFile } from "@/lib/download";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { agencyApi } from "@/app/services/agency.service";
 import { branchApi } from "@/app/services/branch.service";
+import { ImportButton } from "@/app/components/import/ImportButton";
 import {
   fetchAllTransactions,
   fetchPendingTotal,
@@ -441,12 +442,20 @@ function DirectionTab({ direction }: { direction: TransactionDirection }) {
             </Link>
           )}
           {canWrite && (
-            <Link href={`/transactions/new?direction=${direction}`}>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" />
-                {newButtonLabel}
-              </Button>
-            </Link>
+            <>
+              <ImportButton
+                registerType="PURCHASE"
+                label="Import"
+                variant="outline"
+                onCompleted={() => fetchTransactions()}
+              />
+              <Link href={`/transactions/new?direction=${direction}`}>
+                <Button className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  {newButtonLabel}
+                </Button>
+              </Link>
+            </>
           )}
         </div>
       </div>

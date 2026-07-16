@@ -12,6 +12,7 @@ import {
   TrendingUp,
   FileText,
   Building2,
+  Landmark,
 } from "lucide-react";
 import {
   Dialog,
@@ -37,6 +38,7 @@ import { fetchBranchDayBook } from "@/app/store/reportsSlice";
 import { reportApi } from "@/app/services/report.service";
 import { DayBookEntry } from "@/app/types/report";
 import { branchApi } from "@/app/services/branch.service";
+import { bankApi, BankAccount } from "@/app/services/bank.service";
 import { formatCurrency, cn } from "@/lib/utils";
 
 /**
@@ -57,6 +59,14 @@ export default function DayBookReportPage() {
   const [branches, setBranches] = React.useState<
     { id: string; name: string; code: string }[]
   >([]);
+  /**
+   * Bank-account scope for the day-book. Lives outside the
+   * ReportFilters block because the dropdown is rendered next to the
+   * branch picker (above the standard filter bar) and is driven by
+   * its own fetch whenever the active branch changes.
+   */
+  const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
+  const [bankAccountId, setBankAccountId] = React.useState<string>("");
   const [filters, setFilters] = React.useState<ReportFilterValues>({});
   const [activeBranchId, setActiveBranchId] = React.useState<string>("");
   const [activeRow, setActiveRow] = React.useState<DayBookEntry | null>(null);
@@ -83,6 +93,39 @@ export default function DayBookReportPage() {
     };
   }, [addToast]);
 
+  // Load bank accounts for the active branch. The backend's
+  //   GET /api/bank/branch/:branchId
+  // returns only active rows, so the picker is always a list of
+  // accounts the user can actually scope the report to. Resetting
+  // `bankAccountId` on branch change avoids posting a stale id.
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!activeBranchId) {
+      setBankAccounts([]);
+      setBankAccountId("");
+      return () => {
+        cancelled = true;
+      };
+    }
+    (async () => {
+      try {
+        const res = await bankApi.getByBranch(activeBranchId);
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setBankAccounts(res.data);
+        } else {
+          setBankAccounts([]);
+        }
+      } catch {
+        if (!cancelled) setBankAccounts([]);
+      }
+    })();
+    setBankAccountId("");
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBranchId]);
+
   const load = React.useCallback(() => {
     if (!activeBranchId) return;
     dispatch(
@@ -90,11 +133,19 @@ export default function DayBookReportPage() {
         branchId: activeBranchId,
         startDate: filters.startDate,
         endDate: filters.endDate,
+        bankAccountId: bankAccountId || undefined,
       })
     )
       .unwrap()
       .catch((err: string) => addToast(err || "Failed to load day book", "error"));
-  }, [dispatch, activeBranchId, filters.startDate, filters.endDate, addToast]);
+  }, [
+    dispatch,
+    activeBranchId,
+    filters.startDate,
+    filters.endDate,
+    bankAccountId,
+    addToast,
+  ]);
 
   // Refetch whenever the active branch changes (dates are applied
   // explicitly via the Apply button).
@@ -267,6 +318,20 @@ export default function DayBookReportPage() {
     [data?.branch?.name]
   );
 
+  /**
+   * Refetch when the user picks a different bank account. The branch
+   * / date changes are already handled by the load() callback
+   * dependency list; this effect covers just the bank account
+   * toggle so the rows reflect the new scope without the user
+   * having to click Apply.
+   */
+  React.useEffect(() => {
+    if (activeBranchId) load();
+    // load is intentionally omitted from deps — it's redefined on
+    // any state change and we only want to react to bankAccountId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bankAccountId]);
+
   const filterConfig: ReportFilterConfig[] = React.useMemo(
     () => [
       { type: "dateRange" },
@@ -279,7 +344,7 @@ export default function DayBookReportPage() {
       title="Branch Day Book"
       description={
         data?.branch
-          ? `${data.branch.name} (${data.branch.code}) — cash and bank movement`
+          ? `${data.branch.name} — cash and bank movement`
           : "Daily cash and bank movement for a branch"
       }
       generatedAt={data?.generatedAt as string | undefined}
@@ -293,6 +358,7 @@ export default function DayBookReportPage() {
               branchId: activeBranchId,
               startDate: filters.startDate,
               endDate: filters.endDate,
+              bankAccountId: bankAccountId || undefined,
             })
           }
         />
@@ -301,23 +367,56 @@ export default function DayBookReportPage() {
       toolbar={
         <div className="space-y-3">
           <Card className="border-0 shadow-sm">
-            <div className="p-4 flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-gray-400" />
-                <span className="text-sm font-medium text-gray-700">Branch</span>
-              </div>
+            <div className="p-4 flex flex-nowrap items-center gap-3 overflow-x-auto">
+              <FileText className="h-4 w-4 text-gray-400 shrink-0" />
+              <span className="text-sm font-medium text-gray-700 shrink-0">
+                Branch
+              </span>
               <select
                 value={activeBranchId}
                 onChange={(e) => setActiveBranchId(e.target.value)}
-                className="h-9 px-3 text-sm border border-gray-200 bg-white rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 min-w-[220px]"
+                className="h-9 px-3 text-sm border border-gray-200 bg-white rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 min-w-[200px] shrink-0"
               >
                 <option value="">Select branch</option>
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.name} ({b.code})
+                    {b.name}
                   </option>
                 ))}
               </select>
+
+              <Landmark className="h-4 w-4 text-blue-500 shrink-0" />
+              <span className="text-sm font-medium text-gray-700 shrink-0">
+                Bank Account
+              </span>
+              <select
+                value={bankAccountId}
+                onChange={(e) => setBankAccountId(e.target.value)}
+                className="h-9 px-3 text-sm border border-gray-200 bg-white rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 min-w-[240px] disabled:bg-gray-50 disabled:text-gray-400 shrink-0"
+                disabled={!activeBranchId}
+              >
+                <option value="">
+                  {activeBranchId
+                    ? bankAccounts.length === 0
+                      ? "No bank accounts for this branch"
+                      : "All bank accounts"
+                    : "Select a branch first"}
+                </option>
+                {bankAccounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.bankName} — {acc.accountNumber}
+                  </option>
+                ))}
+              </select>
+              {bankAccountId && (
+                <button
+                  type="button"
+                  onClick={() => setBankAccountId("")}
+                  className="text-xs text-gray-500 underline-offset-2 hover:underline shrink-0"
+                >
+                  Clear account
+                </button>
+              )}
             </div>
           </Card>
 
