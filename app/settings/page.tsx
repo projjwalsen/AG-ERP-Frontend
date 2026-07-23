@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout";
 import { useToast, ToastContainer } from "@/components/ui/toast";
@@ -58,12 +59,14 @@ export default function SystemSettingsPage() {
   // Local working copy of the toggles. We only PATCH the diff against
   // the server-side `settings` snapshot, so unsaved changes don't get
   // committed on every flip.
-  const [draft, setDraft] = React.useState<{
-    allowNegativeInventory: boolean;
-    allowNegativeTransaction: boolean;
-  }>({
+  const [draft, setDraft] = React.useState({
     allowNegativeInventory: false,
     allowNegativeTransaction: false,
+    sellerLogo: "",
+    sellerCIN: "",
+    companyPAN: "",
+    signatureImage: "",
+    jurisdictionText: "",
   });
   // Tracks whether the user has touched a toggle since the last load /
   // save. Used to enable/disable the Save button.
@@ -80,6 +83,11 @@ export default function SystemSettingsPage() {
     setDraft({
       allowNegativeInventory: settings.allowNegativeInventory,
       allowNegativeTransaction: settings.allowNegativeTransaction,
+      sellerLogo: settings.sellerLogo || "",
+      sellerCIN: settings.sellerCIN || "",
+      companyPAN: settings.companyPAN || "",
+      signatureImage: settings.signatureImage || "",
+      jurisdictionText: settings.jurisdictionText || "",
     });
     setDirty(false);
   }, [settings]);
@@ -117,6 +125,11 @@ export default function SystemSettingsPage() {
       id: "",
       allowNegativeInventory: false,
       allowNegativeTransaction: false,
+      sellerLogo: "",
+      sellerCIN: "",
+      companyPAN: "",
+      signatureImage: "",
+      jurisdictionText: "",
     };
 
     // Build the diff so the PATCH only carries the keys the user
@@ -125,6 +138,11 @@ export default function SystemSettingsPage() {
     const payload: {
       allowNegativeInventory?: boolean;
       allowNegativeTransaction?: boolean;
+      sellerLogo?: string | null;
+      sellerCIN?: string | null;
+      companyPAN?: string | null;
+      signatureImage?: string | null;
+      jurisdictionText?: string | null;
     } = {};
     if (draft.allowNegativeInventory !== baseline.allowNegativeInventory) {
       payload.allowNegativeInventory = draft.allowNegativeInventory;
@@ -132,6 +150,18 @@ export default function SystemSettingsPage() {
     if (draft.allowNegativeTransaction !== baseline.allowNegativeTransaction) {
       payload.allowNegativeTransaction = draft.allowNegativeTransaction;
     }
+    const invoiceKeys = [
+      "sellerLogo",
+      "sellerCIN",
+      "companyPAN",
+      "signatureImage",
+      "jurisdictionText",
+    ] as const;
+    invoiceKeys.forEach((key) => {
+      if (draft[key] !== (baseline[key] || "")) {
+        payload[key] = draft[key].trim() || null;
+      }
+    });
     if (Object.keys(payload).length === 0) {
       addToast("No changes to save", "info");
       return;
@@ -312,6 +342,42 @@ export default function SystemSettingsPage() {
               )}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-0 shadow-sm">
+        <CardHeader className="border-b border-gray-100">
+          <CardTitle className="text-sm font-semibold text-gray-900">
+            Invoice Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            ["sellerCIN", "Company CIN"],
+            ["companyPAN", "Company PAN"],
+            ["sellerLogo", "Seller Logo URL/Data URI"],
+            ["signatureImage", "Signature Image URL/Data URI"],
+            ["jurisdictionText", "Jurisdiction Text"],
+          ].map(([key, label]) => (
+            <div
+              key={key}
+              className={`space-y-2 ${key === "jurisdictionText" ? "md:col-span-2" : ""}`}
+            >
+              <Label htmlFor={key}>{label}</Label>
+              <Input
+                id={key}
+                value={draft[key as keyof typeof draft] as string}
+                onChange={(event) => {
+                  setDraft((previous) => ({
+                    ...previous,
+                    [key]: event.target.value,
+                  }));
+                  setDirty(true);
+                }}
+                disabled={isSubmitting}
+              />
+            </div>
+          ))}
         </CardContent>
       </Card>
 

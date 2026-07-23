@@ -153,6 +153,12 @@ export interface CompanyLedgerResponse {
     totalExpense: number;
     closingBalance: number;
   };
+  pagination: {
+    page: number;
+    limit: number;
+    totalEntries: number;
+    totalPages: number;
+  };
   entries: CompanyLedgerEntry[];
 }
 

@@ -105,6 +105,28 @@ export interface Sales {
   createdBy?: SalesUser;
   createdAt: string;
   updatedAt?: string;
+  invoiceDate?: string;
+  otherReference?: string;
+  roundOffAmount?: string;
+  irn?: string;
+  ackNo?: string;
+  ackDate?: string;
+  qrCodeImage?: string;
+  modeOfPayment?: string;
+  referenceNo?: string;
+  referenceDate?: string;
+  transport?: Array<{
+    deliveryNote?: string;
+    buyerOrderNo?: string;
+    buyerOrderDate?: string;
+    termsOfDelivery?: string;
+    despatchDocNo?: string;
+    despatchDocDate?: string;
+    despatchThrough?: string;
+    destination?: string;
+    vehicleOrFlightNo?: string;
+    billOfLadingNo?: string;
+  }>;
 }
 
 export interface PaginationMeta {

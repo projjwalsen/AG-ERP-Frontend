@@ -239,7 +239,7 @@ export const ledgerApi = {
     return apiFetch<SuspenseLedgerDetailResponse>(`api/ledgers/suspense/${branchId}${query}`);
   },
 
-  // GET /api/ledgers/company-ledger?branchId=&startDate=&endDate=
+  // GET /api/ledgers/company-ledger?branchId=&startDate=&endDate=&page=&limit=
   // Whole-company consolidated ledger. Backend applies branch-access
   // filtering by user role (ALL access users can scope by branchId,
   // SELECTED access users are locked to their own branch).
@@ -247,11 +247,15 @@ export const ledgerApi = {
     branchId?: string;
     startDate?: string;
     endDate?: string;
+    page?: number;
+    limit?: number;
   }): Promise<{ success: boolean; message: string; data?: CompanyLedgerResponse }> {
     const query = new URLSearchParams();
     if (params?.branchId) query.append("branchId", params.branchId);
     if (params?.startDate) query.append("startDate", params.startDate);
     if (params?.endDate) query.append("endDate", params.endDate);
+    if (params?.page) query.append("page", String(params.page));
+    if (params?.limit) query.append("limit", String(params.limit));
     const qs = query.toString();
     return apiFetch<CompanyLedgerResponse>(`api/ledgers/company-ledger${qs ? `?${qs}` : ""}`);
   },

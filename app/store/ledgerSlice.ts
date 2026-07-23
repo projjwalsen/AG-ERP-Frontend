@@ -346,12 +346,18 @@ export const fetchLedgerBySuspenseId = createAsyncThunk<
   }
 });
 
-// GET /api/ledgers/company-ledger?branchId=&startDate=&endDate=
+// GET /api/ledgers/company-ledger?branchId=&startDate=&endDate=&page=&limit=
 // Whole-company consolidated ledger. startDate/endDate are optional ISO
 // date strings (YYYY-MM-DD); the backend filters transactions on createdAt.
 export const fetchCompanyLedger = createAsyncThunk<
   CompanyLedgerResponse,
-  { branchId?: string; startDate?: string; endDate?: string } | undefined,
+  {
+    branchId?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  } | undefined,
   { rejectValue: string }
 >("ledger/fetchCompanyLedger", async (params, { rejectWithValue }) => {
   try {

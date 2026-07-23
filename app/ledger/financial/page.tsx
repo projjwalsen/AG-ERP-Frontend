@@ -4,7 +4,7 @@ import * as React from "react";
 import {
   Wallet, Search, Eye, Building2,
   Briefcase, Layers, Download, Building,
-  Filter as FilterIcon,
+  Filter as FilterIcon, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,10 +148,12 @@ function FinancialLedgerContent() {
 
   // ===== Company-ledger fetch =====
   const fetchCompany = React.useCallback(
-    async (sd: string, ed: string) => {
+    async (sd: string, ed: string, page: number) => {
       try {
         await dispatch(
           fetchCompanyLedger({
+            page,
+            limit: 25,
             ...(sd ? { startDate: sd } : {}),
             ...(ed ? { endDate: ed } : {}),
           })
@@ -163,12 +165,12 @@ function FinancialLedgerContent() {
     [dispatch, addToast]
   );
 
-  // Refetch company ledger whenever its filters change.
+  // Refetch company ledger whenever its filters or page changes.
   React.useEffect(() => {
     if (activeTab === "COMPANY") {
-      fetchCompany(startDate, endDate);
+      fetchCompany(startDate, endDate, currentPage);
     }
-  }, [activeTab, startDate, endDate, fetchCompany]);
+  }, [activeTab, startDate, endDate, currentPage, fetchCompany]);
 
   const fetchList = React.useCallback(
     async (view: LedgerView, page: number, search: string) => {
@@ -188,9 +190,12 @@ function FinancialLedgerContent() {
     [dispatch, addToast]
   );
 
-  // Refetch whenever tab, page, or search changes
+  // Refetch the shared list whenever tab, page, or search changes. Company
+  // has its own paginated endpoint and must not call get-all?view=COMPANY.
   React.useEffect(() => {
-    fetchList(activeTab, currentPage, searchTerm);
+    if (activeTab !== "COMPANY") {
+      fetchList(activeTab, currentPage, searchTerm);
+    }
   }, [activeTab, currentPage, searchTerm, fetchList]);
 
   const handleTabChange = (value: string) => {
@@ -246,14 +251,16 @@ function FinancialLedgerContent() {
     }
   };
 
-  // Apply: commit draft dates to the applied state, triggering refetch.
+  // Apply: commit draft dates and return to the first result page.
   const applyCompanyFilters = () => {
+    setCurrentPage(1);
     setStartDate(draftStartDate);
     setEndDate(draftEndDate);
   };
 
-  // Reset: clear both draft and applied state in one go.
+  // Reset: clear both draft and applied state and return to page one.
   const resetCompanyFilters = () => {
+    setCurrentPage(1);
     setDraftStartDate("");
     setDraftEndDate("");
     setStartDate("");
@@ -519,6 +526,8 @@ function FinancialLedgerContent() {
             data={currentCompanyLedger}
             isLoading={isCompanyLedgerLoading}
             error={companyLedgerError}
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
           />
         </TabsContent>
       </Tabs>
@@ -951,10 +960,14 @@ function CompanyLedgerTab({
   data,
   isLoading,
   error,
+  currentPage,
+  onPageChange,
 }: {
   data: CompanyLedgerResponse | null;
   isLoading: boolean;
   error: string | null;
+  currentPage: number;
+  onPageChange: (page: number) => void;
 }) {
   if (error) {
     return (
@@ -990,7 +1003,7 @@ function CompanyLedgerTab({
     );
   }
 
-  const { company, summary, entries } = data;
+  const { company, summary, entries, pagination } = data;
 
   return (
     <>
@@ -1011,7 +1024,7 @@ function CompanyLedgerTab({
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-gray-500 uppercase">Total Transactions</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{entries?.length ?? 0}</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{pagination.totalEntries}</p>
           </CardContent>
         </Card>
         <Card>
@@ -1094,6 +1107,68 @@ function CompanyLedgerTab({
           )}
         </CardContent>
       </Card>
+
+      {/*
+       * Dedicated pagination block for the Company tab. Rendered as a
+       * sibling of the entries card (not nested inside it) so it's
+       * always visible at the bottom of the section — including when
+       * totalPages is 1, which lets the user see "Page 1 of N" and
+       * confirms pagination is wired. `totalEntries` falls back to the
+       * current entries length so the block renders even on stale
+       * payloads that don't carry pagination metadata.
+       */}
+      {entries && entries.length > 0 && (
+        <div className="flex items-center justify-between px-4 py-3 mt-3 bg-white border border-gray-200 rounded-md">
+          <p className="text-sm text-gray-500">
+            Showing{" "}
+            {((currentPage - 1) * (pagination?.limit || 25)) + 1} to{" "}
+            {Math.min(
+              currentPage * (pagination?.limit || 25),
+              pagination?.totalEntries ?? entries.length
+            )}{" "}
+            of {pagination?.totalEntries ?? entries.length} entries
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+              disabled={
+                currentPage <= 1 ||
+                (pagination?.totalPages ?? 1) <= 1 ||
+                isLoading
+              }
+              className="gap-1"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <span className="text-sm text-gray-600">
+              Page {currentPage} of {pagination?.totalPages ?? 1}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                onPageChange(
+                  Math.min(
+                    pagination?.totalPages ?? 1,
+                    currentPage + 1
+                  )
+                )
+              }
+              disabled={
+                currentPage >= (pagination?.totalPages ?? 1) ||
+                isLoading
+              }
+              className="gap-1"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

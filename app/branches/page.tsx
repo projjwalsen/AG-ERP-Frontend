@@ -889,8 +889,8 @@ function BankAccountsTab() {
         )}
       </div>
 
-      <div className="flex items-center gap-4 bg-white p-4 rounded-lg border border-gray-200 flex-wrap">
-        <div className="space-y-1.5 min-w-[260px]">
+      <div className="flex items-end gap-4 bg-white p-4 rounded-lg border border-gray-200 flex-wrap">
+        <div className="space-y-1.5 shrink-0 max-w-[200px]">
           <Label htmlFor="bank-branch-picker">Branch</Label>
           <select
             id="bank-branch-picker"
@@ -906,15 +906,27 @@ function BankAccountsTab() {
               {branchesLoading ? "Loading branches…" : "Select a branch"}
             </option>
             {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name} ({b.code})
+              <option
+                key={b.id}
+                value={b.id}
+                // Truncate long branch names to 10 characters + "…" so
+                // the picker stays narrow and the search bar fits on
+                // the same row without wrapping. The full name is
+                // available as the option's `title` tooltip and is
+                // also rendered in full inside the table body.
+                title={b.name}
+              >
+                {(b.name?.length ?? 0) > 10
+                  ? `${b.name.slice(0, 10)}…`
+                  : b.name}{" "}
+                ({b.code})
               </option>
             ))}
           </select>
         </div>
 
         {selectedBranchId && (
-          <div className="relative flex-1 max-w-sm">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
               placeholder="Search by bank / account / IFSC…"

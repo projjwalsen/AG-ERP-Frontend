@@ -50,6 +50,22 @@ interface ReportTableProps<TData, TValue> {
   /** Optional row click handler. */
   onRowClick?: (row: TData) => void;
   className?: string;
+  /**
+   * Server-driven pagination. When supplied, the table:
+   *   - shows the supplied totals/page in the footer instead of its own
+   *     client-side paginator (TanStack's internal `Next/Prev` is hidden)
+   *   - hides the page-size selector since the page size is owned by the
+   *     server
+   * Use this for any report whose backend returns a `pagination` object.
+   */
+  serverPagination?: {
+    page: number;
+    totalPages: number;
+    totalEntries: number;
+    limit: number;
+    isLoading?: boolean;
+    onPageChange: (page: number) => void;
+  };
 }
 
 /**
@@ -72,6 +88,7 @@ export function ReportTable<TData, TValue>({
   loadingRows = 8,
   onRowClick,
   className,
+  serverPagination,
 }: ReportTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -92,8 +109,35 @@ export function ReportTable<TData, TValue>({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    onPaginationChange: setPagination,
-    state: { sorting, columnFilters, globalFilter, columnVisibility, pagination },
+    // When the parent owns pagination, flip TanStack into manual mode so
+    // it doesn't slice `data` again at pageSize=10. We point its internal
+    // pagination at a page big enough to fit every server-supplied row.
+    ...(serverPagination
+      ? {
+          manualPagination: true,
+          pageCount: serverPagination.totalPages,
+          onPaginationChange: () => {
+            /* no-op — server drives page changes via onPageChange */
+          },
+        }
+      : {
+          onPaginationChange: setPagination,
+        }),
+    state: {
+      sorting,
+      columnFilters,
+      globalFilter,
+      columnVisibility,
+      pagination: serverPagination
+        ? {
+            pageIndex: (serverPagination.page || 1) - 1,
+            pageSize: Math.max(
+              serverPagination.limit,
+              data.length || serverPagination.limit
+            ),
+          }
+        : pagination,
+    },
   });
 
   const rows = table.getRowModel().rows;
@@ -120,23 +164,28 @@ export function ReportTable<TData, TValue>({
             )}
 
             <div className="flex items-center gap-2">
-              <Select
-                value={pagination.pageSize.toString()}
-                onValueChange={(v) =>
-                  setPagination({ pageIndex: 0, pageSize: Number(v) })
-                }
-              >
-                <SelectTrigger className="h-9 w-[110px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[10, 20, 30, 50, 100].map((s) => (
-                    <SelectItem key={s} value={s.toString()}>
-                      {s} rows
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Page-size selector only makes sense for client-side
+                  pagination; when the report is server-paginated the
+                  size is owned by the backend. */}
+              {!serverPagination && (
+                <Select
+                  value={pagination.pageSize.toString()}
+                  onValueChange={(v) =>
+                    setPagination({ pageIndex: 0, pageSize: Number(v) })
+                  }
+                >
+                  <SelectTrigger className="h-9 w-[110px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[10, 20, 30, 50, 100].map((s) => (
+                      <SelectItem key={s} value={s.toString()}>
+                        {s} rows
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
 
               {showColumnVisibility && (
                 <DropdownMenu>
@@ -233,48 +282,116 @@ export function ReportTable<TData, TValue>({
           </table>
         </div>
 
-        {/* Pagination */}
+        {/* Pagination — server takes priority; otherwise the table
+            renders its built-in TanStack client-side paginator. */}
         {!isLoading && rows.length > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
-            <p className="text-sm text-gray-500">
-              Showing{" "}
-              <span className="font-medium">
-                {pagination.pageIndex * pagination.pageSize + 1}
-              </span>{" "}
-              to{" "}
-              <span className="font-medium">
-                {Math.min(
-                  (pagination.pageIndex + 1) * pagination.pageSize,
-                  total
-                )}
-              </span>{" "}
-              of <span className="font-medium">{total}</span> entries
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => table.previousPage()}
-                disabled={!table.getCanPreviousPage()}
-                className="h-8"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Prev
-              </Button>
-              <span className="text-sm text-gray-600">
-                Page {pagination.pageIndex + 1} of {table.getPageCount() || 1}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => table.nextPage()}
-                disabled={!table.getCanNextPage()}
-                className="h-8"
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+            {serverPagination ? (
+              <>
+                <p className="text-sm text-gray-500">
+                  Showing{" "}
+                  <span className="font-medium">
+                    {(serverPagination.page - 1) * serverPagination.limit + 1}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-medium">
+                    {Math.min(
+                      serverPagination.page * serverPagination.limit,
+                      serverPagination.totalEntries
+                    )}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-medium">
+                    {serverPagination.totalEntries}
+                  </span>{" "}
+                  entries
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      serverPagination.onPageChange(
+                        Math.max(1, serverPagination.page - 1)
+                      )
+                    }
+                    disabled={
+                      serverPagination.page <= 1 || !!serverPagination.isLoading
+                    }
+                    className="h-8 gap-1"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <span className="text-sm text-gray-600">
+                    Page {serverPagination.page} of {serverPagination.totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      serverPagination.onPageChange(
+                        Math.min(
+                          serverPagination.totalPages,
+                          serverPagination.page + 1
+                        )
+                      )
+                    }
+                    disabled={
+                      serverPagination.page >= serverPagination.totalPages ||
+                      !!serverPagination.isLoading
+                    }
+                    className="h-8 gap-1"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-500">
+                  Showing{" "}
+                  <span className="font-medium">
+                    {pagination.pageIndex * pagination.pageSize + 1}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-medium">
+                    {Math.min(
+                      (pagination.pageIndex + 1) * pagination.pageSize,
+                      total
+                    )}
+                  </span>{" "}
+                  of <span className="font-medium">{total}</span> entries
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => table.previousPage()}
+                    disabled={!table.getCanPreviousPage()}
+                    className="h-8"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Prev
+                  </Button>
+                  <span className="text-sm text-gray-600">
+                    Page {pagination.pageIndex + 1} of{" "}
+                    {table.getPageCount() || 1}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => table.nextPage()}
+                    disabled={!table.getCanNextPage()}
+                    className="h-8"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </CardContent>

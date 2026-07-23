@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Package, Plus, Search, Edit, Eye, MoreHorizontal, Scale, IndianRupee, Download } from "lucide-react";
+import { Package, Plus, Search, Edit, Eye, MoreHorizontal, Scale, IndianRupee, Download, Upload, FileSpreadsheet, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,10 @@ import {
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { useAppSelector } from "@/app/store/hooks";
 import { productApi, UpdateProductPayload } from "@/app/services/product.service";
+import {
+  importProductMaster,
+  ProductImportProgress,
+} from "@/app/services/import.service";
 import { hasModulePermission } from "@/lib/usePermissions";
 import { downloadFile } from "@/lib/download";
 import { Product } from "@/app/types/product";
@@ -40,7 +44,7 @@ export default function InventoryPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Inventory Management</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Product Management</h1>
         <p className="text-gray-500 mt-1">
           Manage products, pricing, and stock settings
         </p>
@@ -65,6 +69,22 @@ function ProductsTab() {
   const [viewModalOpen, setViewModalOpen] = React.useState(false);
   const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null);
   const [exporting, setExporting] = React.useState(false);
+  // Product-master import — see ImportModal below. `progress` is null
+  // until the server emits its first SSE chunk; `final` is set when
+  // the `event: completed` block arrives.
+  const [importOpen, setImportOpen] = React.useState(false);
+  const [importing, setImporting] = React.useState(false);
+  const [importProgress, setImportProgress] =
+    React.useState<ProductImportProgress | null>(null);
+  const [importFinal, setImportFinal] = React.useState<{
+    total: number;
+    processed: number;
+    success: number;
+    failed: number;
+    errors: ProductImportProgress["errors"];
+  } | null>(null);
+  const [importError, setImportError] = React.useState<string | null>(null);
+  const importAbortRef = React.useRef<AbortController | null>(null);
   const { permissions } = useAppSelector((state) => state.auth);
 
   const canView = hasModulePermission(permissions, "PRODUCT", "VIEW");
@@ -160,6 +180,65 @@ function ProductsTab() {
     }
   };
 
+  const openImport = () => {
+    // Reset previous run state before opening.
+    setImportProgress(null);
+    setImportFinal(null);
+    setImportError(null);
+    setImportOpen(true);
+  };
+
+  const closeImport = () => {
+    if (importing) {
+      // Cancel an in-flight stream when the user closes the modal.
+      importAbortRef.current?.abort();
+    }
+    setImportOpen(false);
+  };
+
+  const handleImportFile = async (file: File) => {
+    setImporting(true);
+    setImportProgress(null);
+    setImportFinal(null);
+    setImportError(null);
+
+    const controller = new AbortController();
+    importAbortRef.current = controller;
+
+    try {
+      await importProductMaster(file, {
+        signal: controller.signal,
+        onProgress: (p) => setImportProgress(p),
+        onComplete: (r) => {
+          setImportFinal(r);
+          setImporting(false);
+          importAbortRef.current = null;
+          addToast(
+            r.failed > 0
+              ? `Imported ${r.success}/${r.total} products (${r.failed} failed)`
+              : `Imported ${r.success} products successfully`,
+            r.failed > 0 ? "error" : "success"
+          );
+          // Refresh the product list so the new rows show up.
+          fetchProducts(currentPage, searchTerm, selectedCategory);
+        },
+        onError: (err) => {
+          setImportError(err.message || "Import failed");
+          setImporting(false);
+          importAbortRef.current = null;
+        },
+      });
+    } catch (err: any) {
+      // AbortedError surfaces when the user closes the modal — silent.
+      if (err?.name !== "AbortError") {
+        setImportError(err?.message || "Import failed");
+        addToast(err?.message || "Import failed", "error");
+      }
+      setImporting(false);
+      importAbortRef.current = null;
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -168,10 +247,20 @@ function ProductsTab() {
           <p className="text-sm text-gray-500">Manage product information and status</p>
         </div>
         {canWrite && (
-          <Button onClick={handleCreate} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add Product
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={openImport}
+            >
+              <Upload className="h-4 w-4" />
+              Import Products
+            </Button>
+            <Button onClick={handleCreate} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Add Product
+            </Button>
+          </div>
         )}
       </div>
 
@@ -240,6 +329,7 @@ function ProductsTab() {
                   <tr className="border-b border-gray-100 bg-gray-50">
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Product</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Unit (KG)</th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">Opening Stock</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Price</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -263,6 +353,13 @@ function ProductsTab() {
                             {product.description && (
                               <p className="text-xs text-gray-500 truncate max-w-xs">{product.description}</p>
                             )}
+                            {product.disclaimer && (
+                              <p className="text-xs text-amber-600 truncate max-w-xs mt-0.5">
+                                ⚠ {product.disclaimer.length > 10
+                                  ? `${product.disclaimer.slice(0, 10)}..`
+                                  : product.disclaimer}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -271,6 +368,13 @@ function ProductsTab() {
                           <Scale className="h-3.5 w-3.5 text-gray-400" />
                           KG
                         </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="text-sm font-medium text-gray-900 tabular-nums">
+                          {product.openingStockKG != null
+                            ? Number(product.openingStockKG).toLocaleString()
+                            : "-"}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
@@ -376,7 +480,280 @@ function ProductsTab() {
           product={selectedProduct}
         />
       )}
+
+      <ImportProductsModal
+        open={importOpen}
+        onClose={closeImport}
+        importing={importing}
+        progress={importProgress}
+        final={importFinal}
+        error={importError}
+        onFileSelected={handleImportFile}
+      />
     </div>
+  );
+}
+
+// ============================================================================
+// Import products from Excel — drives POST /api/migration/product.
+//
+// The backend streams `data: { total, processed, success, failed,
+// percentage, errors }` SSE chunks while it imports. The modal shows a
+// live progress bar and a final summary (success / failed counts +
+// per-row errors).
+// ============================================================================
+
+function ImportProductsModal({
+  open,
+  onClose,
+  importing,
+  progress,
+  final,
+  error,
+  onFileSelected,
+}: {
+  open: boolean;
+  onClose: () => void;
+  importing: boolean;
+  progress: ProductImportProgress | null;
+  final: {
+    total: number;
+    processed: number;
+    success: number;
+    failed: number;
+    errors: ProductImportProgress["errors"];
+  } | null;
+  error: string | null;
+  onFileSelected: (file: File) => void;
+}) {
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [fileName, setFileName] = React.useState<string>("");
+
+  const handleChooseFile = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    onFileSelected(file);
+    // Reset the input so the same file can be picked again later.
+    e.target.value = "";
+  };
+
+  // Reset the picked filename whenever the modal closes.
+  React.useEffect(() => {
+    if (!open) setFileName("");
+  }, [open]);
+
+  // Derived values for the UI. While a stream is in flight the
+  // percentage comes from the server; once `final` arrives we lock it
+  // at 100%.
+  const totalRows = progress?.total ?? final?.total ?? 0;
+  const processedRows = progress?.processed ?? final?.processed ?? 0;
+  const successRows = progress?.success ?? final?.success ?? 0;
+  const failedRows = progress?.failed ?? final?.failed ?? 0;
+  const percentage =
+    final != null
+      ? 100
+      : Math.min(100, Math.max(0, progress?.percentage ?? 0));
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
+            Import Product Master
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Upload an Excel workbook (.xlsx / .xls) of product master rows.
+            The importer streams per-row progress as it processes the
+            file.
+          </p>
+
+          {!importing && !final && !error && (
+            <div className="space-y-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2"
+                onClick={handleChooseFile}
+              >
+                <Upload className="h-4 w-4" />
+                {fileName ? `Re-pick file (${fileName})` : "Choose Excel file"}
+              </Button>
+            </div>
+          )}
+
+          {(importing || progress) && !final && !error && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs text-gray-500">
+                <span>
+                  {importing
+                    ? `Importing… ${processedRows}/${totalRows || "?"}`
+                    : "Preparing…"}
+                </span>
+                <span>{percentage}%</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-300 ease-out"
+                  style={{ width: `${percentage}%` }}
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="rounded-md bg-emerald-50 px-2 py-1.5">
+                  <p className="text-emerald-700 font-semibold">
+                    {successRows}
+                  </p>
+                  <p className="text-[11px] text-emerald-600">Imported</p>
+                </div>
+                <div className="rounded-md bg-rose-50 px-2 py-1.5">
+                  <p className="text-rose-700 font-semibold">{failedRows}</p>
+                  <p className="text-[11px] text-rose-600">Failed</p>
+                </div>
+                <div className="rounded-md bg-gray-100 px-2 py-1.5">
+                  <p className="text-gray-700 font-semibold">{totalRows}</p>
+                  <p className="text-[11px] text-gray-500">Total</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {error && !final && (
+            <div className="rounded-md border border-rose-200 bg-rose-50 p-3">
+              <div className="flex items-start gap-2 text-sm text-rose-700">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium">Import failed</p>
+                  <p className="text-xs text-rose-600 mt-0.5">{error}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {final && (
+            <div className="space-y-3">
+              <div
+                className={
+                  "rounded-md border p-3 " +
+                  (final.failed > 0
+                    ? "border-amber-200 bg-amber-50"
+                    : "border-emerald-200 bg-emerald-50")
+                }
+              >
+                <div className="flex items-start gap-2">
+                  <CheckCircle2
+                    className={
+                      "h-4 w-4 mt-0.5 shrink-0 " +
+                      (final.failed > 0
+                        ? "text-amber-600"
+                        : "text-emerald-600")
+                    }
+                  />
+                  <div className="text-sm">
+                    <p
+                      className={
+                        "font-semibold " +
+                        (final.failed > 0
+                          ? "text-amber-700"
+                          : "text-emerald-700")
+                      }
+                    >
+                      {final.failed > 0
+                        ? `Imported ${final.success} of ${final.total} products`
+                        : `Imported ${final.success} products successfully`}
+                    </p>
+                    {final.failed > 0 && (
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        {final.failed} row(s) failed — see errors below.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="rounded-md bg-emerald-50 px-2 py-1.5">
+                  <p className="text-emerald-700 font-semibold">
+                    {final.success}
+                  </p>
+                  <p className="text-[11px] text-emerald-600">Imported</p>
+                </div>
+                <div className="rounded-md bg-rose-50 px-2 py-1.5">
+                  <p className="text-rose-700 font-semibold">{final.failed}</p>
+                  <p className="text-[11px] text-rose-600">Failed</p>
+                </div>
+                <div className="rounded-md bg-gray-100 px-2 py-1.5">
+                  <p className="text-gray-700 font-semibold">{final.total}</p>
+                  <p className="text-[11px] text-gray-500">Total</p>
+                </div>
+              </div>
+
+              {final.errors.length > 0 && (
+                <div className="max-h-40 overflow-y-auto rounded-md border border-rose-100 bg-rose-50/50">
+                  <ul className="divide-y divide-rose-100">
+                    {final.errors.slice(0, 20).map((e, i) => (
+                      <li
+                        key={i}
+                        className="px-3 py-2 text-xs text-rose-700"
+                      >
+                        <span className="font-mono">
+                          {e.row ? `Row ${e.row}` : "Row ?"}
+                          {e.sku ? ` • SKU ${e.sku}` : ""}
+                          {e.name ? ` • ${e.name}` : ""}
+                        </span>
+                        <span className="block text-rose-600 mt-0.5">
+                          {e.message}
+                        </span>
+                      </li>
+                    ))}
+                    {final.errors.length > 20 && (
+                      <li className="px-3 py-2 text-xs text-rose-700 italic">
+                        +{final.errors.length - 20} more row(s) failed
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={importing}
+          >
+            {final || error ? "Close" : "Cancel"}
+          </Button>
+          {!final && !error && !importing && (
+            <Button
+              type="button"
+              className="gap-2"
+              onClick={handleChooseFile}
+            >
+              <Upload className="h-4 w-4" />
+              Choose Excel file
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -405,6 +782,7 @@ function EditProductModal({
         // the row regardless of the active category filter.
         category: "ALL",
         description: product.description || "",
+        disclaimer: product.disclaimer || "",
         hsnNo: product.hsnNo || "",
         applicableGST: product.applicableGST,
         baseUnit: product.baseUnit,
@@ -498,6 +876,16 @@ function EditProductModal({
               id="edit-description"
               value={form.description || ""}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-disclaimer">Disclaimer</Label>
+            <Input
+              id="edit-disclaimer"
+              value={form.disclaimer || ""}
+              onChange={(e) => setForm({ ...form, disclaimer: e.target.value })}
+              placeholder="e.g., Keep away from direct sunlight"
             />
           </div>
 
@@ -657,6 +1045,13 @@ function ViewProductModal({
             </div>
           )}
 
+          {product.disclaimer && (
+            <div>
+              <p className="text-xs text-gray-500 uppercase">Disclaimer</p>
+              <p className="text-sm text-amber-700">{product.disclaimer}</p>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-xs text-gray-500 uppercase">HSN Number</p>
@@ -698,6 +1093,15 @@ function ViewProductModal({
             <div>
               <p className="text-xs text-gray-500 uppercase">Minimum Stock</p>
               <p className="text-sm text-gray-700">{product.minimumStockKG} KG</p>
+            </div>
+          )}
+
+          {product.openingStockKG != null && (
+            <div>
+              <p className="text-xs text-gray-500 uppercase">Opening Stock</p>
+              <p className="text-sm font-medium text-gray-900">
+                {Number(product.openingStockKG).toLocaleString()} {product.baseUnit}
+              </p>
             </div>
           )}
         </div>

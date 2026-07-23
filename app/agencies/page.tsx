@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Briefcase, Plus, Search, Edit, Eye, MapPin, MoreHorizontal, Phone, Mail, Download } from "lucide-react";
+import { Briefcase, Plus, Search, Edit, Eye, MapPin, MoreHorizontal, Phone, Mail, Download, Upload, FileSpreadsheet, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,10 @@ import {
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { useAppSelector } from "@/app/store/hooks";
 import { agencyApi, UpdateAgencyPayload } from "@/app/services/agency.service";
+import {
+  importAgencyMaster,
+  AgencyImportProgress,
+} from "@/app/services/import.service";
 import { metaApi } from "@/app/services/meta.service";
 import { hasModulePermission } from "@/lib/usePermissions";
 import { downloadFile } from "@/lib/download";
@@ -67,6 +71,20 @@ function AgenciesTab() {
   const [viewModalOpen, setViewModalOpen] = React.useState(false);
   const [selectedAgency, setSelectedAgency] = React.useState<Agency | null>(null);
   const [exporting, setExporting] = React.useState(false);
+  // Agency-master import — drives POST /api/migration/agency via SSE.
+  const [importOpen, setImportOpen] = React.useState(false);
+  const [importing, setImporting] = React.useState(false);
+  const [importProgress, setImportProgress] =
+    React.useState<AgencyImportProgress | null>(null);
+  const [importFinal, setImportFinal] = React.useState<{
+    total: number;
+    processed: number;
+    success: number;
+    failed: number;
+    errors: AgencyImportProgress["errors"];
+  } | null>(null);
+  const [importError, setImportError] = React.useState<string | null>(null);
+  const importAbortRef = React.useRef<AbortController | null>(null);
   const { permissions } = useAppSelector((state) => state.auth);
 
   const canView = hasModulePermission(permissions, "AGENCY", "VIEW");
@@ -162,6 +180,61 @@ function AgenciesTab() {
     }
   };
 
+  const openImport = () => {
+    setImportProgress(null);
+    setImportFinal(null);
+    setImportError(null);
+    setImportOpen(true);
+  };
+
+  const closeImport = () => {
+    if (importing) {
+      importAbortRef.current?.abort();
+    }
+    setImportOpen(false);
+  };
+
+  const handleImportFile = async (file: File) => {
+    setImporting(true);
+    setImportProgress(null);
+    setImportFinal(null);
+    setImportError(null);
+
+    const controller = new AbortController();
+    importAbortRef.current = controller;
+
+    try {
+      await importAgencyMaster(file, {
+        signal: controller.signal,
+        onProgress: (p) => setImportProgress(p),
+        onComplete: (r) => {
+          setImportFinal(r);
+          setImporting(false);
+          importAbortRef.current = null;
+          addToast(
+            r.failed > 0
+              ? `Imported ${r.success}/${r.total} agencies (${r.failed} failed)`
+              : `Imported ${r.success} agencies successfully`,
+            r.failed > 0 ? "error" : "success"
+          );
+          fetchAgencies(currentPage, searchTerm, selectedType);
+        },
+        onError: (err) => {
+          setImportError(err.message || "Import failed");
+          setImporting(false);
+          importAbortRef.current = null;
+        },
+      });
+    } catch (err: any) {
+      if (err?.name !== "AbortError") {
+        setImportError(err?.message || "Import failed");
+        addToast(err?.message || "Import failed", "error");
+      }
+      setImporting(false);
+      importAbortRef.current = null;
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -170,10 +243,20 @@ function AgenciesTab() {
           <p className="text-sm text-gray-500">Manage agency information and status</p>
         </div>
         {canWrite && (
-          <Button onClick={handleCreate} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add Agency
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={openImport}
+            >
+              <Upload className="h-4 w-4" />
+              Import Agencies
+            </Button>
+            <Button onClick={handleCreate} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Add Agency
+            </Button>
+          </div>
         )}
       </div>
 
@@ -390,7 +473,270 @@ function AgenciesTab() {
           agency={selectedAgency}
         />
       )}
+
+      <ImportAgenciesModal
+        open={importOpen}
+        onClose={closeImport}
+        importing={importing}
+        progress={importProgress}
+        final={importFinal}
+        error={importError}
+        onFileSelected={handleImportFile}
+      />
     </div>
+  );
+}
+
+// ============================================================================
+// Import agencies from Excel — drives POST /api/migration/agency.
+//
+// Backend streams `data: { total, processed, success, failed, percentage,
+// errors: [{ agency, error }] }` SSE chunks while it imports. The
+// modal shows a live progress bar and a final summary.
+// ============================================================================
+
+function ImportAgenciesModal({
+  open,
+  onClose,
+  importing,
+  progress,
+  final,
+  error,
+  onFileSelected,
+}: {
+  open: boolean;
+  onClose: () => void;
+  importing: boolean;
+  progress: AgencyImportProgress | null;
+  final: {
+    total: number;
+    processed: number;
+    success: number;
+    failed: number;
+    errors: AgencyImportProgress["errors"];
+  } | null;
+  error: string | null;
+  onFileSelected: (file: File) => void;
+}) {
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [fileName, setFileName] = React.useState<string>("");
+
+  const handleChooseFile = () => fileInputRef.current?.click();
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    onFileSelected(file);
+    e.target.value = "";
+  };
+
+  React.useEffect(() => {
+    if (!open) setFileName("");
+  }, [open]);
+
+  const totalRows = progress?.total ?? final?.total ?? 0;
+  const processedRows = progress?.processed ?? final?.processed ?? 0;
+  const successRows = progress?.success ?? final?.success ?? 0;
+  const failedRows = progress?.failed ?? final?.failed ?? 0;
+  const percentage =
+    final != null
+      ? 100
+      : Math.min(100, Math.max(0, progress?.percentage ?? 0));
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
+            Import Agency Master
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Upload an Excel workbook (.xlsx / .xls) of agency master
+            rows. The importer streams per-row progress as it processes
+            the file.
+          </p>
+
+          {!importing && !final && !error && (
+            <div className="space-y-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2"
+                onClick={handleChooseFile}
+              >
+                <Upload className="h-4 w-4" />
+                {fileName ? `Re-pick file (${fileName})` : "Choose Excel file"}
+              </Button>
+            </div>
+          )}
+
+          {(importing || progress) && !final && !error && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs text-gray-500">
+                <span>
+                  {importing
+                    ? `Importing… ${processedRows}/${totalRows || "?"}`
+                    : "Preparing…"}
+                </span>
+                <span>{percentage}%</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-300 ease-out"
+                  style={{ width: `${percentage}%` }}
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="rounded-md bg-emerald-50 px-2 py-1.5">
+                  <p className="text-emerald-700 font-semibold">
+                    {successRows}
+                  </p>
+                  <p className="text-[11px] text-emerald-600">Imported</p>
+                </div>
+                <div className="rounded-md bg-rose-50 px-2 py-1.5">
+                  <p className="text-rose-700 font-semibold">{failedRows}</p>
+                  <p className="text-[11px] text-rose-600">Failed</p>
+                </div>
+                <div className="rounded-md bg-gray-100 px-2 py-1.5">
+                  <p className="text-gray-700 font-semibold">{totalRows}</p>
+                  <p className="text-[11px] text-gray-500">Total</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {error && !final && (
+            <div className="rounded-md border border-rose-200 bg-rose-50 p-3">
+              <div className="flex items-start gap-2 text-sm text-rose-700">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium">Import failed</p>
+                  <p className="text-xs text-rose-600 mt-0.5">{error}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {final && (
+            <div className="space-y-3">
+              <div
+                className={
+                  "rounded-md border p-3 " +
+                  (final.failed > 0
+                    ? "border-amber-200 bg-amber-50"
+                    : "border-emerald-200 bg-emerald-50")
+                }
+              >
+                <div className="flex items-start gap-2">
+                  <CheckCircle2
+                    className={
+                      "h-4 w-4 mt-0.5 shrink-0 " +
+                      (final.failed > 0
+                        ? "text-amber-600"
+                        : "text-emerald-600")
+                    }
+                  />
+                  <div className="text-sm">
+                    <p
+                      className={
+                        "font-semibold " +
+                        (final.failed > 0
+                          ? "text-amber-700"
+                          : "text-emerald-700")
+                      }
+                    >
+                      {final.failed > 0
+                        ? `Imported ${final.success} of ${final.total} agencies`
+                        : `Imported ${final.success} agencies successfully`}
+                    </p>
+                    {final.failed > 0 && (
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        {final.failed} row(s) failed — see errors below.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="rounded-md bg-emerald-50 px-2 py-1.5">
+                  <p className="text-emerald-700 font-semibold">
+                    {final.success}
+                  </p>
+                  <p className="text-[11px] text-emerald-600">Imported</p>
+                </div>
+                <div className="rounded-md bg-rose-50 px-2 py-1.5">
+                  <p className="text-rose-700 font-semibold">{final.failed}</p>
+                  <p className="text-[11px] text-rose-600">Failed</p>
+                </div>
+                <div className="rounded-md bg-gray-100 px-2 py-1.5">
+                  <p className="text-gray-700 font-semibold">{final.total}</p>
+                  <p className="text-[11px] text-gray-500">Total</p>
+                </div>
+              </div>
+
+              {final.errors.length > 0 && (
+                <div className="max-h-40 overflow-y-auto rounded-md border border-rose-100 bg-rose-50/50">
+                  <ul className="divide-y divide-rose-100">
+                    {final.errors.slice(0, 20).map((e, i) => (
+                      <li
+                        key={i}
+                        className="px-3 py-2 text-xs text-rose-700"
+                      >
+                        <span className="font-medium">
+                          {e.agency || "Unknown agency"}
+                        </span>
+                        <span className="block text-rose-600 mt-0.5">
+                          {e.error || "Unknown error"}
+                        </span>
+                      </li>
+                    ))}
+                    {final.errors.length > 20 && (
+                      <li className="px-3 py-2 text-xs text-rose-700 italic">
+                        +{final.errors.length - 20} more row(s) failed
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={importing}
+          >
+            {final || error ? "Close" : "Cancel"}
+          </Button>
+          {!final && !error && !importing && (
+            <Button
+              type="button"
+              className="gap-2"
+              onClick={handleChooseFile}
+            >
+              <Upload className="h-4 w-4" />
+              Choose Excel file
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

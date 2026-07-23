@@ -195,6 +195,13 @@ export interface DayBookSummary {
   netCashFlow: number;
 }
 
+export interface DayBookPagination {
+  page: number;
+  limit: number;
+  totalEntries: number;
+  totalPages: number;
+}
+
 export interface DayBookResponse {
   branch: Pick<Branch, "id" | "name" | "code"> & {
     gstin?: string | null;
@@ -202,6 +209,7 @@ export interface DayBookResponse {
   };
   dateRange: ReportPeriod;
   summary: DayBookSummary;
+  pagination: DayBookPagination;
   entries: DayBookEntry[];
   /**
    * Day Book endpoint does not return a `generatedAt` field the way the
@@ -215,6 +223,8 @@ export interface GetDayBookParams {
   branchId: string;
   startDate?: string;
   endDate?: string;
+  page?: number;
+  limit?: number;
   /**
    * When set, the backend scopes the day-book to transactions that
    * posted against this bank account under the selected branch.

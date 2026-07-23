@@ -30,6 +30,7 @@ import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { agencyApi } from "@/app/services/agency.service";
 import { branchApi } from "@/app/services/branch.service";
 import { ImportButton } from "@/app/components/import/ImportButton";
+import { JournalImportButton } from "@/app/components/import/JournalImportButton";
 import {
   fetchAllTransactions,
   fetchPendingTotal,
@@ -45,6 +46,40 @@ import {
 import { TransactionTable } from "./components/TransactionTable";
 
 // ============== STAT CARD ==============
+// Module-scope (not inline) so the React reconciler can keep the
+// component identity stable across renders — declaring it inside the
+// parent component would reset its state every render.
+const StatCardLink = ({
+  href,
+  className,
+  children,
+}: {
+  href: string;
+  className?: string;
+  children: React.ReactNode;
+}) => (
+  <Link href={href} className={className}>
+    {children}
+  </Link>
+);
+
+const StatCardBox = ({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) => <div className={className}>{children}</div>;
+
+// Union wrapper accepts either shape (with or without `href`). Using
+// `any` here would silence the broader strict-mode checks elsewhere;
+// a small structural union keeps the JSX well-typed.
+// Union wrapper accepts either shape (with or without `href`).
+type StatCardWrapperProps = (
+  | { href: string; className?: string }
+  | { className?: string }
+) & { children?: React.ReactNode };
+
 function StatCard({
   title,
   value,
@@ -62,12 +97,12 @@ function StatCard({
   iconColor: string;
   link?: { label: string; href: string };
 }) {
-  const Wrapper: any = link ? Link : (props: any) => <div {...props} />;
+  const Wrapper: React.ElementType = link ? StatCardLink : StatCardBox;
+  const wrapperProps: StatCardWrapperProps = link
+    ? { href: link.href, className: "block transition-transform hover:-translate-y-0.5" }
+    : { className: "block transition-transform hover:-translate-y-0.5" };
   return (
-    <Wrapper
-      {...(link ? { href: link.href } : {})}
-      className="block transition-transform hover:-translate-y-0.5"
-    >
+    <Wrapper {...wrapperProps}>
       <Card className="border-0 shadow-sm hover:shadow-md transition-shadow h-full">
         <CardContent className="p-5">
           <div className="flex items-start justify-between gap-3">
@@ -445,7 +480,12 @@ function DirectionTab({ direction }: { direction: TransactionDirection }) {
             <>
               <ImportButton
                 registerType="PURCHASE"
-                label="Import"
+                label="Import Purchase Register"
+                variant="outline"
+                onCompleted={() => fetchTransactions()}
+              />
+              <JournalImportButton
+                label="Import Journal Register"
                 variant="outline"
                 onCompleted={() => fetchTransactions()}
               />

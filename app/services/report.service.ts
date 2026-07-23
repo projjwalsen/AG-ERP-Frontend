@@ -44,13 +44,19 @@ export const reportApi = {
   },
 
   /**
-   * GET /api/reports/branch/:branchId/day-book?startDate=&endDate=&bankAccountId=
+   * GET /api/reports/branch/:branchId/day-book?startDate=&endDate=&bankAccountId=&page=&limit=
    *
    * If `bankAccountId` is supplied the backend scopes the day-book to
    * transactions that posted against that bank account under the
    * selected branch. The mirror `bankAccountId` query parameter is
    * defined in the OpenAPI scalar under
    * `AG-ERP-Backend/src/modules/reports/reporting.routes.ts`.
+   *
+   * Pagination: the response carries a `pagination` object describing
+   * the current page slice. `page` is 1-indexed; `limit` defaults to
+   * 25 entries. Running balance on each row is computed against the
+   * FULL result set, then the slice is taken — so per-page balances
+   * stay correct.
    */
   async getBranchDayBook(
     params: GetDayBookParams
@@ -59,6 +65,8 @@ export const reportApi = {
     if (params.startDate) queryParams.append("startDate", params.startDate);
     if (params.endDate) queryParams.append("endDate", params.endDate);
     if (params.bankAccountId) queryParams.append("bankAccountId", params.bankAccountId);
+    if (params.page) queryParams.append("page", String(params.page));
+    if (params.limit) queryParams.append("limit", String(params.limit));
     const query = queryParams.toString();
     const url = query
       ? `api/reports/branch/${params.branchId}/day-book?${query}`

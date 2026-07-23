@@ -15,6 +15,7 @@ export interface CreateProductPayload {
   sku: string;
   category: string;
   description?: string;
+  disclaimer?: string;
   hsnNo?: string;
   applicableGST?: number;
   baseUnit: "KG" | "LTR";
@@ -29,6 +30,7 @@ export interface UpdateProductPayload {
   sku?: string;
   category?: string;
   description?: string;
+  disclaimer?: string;
   hsnNo?: string;
   applicableGST?: number;
   baseUnit?: "KG" | "LTR";

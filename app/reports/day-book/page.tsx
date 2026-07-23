@@ -71,6 +71,11 @@ export default function DayBookReportPage() {
   const [activeBranchId, setActiveBranchId] = React.useState<string>("");
   const [activeRow, setActiveRow] = React.useState<DayBookEntry | null>(null);
 
+  // Server-side pagination. Default limit matches the backend's
+  // default so the very first load doesn't need a query string.
+  const PAGE_SIZE = 25;
+  const [currentPage, setCurrentPage] = React.useState(1);
+
   // Load active branches once. If the user has not yet picked a branch
   // by the time the data finishes loading, default to the first one.
   React.useEffect(() => {
@@ -126,32 +131,49 @@ export default function DayBookReportPage() {
     };
   }, [activeBranchId]);
 
-  const load = React.useCallback(() => {
-    if (!activeBranchId) return;
-    dispatch(
-      fetchBranchDayBook({
-        branchId: activeBranchId,
-        startDate: filters.startDate,
-        endDate: filters.endDate,
-        bankAccountId: bankAccountId || undefined,
-      })
-    )
-      .unwrap()
-      .catch((err: string) => addToast(err || "Failed to load day book", "error"));
-  }, [
-    dispatch,
-    activeBranchId,
-    filters.startDate,
-    filters.endDate,
-    bankAccountId,
-    addToast,
-  ]);
+  // `currentPage` is intentionally NOT in this callback's deps. We
+  // want `load`'s identity to be stable across page changes so the
+  // bank-account effect (which lists `load`) doesn't re-run on every
+  // Next click and snap the user back to page 1.
+  const load = React.useCallback(
+    (page: number) => {
+      if (!activeBranchId) return;
+      dispatch(
+        fetchBranchDayBook({
+          branchId: activeBranchId,
+          startDate: filters.startDate,
+          endDate: filters.endDate,
+          bankAccountId: bankAccountId || undefined,
+          page,
+          limit: PAGE_SIZE,
+        })
+      )
+        .unwrap()
+        .catch((err: string) =>
+          addToast(err || "Failed to load day book", "error")
+        );
+    },
+    [
+      dispatch,
+      activeBranchId,
+      filters.startDate,
+      filters.endDate,
+      bankAccountId,
+      addToast,
+    ]
+  );
 
-  // Refetch whenever the active branch changes (dates are applied
-  // explicitly via the Apply button).
+  // Refetch whenever the active branch, page, or filter scope changes.
   React.useEffect(() => {
-    if (activeBranchId) load();
-  }, [activeBranchId, load]);
+    if (activeBranchId) load(currentPage);
+  }, [activeBranchId, currentPage, load]);
+
+  // No-arg reload for the Refresh button and the date filter — they
+  // expect to re-fetch the current page without callers having to know
+  // which page they're on.
+  const reload = React.useCallback(() => {
+    load(currentPage);
+  }, [load, currentPage]);
 
   React.useEffect(() => {
     if (error) addToast(error, "error");
@@ -319,18 +341,21 @@ export default function DayBookReportPage() {
   );
 
   /**
-   * Refetch when the user picks a different bank account. The branch
-   * / date changes are already handled by the load() callback
-   * dependency list; this effect covers just the bank account
-   * toggle so the rows reflect the new scope without the user
-   * having to click Apply.
+   * Refetch when the user picks a different bank account. Always
+   * reset to page 1 since the total count for the new scope will
+   * likely differ.
+   *
+   * `load` is intentionally NOT in this effect's deps. `load` is a
+   * `useCallback` that re-creates whenever `currentPage` changes, so
+   * including it would cause this effect to fire on every Next/Prev
+   * click — which would snap the user back to page 1.
    */
   React.useEffect(() => {
-    if (activeBranchId) load();
-    // load is intentionally omitted from deps — it's redefined on
-    // any state change and we only want to react to bankAccountId.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bankAccountId]);
+    if (activeBranchId) {
+      setCurrentPage(1);
+      load(1);
+    }
+  }, [bankAccountId, activeBranchId, load]);
 
   const filterConfig: ReportFilterConfig[] = React.useMemo(
     () => [
@@ -348,7 +373,7 @@ export default function DayBookReportPage() {
           : "Daily cash and bank movement for a branch"
       }
       generatedAt={data?.generatedAt as string | undefined}
-      onRefresh={load}
+      onRefresh={reload}
       isRefreshing={isLoading}
       actions={
         <ReportExportButton
@@ -424,10 +449,10 @@ export default function DayBookReportPage() {
             config={filterConfig}
             values={filters}
             onChange={setFilters}
-            onApply={load}
+            onApply={reload}
             onReset={() => {
               setFilters({});
-              load();
+              reload();
             }}
           />
         </div>
@@ -442,6 +467,18 @@ export default function DayBookReportPage() {
         data={rows}
         isLoading={isLoading}
         onRowClick={(r) => setActiveRow(r as DayBookEntry)}
+        serverPagination={
+          data?.pagination
+            ? {
+                page: data.pagination.page,
+                totalPages: data.pagination.totalPages,
+                totalEntries: data.pagination.totalEntries,
+                limit: data.pagination.limit,
+                isLoading,
+                onPageChange: setCurrentPage,
+              }
+            : undefined
+        }
       />
 
       {/* Allocations side panel — uses a Dialog styled as a right-side sheet. */}

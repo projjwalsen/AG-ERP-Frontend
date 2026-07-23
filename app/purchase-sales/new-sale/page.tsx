@@ -62,6 +62,7 @@ const emptyTransport: SaleTransportDetails = {
   dispatchThrough: "",
   destination: "",
   vehicleOrFlightNo: "",
+  billOfLadingNo: "",
   portOfLoading: "",
   portOfDischarge: "",
   countryTo: "",
@@ -120,7 +121,13 @@ export default function NewSalePage() {
     destination: "",
     invoiceDate: "",
     supplierInvoiceDate: "",
-    roundOffAmount: "" as string,
+    irn: "",
+    ackNo: "",
+    ackDate: "",
+    qrCodeImage: "",
+    modeOfPayment: "",
+    referenceNo: "",
+    referenceDate: "",
   });
 
   const [transport, setTransport] =
@@ -438,17 +445,9 @@ export default function NewSalePage() {
 
     setLoading(true);
     try {
-      const roundOffParsed = formData.roundOffAmount.trim() === ""
-        ? undefined
-        : Number(formData.roundOffAmount);
-
-      // Use the FIRST product+batch row's salePrice as the unrolled
-      // unitPrice for every line item; the backend treats that as a
-      // per-line override but we share the price across batches of
-      // the same product. (If you need per-batch pricing, drop the
-      // override entirely and let the backend read the product
-      // default.)
-      const firstRow = lineAllocations[0];
+      // Round-off is computed from the unrounded grand total in
+      // `summaryTotals` — the user doesn't fill it in. We always send
+      // the auto-derived value to the backend.
 
       await dispatch(
         createSale({
@@ -456,10 +455,14 @@ export default function NewSalePage() {
           branchId: formData.branchId,
           invoiceDate: formData.invoiceDate,
           otherReference: formData.otherReference.trim() || undefined,
-          roundOffAmount:
-            roundOffParsed !== undefined && Number.isFinite(roundOffParsed)
-              ? roundOffParsed
-              : undefined,
+          irn: formData.irn.trim() || undefined,
+          ackNo: formData.ackNo.trim() || undefined,
+          ackDate: formData.ackDate || undefined,
+          qrCodeImage: formData.qrCodeImage.trim() || undefined,
+          modeOfPayment: formData.modeOfPayment.trim() || undefined,
+          referenceNo: formData.referenceNo.trim() || undefined,
+          referenceDate: formData.referenceDate || undefined,
+          roundOffAmount: summaryTotals.roundOff,
           remarks: formData.remarks.trim() || undefined,
           deliveryNote: formData.deliveryNote.trim() || undefined,
           suppliersRef: formData.suppliersRef.trim() || undefined,
@@ -475,7 +478,7 @@ export default function NewSalePage() {
             batchId: l.batchId,
             quantity: l.quantity,
             unit: l.unit,
-            ...(l.salePrice && l.salePrice > 0 && l === firstRow
+            ...(l.salePrice && l.salePrice > 0
               ? { unitPrice: l.salePrice }
               : {}),
           })),
@@ -514,10 +517,19 @@ export default function NewSalePage() {
       totalGSTAmount += gstAmount;
     });
 
+    const totalWithGST = totalAmount + totalGSTAmount;
+    // Auto round-off to the nearest whole rupee. Negative when the
+    // fraction is < 0.5, positive when ≥ 0.5 (e.g. 1234.43 → -0.43,
+    // 1234.78 → +0.22). Surfaced read-only in the summary.
+    const roundedTotal = Math.round(totalWithGST);
+    const roundOff = Number((roundedTotal - totalWithGST).toFixed(2));
+
     return {
       totalAmount,
       totalGSTAmount,
-      totalWithGST: totalAmount + totalGSTAmount,
+      totalWithGST,
+      roundOff,
+      roundedTotal,
     };
   }, [items]);
 
@@ -613,21 +625,9 @@ export default function NewSalePage() {
                   }
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="roundOffAmount">Round Off</Label>
-                <Input
-                  id="roundOffAmount"
-                  type="number"
-                  step="0.01"
-                  value={formData.roundOffAmount}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      roundOffAmount: e.target.value,
-                    })
-                  }
-                />
-              </div>
+              {/* Round-off is computed automatically from the total
+                  amount — see the Invoice Summary below. There's no
+                  user input for it. */}
               <div className="space-y-2">
                 <Label htmlFor="otherReference">Other Reference</Label>
                 <Input
@@ -873,20 +873,49 @@ export default function NewSalePage() {
             </div>
 
             {/* Summary Section */}
-            <div className="bg-gray-50 rounded-lg p-4 space-y-2 border border-gray-200">
+            <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200">
               <h4 className="font-semibold text-gray-900">Invoice Summary</h4>
-              <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                 <div>
                   <p className="text-gray-600">Subtotal Amount</p>
-                  <p className="text-lg font-semibold text-gray-900">₹ {summaryTotals.totalAmount.toFixed(2)}</p>
+                  <p className="text-lg font-semibold text-gray-900">
+                    ₹ {summaryTotals.totalAmount.toFixed(2)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-gray-600">Total GST</p>
-                  <p className="text-lg font-semibold text-blue-600">₹ {summaryTotals.totalGSTAmount.toFixed(2)}</p>
+                  <p className="text-lg font-semibold text-blue-600">
+                    ₹ {summaryTotals.totalGSTAmount.toFixed(2)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-gray-600">Total Amount (with GST)</p>
-                  <p className="text-lg font-semibold text-green-600">₹ {summaryTotals.totalWithGST.toFixed(2)}</p>
+                  <p className="text-lg font-semibold text-green-600">
+                    ₹ {summaryTotals.totalWithGST.toFixed(2)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Round Off</p>
+                  <p
+                    className={
+                      "text-lg font-semibold " +
+                      (summaryTotals.roundOff < 0
+                        ? "text-rose-600"
+                        : summaryTotals.roundOff > 0
+                        ? "text-emerald-600"
+                        : "text-gray-500")
+                    }
+                    title="Auto-calculated from the total amount with GST"
+                  >
+                    {summaryTotals.roundOff > 0 ? "+" : ""}
+                    {summaryTotals.roundOff.toFixed(2)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Amount After Round Off</p>
+                  <p className="text-lg font-semibold text-indigo-700">
+                    ₹ {summaryTotals.roundedTotal.toFixed(2)}
+                  </p>
                 </div>
               </div>
             </div>
@@ -938,11 +967,13 @@ export default function NewSalePage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lrNo">LR No</Label>
+                  <Label htmlFor="billOfLadingNo">Bill of Lading / LR No</Label>
                   <Input
-                    id="lrNo"
-                    value={transport.lrNo ?? ""}
-                    onChange={(e) => handleTransportChange("lrNo", e.target.value)}
+                    id="billOfLadingNo"
+                    value={transport.billOfLadingNo ?? transport.lrNo ?? ""}
+                    onChange={(e) =>
+                      handleTransportChange("billOfLadingNo", e.target.value)
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -1033,6 +1064,78 @@ export default function NewSalePage() {
             <div className="space-y-4">
               <h4 className="font-semibold text-gray-900">Reference Details</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="modeOfPayment">Mode/Terms of Payment</Label>
+                  <Input
+                    id="modeOfPayment"
+                    value={formData.modeOfPayment}
+                    onChange={(e) =>
+                      setFormData({ ...formData, modeOfPayment: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="referenceNo">Reference No</Label>
+                  <Input
+                    id="referenceNo"
+                    value={formData.referenceNo}
+                    onChange={(e) =>
+                      setFormData({ ...formData, referenceNo: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="referenceDate">Reference Date</Label>
+                  <Input
+                    id="referenceDate"
+                    type="date"
+                    value={formData.referenceDate}
+                    onChange={(e) =>
+                      setFormData({ ...formData, referenceDate: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="irn">IRN</Label>
+                  <Input
+                    id="irn"
+                    value={formData.irn}
+                    onChange={(e) =>
+                      setFormData({ ...formData, irn: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ackNo">Acknowledgement No</Label>
+                  <Input
+                    id="ackNo"
+                    value={formData.ackNo}
+                    onChange={(e) =>
+                      setFormData({ ...formData, ackNo: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ackDate">Acknowledgement Date</Label>
+                  <Input
+                    id="ackDate"
+                    type="date"
+                    value={formData.ackDate}
+                    onChange={(e) =>
+                      setFormData({ ...formData, ackDate: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="qrCodeImage">e-Invoice QR Image URL/Data URI</Label>
+                  <Input
+                    id="qrCodeImage"
+                    value={formData.qrCodeImage}
+                    onChange={(e) =>
+                      setFormData({ ...formData, qrCodeImage: e.target.value })
+                    }
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="buyerOrderNo">Buyer Order No</Label>
                   <Input

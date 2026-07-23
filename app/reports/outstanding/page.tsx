@@ -102,9 +102,7 @@ export default function OutstandingReportPage() {
 
   React.useEffect(() => {
     load({ type: outstandingType });
-    // Only re-run when the tab or branch filter changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [outstandingType]);
+  }, [outstandingType, load]);
 
   React.useEffect(() => {
     if (error) addToast(error, "error");
@@ -460,24 +458,30 @@ export default function OutstandingReportPage() {
       }
       summary={summary}
       toolbar={
-        <ReportFilters
-          config={filterConfig}
-          values={filters}
-          onChange={setFilters}
-          onApply={() => load()}
-          onReset={() => {
-            setFilters({});
-            load();
-          }}
-        />
+        // Stack the AR/AP + By Agency/Detail toggle above the standard
+        // ReportFilters row so the tabs stay visible even when the
+        // current view is empty (e.g. AP tab with no payables —
+        // previously the empty state replaced the children and hid the
+        // tabs entirely).
+        <div className="space-y-3">
+          {tabsNode}
+          <ReportFilters
+            config={filterConfig}
+            values={filters}
+            onChange={setFilters}
+            onApply={() => load()}
+            onReset={() => {
+              setFilters({});
+              load();
+            }}
+          />
+        </div>
       }
       isLoading={isLoading}
       isEmpty={tableIsEmpty}
       emptyMessage={`No ${outstandingType === "AR" ? "receivable" : "AP"} outstanding`}
       emptyDescription="Try a different branch or date range, or switch the tab."
     >
-      {tabsNode}
-      <div className="mt-3" />
       {viewMode === "agency" ? (
         <ReportTable
           columns={agencyColumns}

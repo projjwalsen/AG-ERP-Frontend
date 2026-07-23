@@ -1,36 +1,9 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import {
   salesApi,
-  SaleTransportDetails,
-  CreateSalesItem,
+  CreateSalesPayload,
 } from "../services/sales.service";
 import { Sales, SalesListResponse } from "../types/sales";
-
-export interface CreateSalesPayload {
-  agencyId: string;
-  branchId: string;
-  invoiceNo?: string;
-  invoiceDate?: string;
-  remarks?: string;
-  voucherType?: string;
-  otherReference?: string;
-  roundOffAmount?: number;
-  suppliersRef?: string;
-  deliveryNote?: string;
-  buyerOrderNo?: string;
-  buyerOrderDate?: string;
-  despatchDocNo?: string;
-  despatchDocDate?: string;
-  despatchThrough?: string;
-  destination?: string;
-  transport?: SaleTransportDetails;
-  /**
-   * Flat list — one item per (product, batch) pair. The form's UI
-   * exposes a per-product card with N batch-allocations; on submit
-   * every non-zero allocation becomes one entry here.
-   */
-  items: CreateSalesItem[];
-}
 
 export interface ApproveSalesPayload {
   saleId: string;

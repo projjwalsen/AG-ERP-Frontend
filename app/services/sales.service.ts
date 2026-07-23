@@ -75,6 +75,8 @@ export interface SaleTransportDetails {
   destination?: string;
   vehicleOrFlightNo?: string;
 
+  billOfLadingNo?: string;
+
   /** Export. */
   portOfLoading?: string;
   portOfDischarge?: string;
@@ -113,6 +115,13 @@ export interface CreateSalesPayload {
   remarks?: string;
   voucherType?: string;
   otherReference?: string;
+  irn?: string;
+  ackNo?: string;
+  ackDate?: string;
+  qrCodeImage?: string;
+  modeOfPayment?: string;
+  referenceNo?: string;
+  referenceDate?: string;
   roundOffAmount?: number;
   suppliersRef?: string;
   deliveryNote?: string;
@@ -124,6 +133,82 @@ export interface CreateSalesPayload {
   destination?: string;
   transport?: SaleTransportDetails;
   items: CreateSalesItem[];
+}
+
+function cleanOptional(value?: string) {
+  const cleaned = value?.trim();
+  return cleaned || undefined;
+}
+
+function normalizeSalesPayload(
+  payload: CreateSalesPayload
+): CreateSalesPayload {
+  const input = payload.transport || {};
+
+  const transport: SaleTransportDetails = {
+    deliveryNote: cleanOptional(
+      input.deliveryNote || payload.deliveryNote
+    ),
+    buyerOrderNo: cleanOptional(
+      input.buyerOrderNo ||
+      input.purchaseOrderNo ||
+      payload.buyerOrderNo
+    ),
+    buyerOrderDate:
+      input.buyerOrderDate ||
+      input.purchaseOrderDate ||
+      payload.buyerOrderDate,
+    termsOfDelivery:
+      cleanOptional(input.termsOfDelivery),
+    despatchDocNo: cleanOptional(
+      input.despatchDocNo || payload.despatchDocNo
+    ),
+    despatchDocDate:
+      input.despatchDocDate || payload.despatchDocDate,
+    despatchThrough: cleanOptional(
+      input.despatchThrough ||
+      input.dispatchThrough ||
+      payload.despatchThrough
+    ),
+    destination: cleanOptional(
+      input.destination || payload.destination
+    ),
+    vehicleOrFlightNo:
+      cleanOptional(input.vehicleOrFlightNo),
+    billOfLadingNo: cleanOptional(
+      input.billOfLadingNo || input.lrNo
+    ),
+    portOfLoading: cleanOptional(input.portOfLoading),
+    portOfDischarge: cleanOptional(input.portOfDischarge),
+    countryTo: cleanOptional(input.countryTo),
+    shippingNo: cleanOptional(input.shippingNo),
+    shippingDate: input.shippingDate,
+    portCode: cleanOptional(input.portCode),
+  };
+
+  const hasTransport = Object.values(transport).some(
+    value => value !== undefined && value !== ""
+  );
+
+  return {
+    agencyId: payload.agencyId,
+    branchId: payload.branchId,
+    invoiceNo: cleanOptional(payload.invoiceNo),
+    invoiceDate: payload.invoiceDate,
+    remarks: cleanOptional(payload.remarks),
+    voucherType: cleanOptional(payload.voucherType),
+    otherReference: cleanOptional(payload.otherReference),
+    irn: cleanOptional(payload.irn),
+    ackNo: cleanOptional(payload.ackNo),
+    ackDate: payload.ackDate,
+    qrCodeImage: cleanOptional(payload.qrCodeImage),
+    modeOfPayment: cleanOptional(payload.modeOfPayment),
+    referenceNo: cleanOptional(payload.referenceNo),
+    referenceDate: payload.referenceDate,
+    roundOffAmount: payload.roundOffAmount,
+    transport: hasTransport ? transport : undefined,
+    items: payload.items,
+  };
 }
 
 export interface ApproveSalesPayload {
@@ -159,7 +244,7 @@ export const salesApi = {
   async create(payload: CreateSalesPayload): Promise<{ success: boolean; message: string; data?: Sales }> {
     return apiFetch<Sales>("api/sales/create", {
       method: "POST",
-      body: payload,
+      body: normalizeSalesPayload(payload),
     });
   },
 

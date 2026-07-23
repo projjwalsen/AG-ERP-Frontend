@@ -8,12 +8,14 @@ export interface Product {
   name: string;
   category: string;
   description?: string;
+  disclaimer?: string;
   hsnNo?: string;
   applicableGST?: number;
   baseUnit: ProductUnit;
   density?: number;
   operationalUnit: ProductUnit;
   minimumStockKG?: number;
+  openingStockKG?: number;
   sellPricePerUnit: number;
   sellPriceLTR: number;
   isActive: boolean;

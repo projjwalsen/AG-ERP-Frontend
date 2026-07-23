@@ -96,7 +96,6 @@ export default function NewPurchasePage() {
     invoiceDate: "",
     supplierInvoiceDate: "",
     otherReference: "",
-    roundOffAmount: "" as string, // string in state for the input, number on submit
     remarks: "",
   });
 
@@ -221,6 +220,11 @@ export default function NewPurchasePage() {
       return;
     }
 
+    if (!transport.purchaseOrderNo || !transport.purchaseOrderNo.trim()) {
+      addToast("Purchase Order No is required", "error");
+      return;
+    }
+
     // Validate items
     const validItems = items.filter(
       (item) => item.productId && item.batchNo && item.quantity && item.purchasePrice
@@ -232,9 +236,10 @@ export default function NewPurchasePage() {
 
     setLoading(true);
     try {
-      const roundOffParsed = formData.roundOffAmount.trim() === ""
-        ? undefined
-        : Number(formData.roundOffAmount);
+      // Round-off is derived from the unrounded grand total below in
+      // `summaryTotals`. The user doesn't fill it in — we compute and
+      // send the integer-rounded amount (negative if the fraction is
+      // < 0.5, positive if it's ≥ 0.5).
       const compactTransport$1 = compactTransport(transport);
 
       await dispatch(
@@ -246,10 +251,7 @@ export default function NewPurchasePage() {
           supplierInvoiceDate:
             dateInputToIso(formData.supplierInvoiceDate) || undefined,
           otherReference: formData.otherReference.trim() || undefined,
-          roundOffAmount:
-            roundOffParsed !== undefined && Number.isFinite(roundOffParsed)
-              ? roundOffParsed
-              : undefined,
+          roundOffAmount: summaryTotals.roundOff,
           remarks: formData.remarks.trim() || undefined,
           transport: compactTransport$1,
           items: validItems.map((item) => ({
@@ -289,10 +291,20 @@ export default function NewPurchasePage() {
       totalGSTAmount += gstAmount;
     });
 
+    const totalWithGST = totalAmount + totalGSTAmount;
+    // Round to the nearest whole rupee: positive when the fraction is
+    // ≥ 0.5, negative when it's < 0.5. e.g. 1234.43 → roundOff = -0.43,
+    // roundedTotal = 1234; 1234.78 → roundOff = +0.22, roundedTotal =
+    // 1235. The user never enters this — it's surfaced read-only.
+    const roundedTotal = Math.round(totalWithGST);
+    const roundOff = Number((roundedTotal - totalWithGST).toFixed(2));
+
     return {
       totalAmount,
       totalGSTAmount,
-      totalWithGST: totalAmount + totalGSTAmount,
+      totalWithGST,
+      roundOff,
+      roundedTotal,
     };
   }, [items]);
 
@@ -386,21 +398,9 @@ export default function NewPurchasePage() {
                   }
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="roundOffAmount">Round Off</Label>
-                <Input
-                  id="roundOffAmount"
-                  type="number"
-                  step="0.01"
-                  value={formData.roundOffAmount}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      roundOffAmount: e.target.value,
-                    })
-                  }
-                />
-              </div>
+              {/* Round-off is computed automatically from the total
+                  amount — see the Order Summary below. There's no user
+                  input for it. */}
             </div>
 
             <div className="space-y-2">
@@ -554,20 +554,49 @@ export default function NewPurchasePage() {
             </div>
 
             {/* Summary Section */}
-            <div className="bg-gray-50 rounded-lg p-4 space-y-2 border border-gray-200">
+            <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200">
               <h4 className="font-semibold text-gray-900">Order Summary</h4>
-              <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                 <div>
                   <p className="text-gray-600">Subtotal Amount</p>
-                  <p className="text-lg font-semibold text-gray-900">₹ {summaryTotals.totalAmount.toFixed(2)}</p>
+                  <p className="text-lg font-semibold text-gray-900">
+                    ₹ {summaryTotals.totalAmount.toFixed(2)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-gray-600">Total GST</p>
-                  <p className="text-lg font-semibold text-blue-600">₹ {summaryTotals.totalGSTAmount.toFixed(2)}</p>
+                  <p className="text-lg font-semibold text-blue-600">
+                    ₹ {summaryTotals.totalGSTAmount.toFixed(2)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-gray-600">Total Amount (with GST)</p>
-                  <p className="text-lg font-semibold text-green-600">₹ {summaryTotals.totalWithGST.toFixed(2)}</p>
+                  <p className="text-lg font-semibold text-green-600">
+                    ₹ {summaryTotals.totalWithGST.toFixed(2)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Round Off</p>
+                  <p
+                    className={
+                      "text-lg font-semibold " +
+                      (summaryTotals.roundOff < 0
+                        ? "text-rose-600"
+                        : summaryTotals.roundOff > 0
+                        ? "text-emerald-600"
+                        : "text-gray-500")
+                    }
+                    title="Auto-calculated from the total amount with GST"
+                  >
+                    {summaryTotals.roundOff > 0 ? "+" : ""}
+                    {summaryTotals.roundOff.toFixed(2)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Amount After Round Off</p>
+                  <p className="text-lg font-semibold text-indigo-700">
+                    ₹ {summaryTotals.roundedTotal.toFixed(2)}
+                  </p>
                 </div>
               </div>
             </div>
@@ -577,13 +606,16 @@ export default function NewPurchasePage() {
               <h4 className="font-semibold text-gray-900">Transport & Reference</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="purchaseOrderNo">Purchase Order No</Label>
+                  <Label htmlFor="purchaseOrderNo">
+                    Purchase Order No <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     id="purchaseOrderNo"
                     value={transport.purchaseOrderNo ?? ""}
                     onChange={(e) =>
                       handleTransportChange("purchaseOrderNo", e.target.value)
                     }
+                    required
                   />
                 </div>
                 <div className="space-y-2">

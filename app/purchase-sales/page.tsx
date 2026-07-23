@@ -185,7 +185,7 @@ function PurchaseTab() {
             <>
               <ImportButton
                 registerType="PURCHASE"
-                label="Import"
+                label="Import Purchase Register"
                 variant="outline"
                 onCompleted={() => fetchPurchases(currentPage, statusFilter)}
               />
@@ -726,7 +726,7 @@ function SalesTab() {
             <>
               <ImportButton
                 registerType="SALE"
-                label="Import"
+                label="Import Sale Register"
                 variant="outline"
                 onCompleted={() => fetchSales(currentPage, statusFilter)}
               />

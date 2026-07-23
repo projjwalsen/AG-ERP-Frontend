@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { productApi, CreateProductPayload } from "@/app/services/product.service";
 import { useRouter } from "next/navigation";
@@ -34,6 +35,7 @@ export default function NewProductPage() {
     sku: "",
     category: DEFAULT_CATEGORY,
     description: "",
+    disclaimer: "",
     hsnNo: "",
     applicableGST: undefined,
     baseUnit: FIXED_UNIT,
@@ -148,6 +150,20 @@ export default function NewProductPage() {
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 placeholder="Brief description of the product"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="disclaimer">Disclaimer</Label>
+              <Textarea
+                id="disclaimer"
+                value={form.disclaimer || ""}
+                onChange={(e) => setForm({ ...form, disclaimer: e.target.value })}
+                placeholder="e.g., Keep away from direct sunlight and open flame"
+                rows={3}
+              />
+              <p className="text-xs text-gray-500">
+                Short note shown alongside the product (safety, storage, or handling info).
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

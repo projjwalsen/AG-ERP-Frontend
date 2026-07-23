@@ -40,6 +40,15 @@ interface DataSelectProps {
   className?: string;
   /** Optional name attribute for form integration. */
   name?: string;
+  /**
+   * When true, the open panel renders inline (no portal) so it lives inside
+   * the same stacking context as the trigger. Required when the DataSelect
+   * sits inside a Radix Dialog/Sheet — otherwise the portal puts the panel
+   * at z-index 9999 in document.body while the dialog overlay sits at
+   * z-index 50 in its own portal, and the panel can be intercepted by the
+   * dialog's outside-pointerdown handler.
+   */
+  disablePortal?: boolean;
 }
 
 /**
@@ -73,6 +82,7 @@ export const DataSelect = React.forwardRef<HTMLButtonElement, DataSelectProps>(
       id,
       className,
       name,
+      disablePortal = false,
     },
     ref
   ) {
@@ -215,27 +225,31 @@ export const DataSelect = React.forwardRef<HTMLButtonElement, DataSelectProps>(
       onChange("");
     };
 
-    const panel = open && panelPos && typeof document !== "undefined" ? (
-      createPortal(
-        <div
-          ref={panelRef}
-          role="listbox"
-          tabIndex={-1}
-          onKeyDown={handleListKeyDown}
-          style={{
-            position: "fixed",
-            top: panelPos.top,
-            left: panelPos.left,
-            width: panelMinWidth
-              ? Math.max(panelPos.width, panelMinWidth)
-              : panelPos.width,
-            zIndex: 9999,
-          }}
-          className={cn(
-            "max-h-80 overflow-auto border border-gray-200 bg-white shadow-lg",
-            panelClassName
-          )}
-        >
+    const panelContent = (
+      <div
+        ref={panelRef}
+        role="listbox"
+        tabIndex={-1}
+        onKeyDown={handleListKeyDown}
+        style={{
+          position: "fixed",
+          top: panelPos?.top ?? 0,
+          left: panelPos?.left ?? 0,
+          width: panelMinWidth
+            ? Math.max(panelPos?.width ?? 0, panelMinWidth)
+            : panelPos?.width ?? 0,
+          // disablePortal keeps the panel in the React tree of the trigger
+          // (so it isn't intercepted by an ancestor Radix dialog), but it
+          // still uses fixed positioning so it can escape the dialog's
+          // overflow-y-auto clipping. Use z-50 to stay above the dialog
+          // overlay (which is itself z-50 in its own portal).
+          zIndex: disablePortal ? 60 : 9999,
+        }}
+        className={cn(
+          "max-h-80 overflow-auto border border-gray-200 bg-white shadow-lg",
+          panelClassName
+        )}
+      >
           {searchable && (
             <div className="sticky top-0 z-[10000] bg-white border-b border-gray-100 p-2">
               <div className="relative">
@@ -300,10 +314,21 @@ export const DataSelect = React.forwardRef<HTMLButtonElement, DataSelectProps>(
               </div>
             );
           })}
-        </div>,
-        document.body
-      )
-    ) : null;
+      </div>
+    );
+
+    // When disablePortal is true, render the panel inline so it shares the
+    // trigger's React subtree — required when the trigger lives inside a
+    // Radix Dialog/Sheet whose outside-pointerdown handler would otherwise
+    // swallow the first click on a portal-rendered panel.
+    // When false, render via portal so the panel escapes any overflow-clip
+    // ancestor (e.g. a table wrapper).
+    const panel =
+      open && panelPos && typeof document !== "undefined"
+        ? disablePortal
+          ? panelContent
+          : createPortal(panelContent, document.body)
+        : null;
 
     return (
       <div ref={wrapperRef} className={cn("relative", className)}>

@@ -9,6 +9,11 @@ export interface Settings {
   id: string;
   allowNegativeInventory: boolean;
   allowNegativeTransaction: boolean;
+  sellerLogo?: string;
+  sellerCIN?: string;
+  companyPAN?: string;
+  signatureImage?: string;
+  jurisdictionText?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -18,6 +23,11 @@ export interface Settings {
 export interface UpdateSettingsPayload {
   allowNegativeInventory?: boolean;
   allowNegativeTransaction?: boolean;
+  sellerLogo?: string | null;
+  sellerCIN?: string | null;
+  companyPAN?: string | null;
+  signatureImage?: string | null;
+  jurisdictionText?: string | null;
 }
 
 export interface SettingsResponse {

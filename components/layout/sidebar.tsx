@@ -239,6 +239,7 @@ const buildSidebarItems = (): SidebarItem[] => [
       { title: "Financial Ledger", href: "/ledger/financial", icon: Wallet },
     ],
   },
+  { title: "Journal", href: "/journal", icon: FileText, module: null },
   // { title: "Audit Logs", href: "/audit-logs", icon: History, module: "AUDIT" },
   {
     title: "Reports",
