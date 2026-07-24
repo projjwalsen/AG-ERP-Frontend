@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { productApi, CreateProductPayload } from "@/app/services/product.service";
+import { ProductType } from "@/app/types/product";
+import { DataSelect, DataSelectOption } from "@/components/ui/data-select";
 import { useRouter } from "next/navigation";
 
 // The product category is not user-selectable — every create payload
@@ -22,6 +24,17 @@ const DEFAULT_CATEGORY = "ALL";
 // page renders the unit column as "KG" only, so changing this here
 // would just create inconsistency downstream.
 const FIXED_UNIT = "KG" as const;
+
+// Default product type. Backend defaults new products to PURCHASED
+// when omitted; we send it explicitly so the column is always
+// present in the create payload.
+const DEFAULT_PRODUCT_TYPE: ProductType = "PURCHASED";
+
+const PRODUCT_TYPE_OPTIONS: { value: ProductType; label: string; description: string }[] = [
+  { value: "PURCHASED", label: "Purchased", description: "Bought from vendors only" },
+  { value: "MANUFACTURED", label: "Manufactured", description: "Produced in-house from a recipe" },
+  // { value: "BOTH", label: "Both", description: "Can be purchased and manufactured" },
+];
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -43,6 +56,7 @@ export default function NewProductPage() {
     operationalUnit: FIXED_UNIT,
     minimumStockKG: undefined,
     sellPricePerUnit: 0,
+    productType: DEFAULT_PRODUCT_TYPE,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,8 +69,24 @@ export default function NewProductPage() {
       addToast("Sell price must be greater than 0", "error");
       return;
     }
+    if (!form.productType) {
+      addToast("Product type is required", "error");
+      return;
+    }
     setShowConfirm(true);
   };
+
+  // Build the product-type options for the DataSelect. Kept memoized so
+  // the dropdown doesn't re-derive on every keystroke.
+  const productTypeOptions: DataSelectOption[] = React.useMemo(
+    () =>
+      PRODUCT_TYPE_OPTIONS.map((opt) => ({
+        value: opt.value,
+        label: opt.label,
+        description: opt.description,
+      })),
+    []
+  );
 
   const handleConfirmCreate = async () => {
     setShowConfirm(false);
@@ -150,6 +180,31 @@ export default function NewProductPage() {
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 placeholder="Brief description of the product"
               />
+            </div>
+
+            {/* Product type — drives whether this product can appear as a
+                recipe output (MANUFACTURED/BOTH). Required; defaults to
+                PURCHASED. Recipe creation picks output products by this
+                flag. */}
+            <div className="space-y-2">
+              <Label htmlFor="productType">Product Type *</Label>
+              <DataSelect
+                id="productType"
+                value={form.productType || DEFAULT_PRODUCT_TYPE}
+                onChange={(value) =>
+                  setForm({ ...form, productType: value as ProductType })
+                }
+                options={productTypeOptions}
+                placeholder="Select product type"
+                required
+                disablePortal
+              />
+              <p className="text-xs text-gray-500">
+                Choose <span className="font-medium">Manufactured</span> or{" "}
+                <span className="font-medium">Both</span> if this product will
+                be produced from a recipe. <span className="font-medium">Purchased</span>{" "}
+                means it can only be bought from vendors.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -273,7 +328,18 @@ export default function NewProductPage() {
                 <h3 className="text-lg font-semibold text-gray-900">Confirm Create Product</h3>
               </div>
               <p className="text-gray-600 mb-6">
-                Are you sure you want to create product <span className="font-semibold text-gray-900">{form.name}</span>?
+                Are you sure you want to create product{" "}
+                <span className="font-semibold text-gray-900">{form.name}</span>
+                {form.productType && (
+                  <>
+                    {" "}as{" "}
+                    <span className="font-semibold text-gray-900">
+                      {PRODUCT_TYPE_OPTIONS.find((o) => o.value === form.productType)?.label ||
+                        form.productType}
+                    </span>
+                  </>
+                )}
+                ?
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>

@@ -2,6 +2,12 @@
 
 export type ProductUnit = "KG" | "LTR";
 
+// Backend enum from prisma/schema.prisma
+// - PURCHASED  : only ever bought from vendors
+// - MANUFACTURED: produced in-house from a recipe
+// - BOTH       : can be purchased AND manufactured
+export type ProductType = "PURCHASED" | "MANUFACTURED" | "BOTH";
+
 export interface Product {
   id: string;
   sku: string;
@@ -18,6 +24,7 @@ export interface Product {
   openingStockKG?: number;
   sellPricePerUnit: number;
   sellPriceLTR: number;
+  productType?: ProductType;
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;

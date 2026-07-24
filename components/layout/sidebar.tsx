@@ -9,7 +9,7 @@ import {
   ShoppingCart, FileText, History, Settings, ChevronLeft, Shield,
   Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu, CreditCard,
   ChevronRight, BookOpen, Wallet, BarChart3, AlertTriangle, Receipt,
-  Calculator,
+  Calculator, Factory, ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -220,6 +220,16 @@ const buildSidebarItems = (): SidebarItem[] => [
   { title: "Access Control", href: "/access-control", icon: Shield, module: "ROLE" },
   { title: "Agency Management", href: "/agencies", icon: Briefcase, module: "AGENCY" },
   { title: "Product Management", href: "/inventory", icon: Package, module: "PRODUCT" },
+  {
+    title: "Manufacturing",
+    href: "/manufacturing",
+    icon: Factory,
+    module: "PRODUCT",
+    children: [
+      { title: "Recipes", href: "/manufacturing", icon: ClipboardList },
+      { title: "Manufactures", href: "/manufacturing/manufactures", icon: Factory },
+    ],
+  },
   { title: "Purchase & Sales", href: "/purchase-sales", icon: ShoppingCart, module: "PURCHASE" },
   
   {

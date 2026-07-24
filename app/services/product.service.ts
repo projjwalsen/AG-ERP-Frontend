@@ -1,13 +1,23 @@
 // Product API Service
 import { apiFetch } from "./api";
 import { fetchBlob } from "@/lib/download";
-import { Product, ProductsListResponse, ProductResponse, PaginationMeta } from "../types/product";
+import {
+  Product,
+  ProductType,
+  ProductsListResponse,
+  ProductResponse,
+  PaginationMeta,
+} from "../types/product";
 
 export interface GetProductsParams {
   page?: number;
   limit?: number;
   search?: string;
   category?: string;
+  /** Optional ProductType filter — used by manufacturing to list
+   *  MANUFACTURED/BOTH products only. Backend does not currently
+   *  accept this query param; included for forward-compat. */
+  productType?: ProductType;
 }
 
 export interface CreateProductPayload {
@@ -23,6 +33,12 @@ export interface CreateProductPayload {
   operationalUnit: "KG" | "LTR";
   minimumStockKG?: number;
   sellPricePerUnit: number;
+  /**
+   * PURCHASED | MANUFACTURED | BOTH. Defaults to PURCHASED server-side
+   * when omitted; we send it explicitly so manufactured products are
+   * properly typed at the source.
+   */
+  productType?: ProductType;
 }
 
 export interface UpdateProductPayload {
@@ -38,6 +54,7 @@ export interface UpdateProductPayload {
   operationalUnit?: "KG" | "LTR";
   minimumStockKG?: number;
   sellPricePerUnit?: number;
+  productType?: ProductType;
 }
 
 // Raw API response types
@@ -54,6 +71,7 @@ export const productApi = {
     if (params?.limit) queryParams.append("limit", String(params.limit));
     if (params?.search) queryParams.append("search", params.search);
     if (params?.category) queryParams.append("category", params.category);
+    if (params?.productType) queryParams.append("productType", params.productType);
 
     const query = queryParams.toString();
     const url = query ? `/api/products/all-list?${query}` : "/api/products/all-list";
@@ -114,6 +132,7 @@ export const productApi = {
     queryParams.append("export", "true");
     if (params?.search) queryParams.append("search", params.search);
     if (params?.category) queryParams.append("category", params.category);
+    if (params?.productType) queryParams.append("productType", params.productType);
 
     return fetchBlob(`api/products/all-list?${queryParams.toString()}`, "products.xlsx");
   },
