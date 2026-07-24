@@ -71,208 +71,17 @@ function ManufactureStatusBadge({ status }: { status: ProductManufactureStatus |
 }
 
 // =====================================================================
-// Confirm approve modal — full impact disclosure
+// Approve / Reject modals — REMOVED FROM THIS PAGE.
+//
+// Approve/reject actions now live on the dedicated
+// /manufacturing/manufactures/pending page (mirroring the
+// transactions pending page). The main list is read-only and
+// shows an Eye button to view the document + a "Sell this product"
+// shortcut for APPROVED documents.
 // =====================================================================
 
-function ConfirmApproveManufactureModal({
-  open,
-  manufacture,
-  preview,
-  loading,
-  onCancel,
-  onConfirm,
-}: {
-  open: boolean;
-  manufacture: ProductManufacture | null;
-  preview: ManufacturePreview | null;
-  loading: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  if (!open || !manufacture) return null;
-  const totalCost = preview?.totalManufacturingCost ?? manufacture.totalManufacturingCost;
-  const unitCost = preview?.unitManufacturingCost ?? manufacture.unitManufacturingCost;
-  const outQty = toFiniteNumber(manufacture.outputQuantity);
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <Card className="max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        <CardContent className="pt-6 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-100 rounded-full">
-              <ShieldCheck className="h-6 w-6 text-green-600" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900">
-              Approve Manufacturing
-            </h3>
-          </div>
-          <p className="text-sm text-gray-600">
-            Approving this manufacturing document will:
-          </p>
-          <ul className="text-sm text-gray-700 list-disc pl-5 space-y-1">
-            <li>Consume raw materials using FIFO</li>
-            <li>Add finished product inventory</li>
-            <li>Create product ledger movements</li>
-            <li>Create an accounting voucher</li>
-          </ul>
-
-          <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
-            <p>
-              <span className="text-gray-500">Output: </span>
-              <span className="font-medium text-gray-900">
-                {outQty} {manufacture.outputUnit}
-              </span>{" "}
-              of{" "}
-              <span className="font-medium text-gray-900">
-                {manufacture.outputProduct?.name || "—"}
-              </span>
-            </p>
-            <p>
-              <span className="text-gray-500">Batch: </span>
-              <span className="font-mono text-gray-900">
-                {manufacture.outputBatchNo}
-              </span>
-            </p>
-            <p>
-              <span className="text-gray-500">Total cost: </span>
-              <span className="font-medium text-gray-900">
-                {formatCurrency(totalCost || 0)}
-              </span>
-            </p>
-            <p>
-              <span className="text-gray-500">Unit cost: </span>
-              <span className="font-medium text-gray-900">
-                {formatCurrency(unitCost || 0)} / {manufacture.outputUnit}
-              </span>
-            </p>
-          </div>
-
-          {preview && preview.allocations.length > 0 && (
-            <div>
-              <p className="text-xs text-gray-500 uppercase mb-1">
-                Will consume (FIFO)
-              </p>
-              <div className="border border-gray-200 rounded-md overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50 text-gray-600">
-                    <tr>
-                      <th className="text-left px-2 py-1.5 font-medium">Material</th>
-                      <th className="text-left px-2 py-1.5 font-medium">Batch</th>
-                      <th className="text-right px-2 py-1.5 font-medium">Qty</th>
-                      <th className="text-right px-2 py-1.5 font-medium">Cost</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.allocations.map((a, i) => (
-                      <tr key={i} className="border-t border-gray-100">
-                        <td className="px-2 py-1.5 text-gray-900">
-                          {a.productName}
-                        </td>
-                        <td className="px-2 py-1.5 font-mono text-gray-600">
-                          {a.batchNo}
-                        </td>
-                        <td className="px-2 py-1.5 text-right font-mono">
-                          {a.quantity} {a.unit}
-                        </td>
-                        <td className="px-2 py-1.5 text-right font-mono">
-                          {formatCurrency(a.totalCost)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={onCancel} disabled={loading}>
-              Cancel
-            </Button>
-            <Button
-              onClick={onConfirm}
-              loading={loading}
-              className="bg-green-600 hover:bg-green-700 text-white"
-            >
-              Yes, Approve
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
 // =====================================================================
-// Reject modal
-// =====================================================================
-
-function RejectManufactureModal({
-  open,
-  manufacture,
-  loading,
-  onCancel,
-  onConfirm,
-}: {
-  open: boolean;
-  manufacture: ProductManufacture | null;
-  loading: boolean;
-  onCancel: () => void;
-  onConfirm: (remarks: string) => void;
-}) {
-  const [remarks, setRemarks] = React.useState("");
-  React.useEffect(() => {
-    if (open) setRemarks("");
-  }, [open, manufacture?.id]);
-  if (!open || !manufacture) return null;
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <Card className="max-w-md w-full">
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-red-100 rounded-full">
-              <AlertTriangle className="h-6 w-6 text-red-600" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900">
-              Reject Manufacturing
-            </h3>
-          </div>
-          <p className="text-gray-600 mb-4">
-            Reject manufacturing document{" "}
-            <span className="font-mono text-gray-900">
-              {manufacture.outputBatchNo}
-            </span>
-            ?
-          </p>
-          <div className="space-y-2 mb-4">
-            <Label htmlFor="mfg-reject-remarks">Reason for rejection</Label>
-            <Textarea
-              id="mfg-reject-remarks"
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              rows={3}
-              placeholder="e.g., Recipe needs adjustment before production"
-            />
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onCancel} disabled={loading}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => onConfirm(remarks.trim())}
-              loading={loading}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              Yes, Reject
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// =====================================================================
-// Detail dialog (after approval) — shows inventory + voucher
+// Detail dialog — view-only, shows inventory + voucher
 // =====================================================================
 
 function ManufactureDetailModal({
@@ -819,9 +628,6 @@ export default function ManufacturesPage() {
   const [viewInventoryBefore, setViewInventoryBefore] = React.useState<AvailableBatch[]>([]);
   const [viewInventoryAfter, setViewInventoryAfter] = React.useState<AvailableBatch[]>([]);
   const [viewSummary, setViewSummary] = React.useState<InventorySummaryRecord | null>(null);
-  const [approving, setApproving] = React.useState<ProductManufacture | null>(null);
-  const [rejecting, setRejecting] = React.useState<ProductManufacture | null>(null);
-  const [actionLoading, setActionLoading] = React.useState(false);
 
   const [newOpen, setNewOpen] = React.useState(false);
 
@@ -829,18 +635,11 @@ export default function ManufacturesPage() {
   const isSingleBranch = user?.branchAccessType === "SELECTED" && !!user?.branchId;
   const effectiveBranchId = isSingleBranch ? user!.branchId! : undefined;
 
-  // Permission gate
-  if (!canView && !hasModulePermission(permissions, "PRODUCT", "VIEW")) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <Card>
-          <CardContent className="py-12 text-center text-gray-500">
-            You do not have permission to view manufacturing documents.
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // NOTE: the permission gate lives AFTER all hook calls below — moving
+  // it earlier caused "Rendered more hooks than during the previous
+  // render" because `usePermissions(permissions)` returns false until
+  // `fetchUserAccess` resolves, which would change the hook count
+  // between renders.
 
   const loadAll = React.useCallback(async () => {
     setLoading(true);
@@ -921,49 +720,6 @@ export default function ManufacturesPage() {
     }
   };
 
-  const handleApprove = async () => {
-    if (!approving) return;
-    setActionLoading(true);
-    try {
-      const res = await manufacturingApi.approveManufacture(approving.id);
-      if (res.success && res.data?.manufacture) {
-        addToast(
-          `Manufacturing ${res.data.manufacture.outputBatchNo} approved. Inventory updated, voucher created.`,
-          "success"
-        );
-        setApproving(null);
-        await loadAll();
-        setViewing(res.data.manufacture);
-        await loadInventoryForView(res.data.manufacture);
-      } else {
-        addToast(res.message || "Failed to approve manufacturing", "error");
-      }
-    } catch (err: any) {
-      addToast(err?.message || "Failed to approve manufacturing", "error");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleReject = async (remarks: string) => {
-    if (!rejecting) return;
-    setActionLoading(true);
-    try {
-      const res = await manufacturingApi.rejectManufacture(rejecting.id, { remarks });
-      if (res.success) {
-        addToast("Manufacturing rejected", "success");
-        setRejecting(null);
-        await loadAll();
-      } else {
-        addToast(res.message || "Failed to reject manufacturing", "error");
-      }
-    } catch (err: any) {
-      addToast(err?.message || "Failed to reject manufacturing", "error");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return manufactures;
@@ -977,30 +733,23 @@ export default function ManufacturesPage() {
     );
   }, [manufactures, search]);
 
-  // For the confirm-approve modal we need the preview-cost numbers — pull
-  // them from the most-recently-fetched preview stored in the viewed doc,
-  // otherwise just use the values the doc already has.
-  const previewForApproval: ManufacturePreview | null = React.useMemo(() => {
-    if (!approving) return null;
-    return {
-      recipe: approving.recipe || ({} as ProductRecipe),
-      outputQuantity: toFiniteNumber(approving.outputQuantity),
-      canManufacture: true,
-      allocations: (approving.consumptions || []).map((c) => ({
-        productId: c.productId,
-        productName: c.productId, // best-effort
-        batchId: c.batchId,
-        batchNo: c.batchId,
-        quantity: toFiniteNumber(c.quantity),
-        unit: c.unit,
-        unitCost: c.unitCost || 0,
-        totalCost: c.totalCost || 0,
-      })),
-      insufficient: [],
-      totalManufacturingCost: approving.totalManufacturingCost || 0,
-      unitManufacturingCost: approving.unitManufacturingCost || 0,
-    };
-  }, [approving]);
+  // (previewForApproval memo removed — the confirm-approve modal lives on
+  //  the dedicated pending page now, and the main list is view-only)
+
+  // Permission gate — placed AFTER all hook calls so the hook count
+  // stays stable across renders while `fetchUserAccess` is in flight.
+  if (!canView && !hasModulePermission(permissions, "PRODUCT", "VIEW")) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <Card>
+          <CardContent className="py-12 text-center text-gray-500">
+            You do not have permission to view manufacturing documents.
+          </CardContent>
+        </Card>
+        <ToastContainer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -1027,14 +776,24 @@ export default function ManufacturesPage() {
               <span className="ml-2">Recipes</span>
             </Button>
             {canWrite && (
-              <Button
-                onClick={() => setNewOpen(true)}
-                disabled={recipes.length === 0}
-                className="bg-purple-600 hover:bg-purple-700 text-white"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                New Manufacturing
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push("/manufacturing/manufactures/pending")}
+                  className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                >
+                  <ShieldCheck className="h-4 w-4 mr-2" />
+                  Pending Approvals
+                </Button>
+                <Button
+                  onClick={() => setNewOpen(true)}
+                  disabled={recipes.length === 0}
+                  className="bg-purple-600 hover:bg-purple-700 text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Manufacturing
+                </Button>
+              </>
             )}
           </div>
         }
@@ -1151,46 +910,14 @@ export default function ManufacturesPage() {
                             <Eye className="h-4 w-4" />
                           </Button>
                           {canWrite && m.status === "DRAFT" && (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setApproving(m)}
-                                title="Approve"
-                                className="text-green-700 hover:bg-green-50"
-                              >
-                                <ShieldCheck className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setRejecting(m)}
-                                title="Reject"
-                                className="text-red-700 hover:bg-red-50"
-                              >
-                                <XCircle className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                          {m.status === "APPROVED" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                if (m.outputProductId) {
-                                  router.push(
-                                    `/purchase-sales/new-sale?productId=${m.outputProductId}&batchId=${m.outputBatchId || ""}`
-                                  );
-                                } else {
-                                  router.push("/purchase-sales/new-sale");
-                                }
-                              }}
-                              title="Sell this product"
-                              className="text-blue-700 hover:bg-blue-50"
+                            <span
+                              className="text-xs text-gray-400 px-2"
+                              title="Approve/reject from the Pending Approvals page"
                             >
-                              <IndianRupee className="h-4 w-4" />
-                            </Button>
+                              pending review
+                            </span>
                           )}
+                         
                         </div>
                       </td>
                     </tr>
@@ -1208,23 +935,6 @@ export default function ManufacturesPage() {
         branches={branches}
         onClose={() => setNewOpen(false)}
         onCreated={handleCreated}
-      />
-
-      <ConfirmApproveManufactureModal
-        open={!!approving}
-        manufacture={approving}
-        preview={previewForApproval}
-        loading={actionLoading}
-        onCancel={() => setApproving(null)}
-        onConfirm={handleApprove}
-      />
-
-      <RejectManufactureModal
-        open={!!rejecting}
-        manufacture={rejecting}
-        loading={actionLoading}
-        onCancel={() => setRejecting(null)}
-        onConfirm={handleReject}
       />
 
       <ManufactureDetailModal

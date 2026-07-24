@@ -9,21 +9,18 @@ import {
   Plus,
   RefreshCcw,
   Eye,
-  ShieldCheck,
-  AlertTriangle,
   CheckCircle2,
   XCircle,
   Clock,
   Lock,
   Search,
+  ShieldCheck,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/layout";
 import { formatDateTime } from "@/lib/utils";
 import { hasModulePermission, usePermissions } from "@/lib/usePermissions";
@@ -37,7 +34,7 @@ import {
 } from "@/app/types/manufacturing";
 
 // =====================================================================
-// Status badge helper — shared between recipe + manufacture pages
+// Status badge helper — read-only display
 // =====================================================================
 
 function StatusBadge({ status }: { status: ProductRecipeStatus | string }) {
@@ -58,134 +55,7 @@ function StatusBadge({ status }: { status: ProductRecipeStatus | string }) {
 }
 
 // =====================================================================
-// Confirm-approve modal
-// =====================================================================
-
-function ConfirmApproveRecipeModal({
-  open,
-  recipe,
-  loading,
-  onCancel,
-  onConfirm,
-}: {
-  open: boolean;
-  recipe: ProductRecipe | null;
-  loading: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  if (!open || !recipe) return null;
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <Card className="max-w-md w-full">
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-green-100 rounded-full">
-              <ShieldCheck className="h-6 w-6 text-green-600" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900">Approve Recipe</h3>
-          </div>
-          <p className="text-gray-600 mb-2">
-            Approve recipe for{" "}
-            <span className="font-semibold text-gray-900">
-              {recipe.outputProduct?.name || "—"}
-            </span>{" "}
-            (v{recipe.version})?
-          </p>
-          <p className="text-xs text-gray-500 mb-6">
-            Approving locks any other approved recipe for the same product and
-            makes this the active production recipe.
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onCancel} disabled={loading}>
-              Cancel
-            </Button>
-            <Button
-              onClick={onConfirm}
-              loading={loading}
-              className="bg-green-600 hover:bg-green-700 text-white"
-            >
-              Yes, Approve
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// =====================================================================
-// Reject modal
-// =====================================================================
-
-function RejectRecipeModal({
-  open,
-  recipe,
-  loading,
-  onCancel,
-  onConfirm,
-}: {
-  open: boolean;
-  recipe: ProductRecipe | null;
-  loading: boolean;
-  onCancel: () => void;
-  onConfirm: (remarks: string) => void;
-}) {
-  const [remarks, setRemarks] = React.useState("");
-
-  React.useEffect(() => {
-    if (open) setRemarks("");
-  }, [open, recipe?.id]);
-
-  if (!open || !recipe) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <Card className="max-w-md w-full">
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-red-100 rounded-full">
-              <AlertTriangle className="h-6 w-6 text-red-600" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900">Reject Recipe</h3>
-          </div>
-          <p className="text-gray-600 mb-4">
-            Reject recipe for{" "}
-            <span className="font-semibold text-gray-900">
-              {recipe.outputProduct?.name || "—"}
-            </span>
-            ?
-          </p>
-          <div className="space-y-2 mb-4">
-            <Label htmlFor="recipe-reject-remarks">Reason for rejection</Label>
-            <Textarea
-              id="recipe-reject-remarks"
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              rows={3}
-              placeholder="e.g., Please correct the ethanol quantity"
-            />
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onCancel} disabled={loading}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => onConfirm(remarks.trim())}
-              loading={loading}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              Yes, Reject
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// =====================================================================
-// Detail dialog
+// Detail dialog (read-only)
 // =====================================================================
 
 function RecipeDetailModal({
@@ -245,9 +115,7 @@ function RecipeDetailModal({
             {recipe.remarks && (
               <div className="col-span-2">
                 <p className="text-xs text-gray-500 uppercase">Remarks</p>
-                <p className="text-gray-900 whitespace-pre-line">
-                  {recipe.remarks}
-                </p>
+                <p className="text-gray-900 whitespace-pre-line">{recipe.remarks}</p>
               </div>
             )}
           </div>
@@ -305,7 +173,7 @@ function RecipeDetailModal({
 }
 
 // =====================================================================
-// Main page
+// Main page — view-only
 // =====================================================================
 
 export default function ManufacturingRecipesPage() {
@@ -320,9 +188,6 @@ export default function ManufacturingRecipesPage() {
   const [statusFilter, setStatusFilter] = React.useState<ProductRecipeStatus | "">("");
 
   const [viewing, setViewing] = React.useState<ProductRecipe | null>(null);
-  const [approving, setApproving] = React.useState<ProductRecipe | null>(null);
-  const [rejecting, setRejecting] = React.useState<ProductRecipe | null>(null);
-  const [actionLoading, setActionLoading] = React.useState(false);
 
   const loadRecipes = React.useCallback(async () => {
     setLoading(true);
@@ -348,44 +213,6 @@ export default function ManufacturingRecipesPage() {
     loadRecipes();
   }, [loadRecipes]);
 
-  const handleApprove = async () => {
-    if (!approving) return;
-    setActionLoading(true);
-    try {
-      const res = await manufacturingApi.approveRecipe(approving.id);
-      if (res.success) {
-        addToast("Recipe approved successfully", "success");
-        setApproving(null);
-        await loadRecipes();
-      } else {
-        addToast(res.message || "Failed to approve recipe", "error");
-      }
-    } catch (err: any) {
-      addToast(err?.message || "Failed to approve recipe", "error");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleReject = async (remarks: string) => {
-    if (!rejecting) return;
-    setActionLoading(true);
-    try {
-      const res = await manufacturingApi.rejectRecipe(rejecting.id, { remarks });
-      if (res.success) {
-        addToast("Recipe rejected", "success");
-        setRejecting(null);
-        await loadRecipes();
-      } else {
-        addToast(res.message || "Failed to reject recipe", "error");
-      }
-    } catch (err: any) {
-      addToast(err?.message || "Failed to reject recipe", "error");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return recipes;
@@ -398,7 +225,6 @@ export default function ManufacturingRecipesPage() {
     );
   }, [recipes, search]);
 
-  // Permission gate — read-only when no PRODUCT:VIEW
   if (!canView && !hasModulePermission(permissions, "PRODUCT", "VIEW")) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -439,10 +265,20 @@ export default function ManufacturingRecipesPage() {
               Manufactures
             </Button>
             {canWrite && (
-              <Button onClick={() => router.push("/manufacturing/recipes/new")}>
-                <Plus className="h-4 w-4 mr-2" />
-                New Recipe
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push("/manufacturing/recipes/pending")}
+                  className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                >
+                  <ShieldCheck className="h-4 w-4 mr-2" />
+                  Pending Approvals
+                </Button>
+                <Button onClick={() => router.push("/manufacturing/recipes/new")}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Recipe
+                </Button>
+              </>
             )}
           </div>
         }
@@ -545,34 +381,12 @@ export default function ManufacturingRecipesPage() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          {canWrite && r.status === "DRAFT" && (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setApproving(r)}
-                                title="Approve"
-                                className="text-green-700 hover:bg-green-50"
-                              >
-                                <ShieldCheck className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setRejecting(r)}
-                                title="Reject"
-                                className="text-red-700 hover:bg-red-50"
-                              >
-                                <XCircle className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                          {r.status !== "DRAFT" && (
+                          {r.status === "DRAFT" && (
                             <span
                               className="text-xs text-gray-400 px-2"
-                              title="Approved/locked recipes cannot be modified"
+                              title="Approve/reject from the Pending Approvals page"
                             >
-                              locked
+                              pending review
                             </span>
                           )}
                         </div>
@@ -585,22 +399,6 @@ export default function ManufacturingRecipesPage() {
           )}
         </CardContent>
       </Card>
-
-      <ConfirmApproveRecipeModal
-        open={!!approving}
-        recipe={approving}
-        loading={actionLoading}
-        onCancel={() => setApproving(null)}
-        onConfirm={handleApprove}
-      />
-
-      <RejectRecipeModal
-        open={!!rejecting}
-        recipe={rejecting}
-        loading={actionLoading}
-        onCancel={() => setRejecting(null)}
-        onConfirm={handleReject}
-      />
 
       <RecipeDetailModal
         open={!!viewing}

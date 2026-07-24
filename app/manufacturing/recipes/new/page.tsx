@@ -143,18 +143,6 @@ export default function NewRecipePage() {
     );
   }, [outputProductId]);
 
-  if (!canWrite && !hasModulePermission(permissions, "PRODUCT", "WRITE")) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <Card>
-          <CardContent className="py-12 text-center text-gray-500">
-            You do not have permission to create recipes.
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   // =================== Row helpers ===================
 
   const updateRow = (rowId: string, patch: Partial<DraftItem>) => {
@@ -251,6 +239,21 @@ export default function NewRecipePage() {
     }
     return dups;
   })();
+
+  // Permission gate — placed AFTER all hook calls so the hook count
+  // stays stable across renders while `fetchUserAccess` is in flight.
+  if (!canWrite && !hasModulePermission(permissions, "PRODUCT", "WRITE")) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <Card>
+          <CardContent className="py-12 text-center text-gray-500">
+            You do not have permission to create recipes.
+          </CardContent>
+        </Card>
+        <ToastContainer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
