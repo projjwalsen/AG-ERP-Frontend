@@ -8,6 +8,35 @@ export type ProductUnit = "KG" | "LTR";
 // - BOTH       : can be purchased AND manufactured
 export type ProductType = "PURCHASED" | "MANUFACTURED" | "BOTH";
 
+export interface ProductRecipeItemSummary {
+  id?: string;
+  recipeId?: string;
+  productId: string;
+  quantity: number | string;
+  unit: ProductUnit;
+  product?: {
+    id: string;
+    name: string;
+    sku?: string;
+  };
+}
+
+export interface ProductRecipeOutput {
+  id: string;
+  outputProductId: string;
+  outputQuantity: number | string;
+  outputUnit: ProductUnit;
+  version: number;
+  remarks?: string | null;
+  status?: string;
+  createdById?: string;
+  approvedById?: string | null;
+  approvedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  items: ProductRecipeItemSummary[];
+}
+
 export interface Product {
   id: string;
   sku: string;
@@ -28,6 +57,7 @@ export interface Product {
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
+  recipeOutputs?: ProductRecipeOutput[];
   conversionPreview?: {
     formula?: string;
     density?: number;

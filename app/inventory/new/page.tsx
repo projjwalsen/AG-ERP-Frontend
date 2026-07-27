@@ -8,10 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast, ToastContainer } from "@/components/ui/toast";
-import { productApi, CreateProductPayload } from "@/app/services/product.service";
-import { manufacturingApi } from "@/app/services/manufacturing.service";
+import { productApi, CreateProductPayload, CreateProductRecipePayload } from "@/app/services/product.service";
 import { Product, ProductType, ProductUnit } from "@/app/types/product";
-import { CreateRecipePayload } from "@/app/types/manufacturing";
 import { DataSelect, DataSelectOption } from "@/components/ui/data-select";
 import { useRouter } from "next/navigation";
 
@@ -61,11 +59,7 @@ export default function NewProductPage() {
 
   const [loading, setLoading] = React.useState(false);
   const [showConfirm, setShowConfirm] = React.useState(false);
-  const [createdProduct, setCreatedProduct] = React.useState<Product | null>(null);
-  const [showRecipeForm, setShowRecipeForm] = React.useState(false);
   const [recipeProducts, setRecipeProducts] = React.useState<Product[]>([]);
-  const [recipeSubmitting, setRecipeSubmitting] = React.useState(false);
-  const [recipeCreated, setRecipeCreated] = React.useState(false);
   const [recipeOutputQuantity, setRecipeOutputQuantity] = React.useState("1");
   const [recipeOutputUnit, setRecipeOutputUnit] = React.useState<ProductUnit>("KG");
   const [recipeRemarks, setRecipeRemarks] = React.useState("");
@@ -99,6 +93,10 @@ export default function NewProductPage() {
     }
     if (!form.productType) {
       addToast("Product type is required", "error");
+      return;
+    }
+    if (form.productType === "MANUFACTURED" && Object.keys(recipeErrors).length > 0) {
+      addToast("Please fix the composition details before creating the product", "error");
       return;
     }
     setShowConfirm(true);
@@ -173,70 +171,36 @@ export default function NewProductPage() {
 
   const isRecipeValid = Object.keys(recipeErrors).length === 0;
 
-  const handleCreateRecipe = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!createdProduct) {
-      addToast("Create the product first", "error");
-      return;
-    }
-
-    if (!isRecipeValid) {
-      addToast("Please fix the recipe errors", "error");
-      return;
-    }
-
-    const payload: CreateRecipePayload = {
-      outputProductId: createdProduct.id,
-      outputQuantity: Number(recipeOutputQuantity),
-      outputUnit: recipeOutputUnit,
-      remarks: recipeRemarks.trim() || undefined,
-      items: recipeItems
-        .filter((item) => item.productId && Number(item.quantity) > 0 && item.unit)
-        .map((item) => ({
-          productId: item.productId,
-          quantity: Number(item.quantity),
-          unit: item.unit,
-        })),
-    };
-
-    setRecipeSubmitting(true);
-    try {
-      const res = await manufacturingApi.createRecipe(payload);
-      if (res.success) {
-        setRecipeCreated(true);
-        addToast("Recipe created successfully", "success");
-      } else {
-        addToast(res.message || "Failed to create recipe", "error");
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to create recipe";
-      addToast(message, "error");
-    } finally {
-      setRecipeSubmitting(false);
-    }
-  };
-
   const handleConfirmCreate = async () => {
     setShowConfirm(false);
     setLoading(true);
     try {
-      const response = await productApi.create(form);
+      const recipePayload: CreateProductRecipePayload | undefined =
+        form.productType === "MANUFACTURED"
+          ? {
+              outputQuantity: Number(recipeOutputQuantity),
+              outputUnit: recipeOutputUnit,
+              remarks: recipeRemarks.trim() || undefined,
+              items: recipeItems
+                .filter((item) => item.productId && Number(item.quantity) > 0 && item.unit)
+                .map((item) => ({
+                  productId: item.productId,
+                  quantity: Number(item.quantity),
+                  unit: item.unit,
+                })),
+            }
+          : undefined;
+
+      const payload: CreateProductPayload = {
+        ...form,
+        ...(recipePayload ? { recipe: recipePayload } : {}),
+      };
+
+      const response = await productApi.create(payload);
       if (response && response.success) {
-        const newProduct = response.data?.product ?? null;
-        setCreatedProduct(newProduct);
-        setRecipeCreated(false);
         setLoading(false);
-        if (newProduct && (newProduct.productType === "MANUFACTURED" || newProduct.productType === "BOTH")) {
-          setRecipeItems([makeRecipeRow()]);
-          setRecipeOutputQuantity("1");
-          setRecipeOutputUnit("KG");
-          setRecipeRemarks("");
-          setShowRecipeForm(true);
-        } else {
-          setShowRecipeForm(false);
-          router.push("/inventory");
-        }
         addToast("Product created successfully", "success");
+        router.push("/inventory");
       } else {
         addToast(response?.message || "Failed to create product", "error");
         setLoading(false);
@@ -330,10 +294,8 @@ export default function NewProductPage() {
               />
             </div>
 
-            {/* Product type — drives whether this product can appear as a
-                recipe output (MANUFACTURED/BOTH). Required; defaults to
-                PURCHASED. Recipe creation picks output products by this
-                flag. */}
+            {/* Product type — drives whether this product should include a
+                composition section during create. Purchased products skip it. */}
             <div className="space-y-2">
               <Label htmlFor="productType">Product Type *</Label>
               <DataSelect
@@ -348,12 +310,131 @@ export default function NewProductPage() {
                 disablePortal
               />
               <p className="text-xs text-gray-500">
-                Choose <span className="font-medium">Manufactured</span> or{" "}
-                <span className="font-medium">Both</span> if this product will
-                be produced from a recipe. <span className="font-medium">Purchased</span>{" "}
+                Choose <span className="font-medium">Manufactured</span> if this product will
+                be produced from a composition. <span className="font-medium">Purchased</span>{" "}
                 means it can only be bought from vendors.
               </p>
             </div>
+
+            {(form.productType === "MANUFACTURED" || form.productType === "BOTH") && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900">Composition</h3>
+                    <p className="text-xs text-gray-500">This will be sent with the product create request.</p>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={addRecipeRow}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Material
+                  </Button>
+                </div>
+
+                {recipeItems.map((item, index) => {
+                  const materialOptions = recipeProducts
+                    .filter((product) => product.id !== form.sku)
+                    .map((product) => ({
+                      value: product.id,
+                      label: product.name,
+                      description: product.sku,
+                      badge: product.productType,
+                    }));
+
+                  return (
+                    <div key={item.rowId} className="grid grid-cols-1 md:grid-cols-[1.3fr_0.8fr_0.8fr_auto] gap-3 rounded-lg border border-gray-200 bg-white p-3">
+                      <div className="space-y-2">
+                        <Label>Material {index + 1} *</Label>
+                        <DataSelect
+                          value={item.productId}
+                          onChange={(value) => updateRecipeRow(item.rowId, { productId: value })}
+                          options={materialOptions}
+                          placeholder="Select material"
+                          searchable
+                          clearable
+                          disablePortal
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Quantity *</Label>
+                        <Input
+                          type="number"
+                          step="0.001"
+                          value={item.quantity}
+                          onChange={(e) => updateRecipeRow(item.rowId, { quantity: e.target.value })}
+                          placeholder="10"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Unit</Label>
+                        <select
+                          value={item.unit}
+                          onChange={(e) => updateRecipeRow(item.rowId, { unit: e.target.value as ProductUnit })}
+                          className="h-10 w-full border border-gray-200 rounded-md px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                        >
+                          <option value="KG">KG</option>
+                          <option value="LTR">LTR</option>
+                        </select>
+                      </div>
+                      <div className="flex items-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeRecipeRow(item.rowId)}
+                          disabled={recipeItems.length <= 1}
+                          className="h-10 w-10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {recipeErrors.recipeItems && (
+                  <p className="text-xs text-red-500">{recipeErrors.recipeItems}</p>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="recipeOutputQuantity">Output Quantity *</Label>
+                    <Input
+                      id="recipeOutputQuantity"
+                      type="number"
+                      step="0.001"
+                      value={recipeOutputQuantity}
+                      onChange={(e) => setRecipeOutputQuantity(e.target.value)}
+                      placeholder="1"
+                    />
+                    {recipeErrors.recipeOutputQuantity && (
+                      <p className="text-xs text-red-500">{recipeErrors.recipeOutputQuantity}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="recipeOutputUnit">Output Unit *</Label>
+                    <select
+                      id="recipeOutputUnit"
+                      value={recipeOutputUnit}
+                      onChange={(e) => setRecipeOutputUnit(e.target.value as ProductUnit)}
+                      className="h-10 w-full border border-gray-200 rounded-md px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="KG">KG</option>
+                      <option value="LTR">LTR</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="recipeRemarks">Remarks</Label>
+                  <Textarea
+                    id="recipeRemarks"
+                    value={recipeRemarks}
+                    onChange={(e) => setRecipeRemarks(e.target.value)}
+                    rows={2}
+                    placeholder="e.g., Blending of BASE OIL and ETHANOL"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="disclaimer">Disclaimer</Label>
@@ -498,169 +579,6 @@ export default function NewProductPage() {
             </CardContent>
           </Card>
         </div>
-      )}
-
-      {showRecipeForm && createdProduct && (
-        <Card className="mt-6 max-w-full">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardList className="h-5 w-5 text-purple-600" />
-              Create Composition for Manufactured Product
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {recipeCreated ? (
-              <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-                <p className="font-semibold text-green-800">Composition created successfully.</p>
-                <p className="text-sm text-green-700 mt-1">
-                  The composition for {createdProduct.name} is now ready for approval and use in manufacturing.
-                </p>
-                <div className="flex items-center gap-3 mt-4">
-                  <Button variant="outline" onClick={() => router.push("/inventory")}>Back to Inventory</Button>
-                  <Button onClick={() => {
-                    setRecipeCreated(false);
-                    setRecipeItems([makeRecipeRow()]);
-                    setRecipeOutputQuantity("1");
-                    setRecipeOutputUnit("KG");
-                    setRecipeRemarks("");
-                  }}>
-                    Create Another Composition
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleCreateRecipe} className="space-y-4">
-                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                  <p className="text-sm font-medium text-gray-800">Output Product</p>
-                  <p className="text-sm text-gray-600 mt-1">{createdProduct.name} ({createdProduct.sku})</p>
-                </div>
-<div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-gray-900">Raw Materials</h3>
-                    <Button type="button" variant="outline" size="sm" onClick={addRecipeRow}>
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add Material
-                    </Button>
-                  </div>
-
-                  {recipeItems.map((item, index) => {
-                    const materialOptions = recipeProducts
-                      .filter((product) => product.id !== createdProduct.id)
-                      .map((product) => ({
-                        value: product.id,
-                        label: product.name,
-                        description: product.sku,
-                        badge: product.productType,
-                      }));
-
-                    return (
-                      <div key={item.rowId} className="grid grid-cols-1 md:grid-cols-[1.3fr_0.8fr_0.8fr_auto] gap-3 rounded-lg border border-gray-200 bg-white p-3">
-                        <div className="space-y-2">
-                          <Label>Material {index + 1} *</Label>
-                          <DataSelect
-                            value={item.productId}
-                            onChange={(value) => updateRecipeRow(item.rowId, { productId: value })}
-                            options={materialOptions}
-                            placeholder="Select material"
-                            searchable
-                            clearable
-                            disablePortal
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Quantity *</Label>
-                          <Input
-                            type="number"
-                            step="0.001"
-                            value={item.quantity}
-                            onChange={(e) => updateRecipeRow(item.rowId, { quantity: e.target.value })}
-                            placeholder="10"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Unit</Label>
-                          <select
-                            value={item.unit}
-                            onChange={(e) => updateRecipeRow(item.rowId, { unit: e.target.value as ProductUnit })}
-                            className="h-10 w-full border border-gray-200 rounded-md px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                          >
-                            <option value="KG">KG</option>
-                            <option value="LTR">LTR</option>
-                          </select>
-                        </div>
-                        <div className="flex items-end">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeRecipeRow(item.rowId)}
-                            disabled={recipeItems.length <= 1}
-                            className="h-10 w-10"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {recipeErrors.recipeItems && (
-                    <p className="text-xs text-red-500">{recipeErrors.recipeItems}</p>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="recipeOutputQuantity">Output Quantity *</Label>
-                    <Input
-                      id="recipeOutputQuantity"
-                      type="number"
-                      step="0.001"
-                      value={recipeOutputQuantity}
-                      onChange={(e) => setRecipeOutputQuantity(e.target.value)}
-                      placeholder="1"
-                    />
-                    {recipeErrors.recipeOutputQuantity && (
-                      <p className="text-xs text-red-500">{recipeErrors.recipeOutputQuantity}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="recipeOutputUnit">Output Unit *</Label>
-                    <select
-                      id="recipeOutputUnit"
-                      value={recipeOutputUnit}
-                      onChange={(e) => setRecipeOutputUnit(e.target.value as ProductUnit)}
-                      className="h-10 w-full border border-gray-200 rounded-md px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                    >
-                      <option value="KG">KG</option>
-                      <option value="LTR">LTR</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="recipeRemarks">Remarks</Label>
-                  <Textarea
-                    id="recipeRemarks"
-                    value={recipeRemarks}
-                    onChange={(e) => setRecipeRemarks(e.target.value)}
-                    rows={2}
-                    placeholder="e.g., Blending of BASE OIL and ETHANOL"
-                  />
-                </div>
-
-                
-
-                <div className="flex items-center gap-3 pt-2">
-                  
-                  <Button type="submit" loading={recipeSubmitting}>
-                    Create Composition
-                  </Button>
-                </div>
-              </form>
-            )}
-          </CardContent>
-        </Card>
       )}
 
       <ToastContainer />

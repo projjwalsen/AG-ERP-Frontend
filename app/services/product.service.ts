@@ -7,6 +7,7 @@ import {
   ProductsListResponse,
   ProductResponse,
   PaginationMeta,
+  ProductUnit,
 } from "../types/product";
 
 export interface GetProductsParams {
@@ -18,6 +19,17 @@ export interface GetProductsParams {
    *  MANUFACTURED/BOTH products only. Backend does not currently
    *  accept this query param; included for forward-compat. */
   productType?: ProductType;
+}
+
+export interface CreateProductRecipePayload {
+  outputQuantity: number;
+  outputUnit: ProductUnit;
+  remarks?: string;
+  items: Array<{
+    productId: string;
+    quantity: number;
+    unit: ProductUnit;
+  }>;
 }
 
 export interface CreateProductPayload {
@@ -39,6 +51,7 @@ export interface CreateProductPayload {
    * properly typed at the source.
    */
   productType?: ProductType;
+  recipe?: CreateProductRecipePayload;
 }
 
 export interface UpdateProductPayload {

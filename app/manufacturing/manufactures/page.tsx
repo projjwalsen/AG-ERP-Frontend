@@ -784,10 +784,7 @@ export default function ManufacturesPage() {
               <RefreshCcw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            <Button variant="outline" onClick={() => router.push("/manufacturing")}>
-              <ClipboardList />
-              <span className="ml-2">Compositions</span>
-            </Button>
+           
             {canWrite && (
               <>
                 <Button

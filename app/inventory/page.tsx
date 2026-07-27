@@ -1104,6 +1104,47 @@ function ViewProductModal({
               </p>
             </div>
           )}
+
+          {(product.productType === "MANUFACTURED" || product.productType === "BOTH") && (
+            <div>
+              <p className="text-xs text-gray-500 uppercase mb-2">Composition</p>
+              {product.recipeOutputs && product.recipeOutputs.length > 0 ? (
+                <div className="space-y-2">
+                  {product.recipeOutputs.map((recipe) => (
+                    <div key={recipe.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium text-gray-900">
+                          Output {recipe.outputQuantity} {recipe.outputUnit}
+                        </p>
+                        {recipe.status && (
+                          <Badge variant="outline" className="text-xs">
+                            {recipe.status}
+                          </Badge>
+                        )}
+                      </div>
+                      {recipe.remarks && (
+                        <p className="text-xs text-gray-500 mt-1">{recipe.remarks}</p>
+                      )}
+                      {recipe.items?.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {recipe.items.map((item, index) => (
+                            <div key={item.id || `${item.productId}-${index}`} className="flex items-center justify-between rounded bg-white px-2 py-1 text-sm">
+                              <span className="text-gray-700">{item.product?.name || item.productId}</span>
+                              <span className="font-mono text-gray-600">
+                                {item.quantity} {item.unit}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No composition attached yet.</p>
+              )}
+            </div>
+          )}
         </div>
 
         <DialogFooter>
