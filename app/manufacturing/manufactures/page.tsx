@@ -519,7 +519,7 @@ function NewManufactureDialog({
                 className="bg-purple-600 hover:bg-purple-700 text-white"
               >
                 <Save className="h-4 w-4 mr-2" />
-                Create Pending
+                Create Manufactures
               </Button>
             </div>
           </div>
@@ -550,62 +550,75 @@ function NewManufactureDialog({
                 </div>
               )}
 
-              {preview.allocations.length > 0 && (
-                <div>
-                  <p className="text-xs text-gray-500 uppercase mb-1">
-                    FIFO Allocations
-                  </p>
-                  <div className="border border-gray-200 rounded-md overflow-hidden">
-                    <table className="w-full text-xs">
-                      <thead className="bg-gray-50 text-gray-600">
-                        <tr>
-                          <th className="text-left px-2 py-1.5 font-medium">Material</th>
-                          <th className="text-left px-2 py-1.5 font-medium">Batch</th>
-                          <th className="text-right px-2 py-1.5 font-medium">Qty</th>
-                          <th className="text-right px-2 py-1.5 font-medium">Unit Cost</th>
-                          <th className="text-right px-2 py-1.5 font-medium">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {preview.allocations.map((a, i) => (
-                          <tr key={i} className="border-t border-gray-100">
-                            <td className="px-2 py-1.5 text-gray-900">
-                              {a.productName}
-                            </td>
-                            <td className="px-2 py-1.5 font-mono text-gray-600">
-                              {a.batchNo}
-                            </td>
-                            <td className="px-2 py-1.5 text-right font-mono">
-                              {a.quantity} {a.unit}
-                            </td>
-                            <td className="px-2 py-1.5 text-right font-mono">
-                              {formatCurrency(a.unitCost)}
-                            </td>
-                            <td className="px-2 py-1.5 text-right font-mono">
-                              {formatCurrency(a.totalCost)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+              {preview.canManufacture ? (
+                <>
+                  {preview.allocations.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase mb-1">
+                        FIFO Allocations
+                      </p>
+                      <div className="border border-gray-200 rounded-md overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50 text-gray-600">
+                            <tr>
+                              <th className="text-left px-2 py-1.5 font-medium">Material</th>
+                              <th className="text-left px-2 py-1.5 font-medium">Batch</th>
+                              <th className="text-right px-2 py-1.5 font-medium">Qty</th>
+                              <th className="text-right px-2 py-1.5 font-medium">Unit Cost</th>
+                              <th className="text-right px-2 py-1.5 font-medium">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {preview.allocations.map((a, i) => (
+                              <tr key={i} className="border-t border-gray-100">
+                                <td className="px-2 py-1.5 text-gray-900">
+                                  {a.productName}
+                                </td>
+                                <td className="px-2 py-1.5 font-mono text-gray-600">
+                                  {a.batchNo}
+                                </td>
+                                <td className="px-2 py-1.5 text-right font-mono">
+                                  {a.quantity} {a.unit}
+                                </td>
+                                <td className="px-2 py-1.5 text-right font-mono">
+                                  {formatCurrency(a.unitCost)}
+                                </td>
+                                <td className="px-2 py-1.5 text-right font-mono">
+                                  {formatCurrency(a.totalCost)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="bg-gray-50 rounded-md p-3 text-sm flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-gray-500">Total manufacturing cost</p>
+                      <p className="text-lg font-bold text-gray-900">
+                        {formatCurrency(preview.totalManufacturingCost)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500">Unit cost</p>
+                      <p className="text-lg font-bold text-gray-900">
+                        {formatCurrency(preview.unitManufacturingCost)} / {selectedRecipe?.outputUnit || ""}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-gray-50 rounded-md p-3 text-sm space-y-2">
+                  <p className="text-xs text-gray-500 uppercase">FIFO Allocations</p>
+                  <p className="text-base font-medium text-gray-700">Not available</p>
+                  <div>
+                    <p className="text-xs text-gray-500">Total manufacturing cost</p>
+                    <p className="text-lg font-bold text-gray-900">Not available</p>
                   </div>
                 </div>
               )}
-
-              <div className="bg-gray-50 rounded-md p-3 text-sm flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500">Total manufacturing cost</p>
-                  <p className="text-lg font-bold text-gray-900">
-                    {formatCurrency(preview.totalManufacturingCost)}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-gray-500">Unit cost</p>
-                  <p className="text-lg font-bold text-gray-900">
-                    {formatCurrency(preview.unitManufacturingCost)} / {selectedRecipe?.outputUnit || ""}
-                  </p>
-                </div>
-              </div>
 
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
                 <AlertTriangle className="h-3.5 w-3.5 inline -mt-0.5 mr-1" />
