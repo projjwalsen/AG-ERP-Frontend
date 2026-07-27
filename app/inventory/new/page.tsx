@@ -321,7 +321,7 @@ export default function NewProductPage() {
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-semibold text-gray-900">Composition</h3>
-                    <p className="text-xs text-gray-500">This will be sent with the product create request.</p>
+                    
                   </div>
                   <Button type="button" variant="outline" size="sm" onClick={addRecipeRow}>
                     <Plus className="h-4 w-4 mr-1" />
