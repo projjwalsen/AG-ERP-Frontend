@@ -222,13 +222,11 @@ const buildSidebarItems = (): SidebarItem[] => [
   { title: "Product Management", href: "/inventory", icon: Package, module: "PRODUCT" },
   {
     title: "Manufacturing",
-    href: "/manufacturing",
+    href: "/manufacturing/manufactures",
     icon: Factory,
     module: "PRODUCT",
-    children: [
-      { title: "Recipes", href: "/manufacturing", icon: ClipboardList },
-      { title: "Manufactures", href: "/manufacturing/manufactures", icon: Factory },
-     ],
+    
+    
   },
   { title: "Purchase & Sales", href: "/purchase-sales", icon: ShoppingCart, module: "PURCHASE" },
   

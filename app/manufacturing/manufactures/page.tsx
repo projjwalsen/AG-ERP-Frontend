@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
+  X,
   Clock,
   Search,
   ArrowDown,
@@ -56,7 +57,7 @@ import { AvailableBatch, InventorySummaryRecord } from "@/app/types/inventory";
 
 function ManufactureStatusBadge({ status }: { status: ProductManufactureStatus | string }) {
   const config: Record<string, { variant: "default" | "success" | "warning" | "error" | "secondary" | "info" | "purple" | "outline"; icon: React.ElementType; label: string }> = {
-    DRAFT: { variant: "outline", icon: Clock, label: "Draft" },
+    DRAFT: { variant: "outline", icon: Clock, label: "Pending" },
     APPROVED: { variant: "success", icon: CheckCircle2, label: "Approved" },
     REJECTED: { variant: "error", icon: XCircle, label: "Rejected" },
   };
@@ -109,7 +110,7 @@ function ManufactureDetailModal({
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">
-                Manufacturing — {manufacture.outputBatchNo}
+                Composition — {manufacture.outputBatchNo}
               </h3>
               <p className="text-sm text-gray-500">
                 {manufacture.outputProduct?.name || "—"} · {manufacture.status}
@@ -296,7 +297,7 @@ function NewManufactureDialog({
   const { addToast } = useToast();
   const { user } = useAppSelector((state) => state.auth);
 
-  // Approved recipes only — backend /preview rejects others.
+  // Approved compositions only — backend /preview rejects others.
   const approvedRecipes = React.useMemo(
     () => recipes.filter((r) => r.status === "APPROVED" || r.status === "LOCKED"),
     [recipes]
@@ -341,44 +342,51 @@ function NewManufactureDialog({
     }
   }, [open, defaultBranchId]);
 
-  // If recipe list updates, drop the preview (recipe may have changed)
+  // Auto-generate a preview when the required inputs are complete.
   React.useEffect(() => {
+    if (!open) return;
+    if (!recipeId || !branchId || Number(outputQuantity) <= 0) {
+      setPreview(null);
+      return;
+    }
+
+    let cancelled = false;
+    setPreviewing(true);
     setPreview(null);
-  }, [recipeId, branchId, outputQuantity]);
+
+    const runPreview = async () => {
+      try {
+        const res = await manufacturingApi.preview({
+          recipeId,
+          branchId,
+          outputQuantity: Number(outputQuantity),
+        });
+        if (!cancelled && res.success && res.data) {
+          setPreview(res.data);
+        } else if (!cancelled) {
+          setPreview(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setPreview(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setPreviewing(false);
+        }
+      }
+    };
+
+    runPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, recipeId, branchId, outputQuantity]);
 
   if (!open) return null;
 
   const selectedRecipe = approvedRecipes.find((r) => r.id === recipeId);
-
-  const canPreview =
-    !!recipeId && !!branchId && Number(outputQuantity) > 0;
-
-  const handlePreview = async () => {
-    if (!canPreview) return;
-    setPreviewing(true);
-    setPreview(null);
-    try {
-      const res = await manufacturingApi.preview({
-        recipeId,
-        branchId,
-        outputQuantity: Number(outputQuantity),
-      });
-      if (res.success && res.data) {
-        setPreview(res.data);
-        if (res.data.canManufacture) {
-          addToast("Preview loaded — ready to create manufacturing document", "success");
-        } else {
-          addToast("Stock is insufficient for this output quantity", "error");
-        }
-      } else {
-        addToast(res.message || "Failed to load preview", "error");
-      }
-    } catch (err: any) {
-      addToast(err?.message || "Failed to load preview", "error");
-    } finally {
-      setPreviewing(false);
-    }
-  };
 
   const handleCreate = async () => {
     if (!preview || !preview.canManufacture) return;
@@ -391,7 +399,7 @@ function NewManufactureDialog({
         remarks: remarks.trim() || undefined,
       });
       if (res.success && res.data?.manufacture) {
-        addToast("Manufacturing document created in DRAFT", "success");
+        addToast("Manufacturing document created as Pending", "success");
         onCreated(res.data.manufacture);
       } else {
         addToast(res.message || "Failed to create manufacturing document", "error");
@@ -407,30 +415,42 @@ function NewManufactureDialog({
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <Card className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <CardContent className="pt-6 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-100 rounded-full">
-              <Factory className="h-6 w-6 text-purple-600" />
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-purple-100 rounded-full">
+                <Factory className="h-6 w-6 text-purple-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                New Manufacturing
+              </h3>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900">
-              New Manufacturing
-            </h3>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="text-gray-500 hover:text-gray-700"
+              aria-label="Close new manufacturing dialog"
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-2 md:col-span-2">
-              <Label>Approved Recipe *</Label>
+              <Label>Approved Composition *</Label>
               <DataSelect
                 value={recipeId}
                 onChange={setRecipeId}
                 options={recipeOptions}
-                placeholder="Select an approved recipe"
+                placeholder="Select an approved composition"
                 searchable
                 clearable
                 disablePortal
               />
               {approvedRecipes.length === 0 && (
                 <p className="text-xs text-amber-700">
-                  No approved recipes available. Approve a recipe first.
+                  No approved compositions available. Approve a composition first.
                 </p>
               )}
             </div>
@@ -462,7 +482,7 @@ function NewManufactureDialog({
               />
               {selectedRecipe && (
                 <p className="text-xs text-gray-500">
-                  Recipe defines 1 batch = {toFiniteNumber(selectedRecipe.outputQuantity)} {selectedRecipe.outputUnit}
+                  Composition defines 1 batch = {toFiniteNumber(selectedRecipe.outputQuantity)} {selectedRecipe.outputUnit}
                 </p>
               )}
             </div>
@@ -491,22 +511,13 @@ function NewManufactureDialog({
             <div className="flex gap-2">
               <Button
                 type="button"
-                variant="outline"
-                onClick={handlePreview}
-                loading={previewing}
-                disabled={!canPreview || previewing || creating}
-              >
-                Preview Cost & Stock
-              </Button>
-              <Button
-                type="button"
                 onClick={handleCreate}
                 loading={creating}
                 disabled={!preview || !preview.canManufacture || creating}
                 className="bg-purple-600 hover:bg-purple-700 text-white"
               >
                 <Save className="h-4 w-4 mr-2" />
-                Create DRAFT
+                Create Pending
               </Button>
             </div>
           </div>
@@ -596,7 +607,7 @@ function NewManufactureDialog({
 
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
                 <AlertTriangle className="h-3.5 w-3.5 inline -mt-0.5 mr-1" />
-                Creating a DRAFT document does not change inventory or
+                Creating a Pending document does not change inventory or
                 accounting. Inventory is only impacted on approval.
               </p>
             </div>
@@ -677,11 +688,11 @@ export default function ManufacturesPage() {
     loadAll();
   }, [loadAll]);
 
-  // After a DRAFT is created, refresh the list and open its detail view
+  // After a pending manufacturing document is created, refresh the list and open its detail view
   const handleCreated = async (m: ProductManufacture) => {
     setNewOpen(false);
     addToast(
-      `DRAFT ${m.outputBatchNo} created. Approve to consume raw materials and add finished goods.`,
+      `Pending ${m.outputBatchNo} created. Approve to consume raw materials and add finished goods.`,
       "info"
     );
     await loadAll();
@@ -764,7 +775,7 @@ export default function ManufacturesPage() {
 
       <PageHeader
         title="Manufacturing"
-        description="Create and approve manufacturing documents from approved recipes"
+        description="Create and approve composition documents from approved compositions"
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={loadAll} disabled={loading}>
@@ -773,7 +784,7 @@ export default function ManufacturesPage() {
             </Button>
             <Button variant="outline" onClick={() => router.push("/manufacturing")}>
               <ClipboardList />
-              <span className="ml-2">Recipes</span>
+              <span className="ml-2">Compositions</span>
             </Button>
             {canWrite && (
               <>
@@ -822,7 +833,7 @@ export default function ManufacturesPage() {
               className="h-10 border border-gray-200 rounded-md px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               <option value="">All statuses</option>
-              <option value="DRAFT">Draft</option>
+              <option value="DRAFT">Pending</option>
               <option value="APPROVED">Approved</option>
               <option value="REJECTED">Rejected</option>
             </select>
@@ -847,7 +858,7 @@ export default function ManufacturesPage() {
               )}
               {canWrite && recipes.length === 0 && (
                 <p className="text-xs mt-2 text-amber-700">
-                  You need at least one APPROVED recipe to create a manufacturing document.
+                  You need at least one APPROVED composition to create a manufacturing document.
                 </p>
               )}
             </div>
