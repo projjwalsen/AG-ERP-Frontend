@@ -132,6 +132,7 @@ export interface ProductManufactureConsumption {
   unitCost: number;
   totalCost: number;
   createdAt: string;
+  productName?: string;
 }
 
 export interface ProductManufacture {

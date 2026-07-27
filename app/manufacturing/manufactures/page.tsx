@@ -178,7 +178,9 @@ function ManufactureDetailModal({
                   <tbody>
                     {manufacture.consumptions.map((c) => (
                       <tr key={c.id} className="border-t border-gray-100">
-                        <td className="px-2 py-1.5 text-gray-900">{c.productId}</td>
+                        <td className="px-2 py-1.5 text-gray-900">
+                          {c.productName || c.productId}
+                        </td>
                         <td className="px-2 py-1.5 text-right font-mono">
                           {c.quantity} {c.unit}
                         </td>
