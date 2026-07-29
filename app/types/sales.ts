@@ -1,7 +1,7 @@
 // Sales Types - matches backend API contract
 
 export type SalesStatus = "PENDING" | "APPROVED" | "REJECTED";
-export type ProductUnit = "KG" | "LTR";
+export type ProductUnit = "KG" | "LTR" | "MT";
 
 export interface SalesItemProduct {
   id: string;

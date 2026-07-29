@@ -71,7 +71,6 @@ export type PaymentMode = "ONLINE" | "OFFLINE";
 export type PaymentThrough = "CASH" | "CHEQUE" | "DD" | "NEFT" | "RTGS" | "UPI";
 
 export const PAYMENT_THROUGH_OPTIONS: { value: PaymentThrough; label: string }[] = [
-  { value: "CASH", label: "Cash" },
   { value: "CHEQUE", label: "Cheque" },
   { value: "DD", label: "DD (Demand Draft)" },
   { value: "NEFT", label: "NEFT" },

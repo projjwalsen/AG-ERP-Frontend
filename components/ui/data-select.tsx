@@ -289,13 +289,7 @@ export const DataSelect = React.forwardRef<HTMLButtonElement, DataSelectProps>(
                   option.disabled && "opacity-50 cursor-not-allowed"
                 )}
               >
-                <span className="mt-0.5 shrink-0">
-                  {isSelected ? (
-                    <Check className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <span className="block h-4 w-4" />
-                  )}
-                </span>
+               
                 <span className="flex-1 min-w-0">
                   <span className="block text-gray-900 break-words">
                     {option.label}
@@ -360,7 +354,18 @@ export const DataSelect = React.forwardRef<HTMLButtonElement, DataSelectProps>(
               !selected && "text-gray-400"
             )}
           >
-            {selected ? selected.label : placeholder}
+            {selected ? (
+              <span className="min-w-0">
+                <span className="block text-gray-900 truncate">{selected.label}</span>
+                {selected.description && (
+                  <span className="block text-[11px] text-gray-500 mt-0.5 truncate">
+                    {selected.description}
+                  </span>
+                )}
+              </span>
+            ) : (
+              placeholder
+            )}
           </span>
           <span className="flex items-center gap-1 shrink-0">
             {clearable && selected && !disabled && (

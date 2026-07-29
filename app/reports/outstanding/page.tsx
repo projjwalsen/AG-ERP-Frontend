@@ -44,10 +44,10 @@ interface BucketColumn {
 }
 
 const BUCKET_COLUMNS: BucketColumn[] = [
-  { key: "bucket_0_30_days", label: "0-30 Days" },
-  { key: "bucket_31_60_days", label: "31-60 Days" },
-  { key: "bucket_61_90_days", label: "61-90 Days" },
-  { key: "bucket_91_plus_days", label: "91+ Days" },
+  { key: "bucket_0_60_days", label: "0-60 Days" },
+  { key: "bucket_61_120_days", label: "61-120 Days" },
+  { key: "bucket_121_180_days", label: "121-180 Days" },
+  { key: "bucket_180_plus_days", label: "180+ Days" },
 ];
 
 function formatDate(d: string | Date | null | undefined): string {
@@ -148,15 +148,15 @@ export default function OutstandingReportPage() {
       },
       {
         title: "Oldest Bucket",
-        value: formatCurrency(data?.summary?.bucket_91_plus_days ?? 0),
-        hint: "Invoices aged 91+ days",
+        value: formatCurrency(data?.summary?.bucket_180_plus_days ?? 0),
+        hint: "Invoices aged 180+ days",
         icon: Receipt,
         iconBg:
-          (data?.summary?.bucket_91_plus_days ?? 0) > 0
+            (data?.summary?.bucket_180_plus_days ?? 0) > 0
             ? "bg-rose-50"
             : "bg-gray-100",
         iconColor:
-          (data?.summary?.bucket_91_plus_days ?? 0) > 0
+            (data?.summary?.bucket_180_plus_days ?? 0) > 0
             ? "text-rose-600"
             : "text-gray-500",
       },

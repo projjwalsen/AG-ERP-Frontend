@@ -56,10 +56,10 @@ import { formatCurrency, cn } from "@/lib/utils";
 type ViewMode = "agency" | "detail";
 
 const BUCKET_COLUMNS: { key: OutstandingBucketKey; label: string }[] = [
-  { key: "bucket_0_30_days", label: "0-30 Days" },
-  { key: "bucket_31_60_days", label: "31-60 Days" },
-  { key: "bucket_61_90_days", label: "61-90 Days" },
-  { key: "bucket_91_plus_days", label: "91+ Days" },
+  { key: "bucket_0_60_days", label: "0-60 Days" },
+  { key: "bucket_61_120_days", label: "61-120 Days" },
+  { key: "bucket_121_180_days", label: "121-180 Days" },
+  { key: "bucket_180_plus_days", label: "180+ Days" },
 ];
 
 function formatDate(d: string | Date | null | undefined): string {

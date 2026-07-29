@@ -511,6 +511,7 @@ export default function NewPurchasePage() {
                               options={[
                                 { value: "KG", label: "KG" },
                                 { value: "LTR", label: "LTR" },
+                                { value: "MT", label: "MT" },
                               ]}
                             />
                           </td>

@@ -261,6 +261,7 @@ const buildSidebarItems = (): SidebarItem[] => [
       { title: "GST Suspense Log", href: "/reports/gst-suspense", icon: AlertTriangle },
       { title: "GST Ledger", href: "/reports/gst-ledger", icon: Calculator },
       { title: "Inventory Report", href: "/reports/inventory", icon: Package },
+      { title: "Trial Balance Report", href: "/reports/trial-balance", icon: ClipboardList },
     ],
   },
   { title: "Settings", href: "/settings", icon: Settings, module: null },

@@ -15,7 +15,7 @@ export type ProductLedgerMovementType =
   | "TRANSFER_IN"
   | "TRANSFER_OUT";
 
-export type ProductUnit = "KG" | "LTR" | "PIECE";
+export type ProductUnit = "KG" | "LTR" | "MT" | "PIECE";
 
 export interface ProductLedgerListItem {
   id: string;

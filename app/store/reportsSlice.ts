@@ -104,10 +104,10 @@ function castRow(
   return {
     ...row,
     totalOutstanding: toNumber(row.totalOutstanding),
-    bucket_0_30_days: castBucket(row.bucket_0_30_days),
-    bucket_31_60_days: castBucket(row.bucket_31_60_days),
-    bucket_61_90_days: castBucket(row.bucket_61_90_days),
-    bucket_91_plus_days: castBucket(row.bucket_91_plus_days),
+    bucket_0_60_days: castBucket(row.bucket_0_60_days),
+    bucket_61_120_days: castBucket(row.bucket_61_120_days),
+    bucket_121_180_days: castBucket(row.bucket_121_180_days),
+    bucket_180_plus_days: castBucket(row.bucket_180_plus_days),
   };
 }
 
@@ -134,10 +134,10 @@ function castOutstanding(
       totalAgencies: r.summary?.totalAgencies ?? 0,
       totalInvoices: r.summary?.totalInvoices ?? 0,
       totalOutstanding: toNumber(r.summary?.totalOutstanding),
-      bucket_0_30_days: toNumber(r.summary?.bucket_0_30_days),
-      bucket_31_60_days: toNumber(r.summary?.bucket_31_60_days),
-      bucket_61_90_days: toNumber(r.summary?.bucket_61_90_days),
-      bucket_91_plus_days: toNumber(r.summary?.bucket_91_plus_days),
+      bucket_0_60_days: toNumber(r.summary?.bucket_0_60_days),
+      bucket_61_120_days: toNumber(r.summary?.bucket_61_120_days),
+      bucket_121_180_days: toNumber(r.summary?.bucket_121_180_days),
+      bucket_180_plus_days: toNumber(r.summary?.bucket_180_plus_days),
     },
     rows: (r.rows || []).map(castRow),
     detailRows: (r.detailRows || []).map(castDetailRow),

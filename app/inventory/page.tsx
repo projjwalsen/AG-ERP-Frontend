@@ -137,8 +137,7 @@ function ProductsTab() {
   };
 
   const handleEdit = (product: Product) => {
-    setSelectedProduct(product);
-    setEditModalOpen(true);
+    router.push(`/inventory/${product.id}/edit`);
   };
 
   const handleView = (product: Product) => {
@@ -462,15 +461,6 @@ function ProductsTab() {
             </Button>
           </CardContent>
         </Card>
-      )}
-
-      {selectedProduct && (
-        <EditProductModal
-          open={editModalOpen}
-          onClose={() => setEditModalOpen(false)}
-          onSuccess={handleEditSuccess}
-          product={selectedProduct}
-        />
       )}
 
       {selectedProduct && (

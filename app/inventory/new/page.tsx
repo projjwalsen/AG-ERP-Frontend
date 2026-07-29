@@ -30,9 +30,9 @@ const FIXED_UNIT = "KG" as const;
 // present in the create payload.
 const DEFAULT_PRODUCT_TYPE: ProductType = "PURCHASED";
 
-const PRODUCT_TYPE_OPTIONS: { value: ProductType; label: string; description: string }[] = [
-  { value: "PURCHASED", label: "Purchased", description: "Bought from vendors only" },
-  { value: "MANUFACTURED", label: "Manufactured", description: "Produced in-house from a recipe" },
+const PRODUCT_TYPE_OPTIONS: { value: ProductType; label: string }[] = [
+  { value: "PURCHASED", label: "Purchased"},
+  { value: "MANUFACTURED", label: "Manufactured"},
   // { value: "BOTH", label: "Both", description: "Can be purchased and manufactured" },
 ];
 
@@ -109,7 +109,7 @@ export default function NewProductPage() {
       PRODUCT_TYPE_OPTIONS.map((opt) => ({
         value: opt.value,
         label: opt.label,
-        description: opt.description,
+       
       })),
     []
   );
@@ -335,7 +335,7 @@ export default function NewProductPage() {
                     .map((product) => ({
                       value: product.id,
                       label: product.name,
-                      description: product.sku,
+                      description: product.density ? `Density: ${product.density} kg/L` : undefined,
                       badge: product.productType,
                     }));
 
@@ -372,6 +372,7 @@ export default function NewProductPage() {
                         >
                           <option value="KG">KG</option>
                           <option value="LTR">LTR</option>
+                          <option value="MT">MT</option>
                         </select>
                       </div>
                       <div className="flex items-end">

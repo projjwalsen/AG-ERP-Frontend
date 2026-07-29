@@ -124,6 +124,20 @@ export const reportApi = {
     return apiFetch<InventoryReportResponse>(url);
   },
 
+  /** GET /api/reports/trial-balance?branchId=&startDate=&endDate=&includeZero=true */
+  async getTrialBalanceReport(
+    params?: { branchId?: string; startDate?: string; endDate?: string; includeZero?: boolean }
+  ): Promise<{ success: boolean; message: string; data?: import("@/app/types/report").TrialBalanceResponse }> {
+    const queryParams = new URLSearchParams();
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    if (params?.includeZero) queryParams.append("includeZero", String(params.includeZero));
+    const query = queryParams.toString();
+    const url = query ? `api/reports/trial-balance?${query}` : `api/reports/trial-balance`;
+    return apiFetch(url as any);
+  },
+
   // ===================================================================
   // EXCEL EXPORTS
   //
@@ -272,5 +286,18 @@ export const reportApi = {
       `api/reports/stock-inventory?${queryParams.toString()}`,
       "stock-inventory.xlsx"
     );
+  },
+
+  /** GET /api/reports/trial-balance?export=true&branchId=&startDate=&endDate=&includeZero=true */
+  async exportTrialBalanceExcel(
+    params?: { branchId?: string; startDate?: string; endDate?: string; includeZero?: boolean }
+  ): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    if (params?.includeZero) queryParams.append("includeZero", String(params.includeZero));
+    return fetchBlob(`api/reports/trial-balance?${queryParams.toString()}`, "trial-balance.xlsx");
   },
 };

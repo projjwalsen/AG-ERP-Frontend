@@ -1,6 +1,6 @@
 // Product Types - matches backend API contract
 
-export type ProductUnit = "KG" | "LTR";
+export type ProductUnit = "KG" | "LTR" | "MT";
 
 // Backend enum from prisma/schema.prisma
 // - PURCHASED  : only ever bought from vendors

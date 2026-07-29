@@ -42,15 +42,7 @@ export function ReportHeader({
     <div className={cn("mb-5 space-y-2", className)}>
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          {showBack && (
-            <Link
-              href="/reports"
-              className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-green-600 mb-2"
-            >
-              <ArrowLeft className="h-3 w-3" />
-              All Reports
-            </Link>
-          )}
+          
           <h1 className="text-xl font-semibold text-gray-900">{title}</h1>
           {description && (
             <p className="mt-0.5 text-sm text-gray-500">{description}</p>

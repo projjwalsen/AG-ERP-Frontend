@@ -26,10 +26,10 @@ export type OutstandingSettlementStatus =
   | "SETTLED";
 export type OutstandingInvoiceType = "PURCHASE" | "SALE";
 export type OutstandingBucketKey =
-  | "bucket_0_30_days"
-  | "bucket_31_60_days"
-  | "bucket_61_90_days"
-  | "bucket_91_plus_days";
+  | "bucket_0_60_days"
+  | "bucket_61_120_days"
+  | "bucket_121_180_days"
+  | "bucket_180_plus_days";
 export type SuspenseAuthStatus = "PENDING_AUTHENTICATION" | "AUTHENTICATED";
 export type GSTRClassification = "B2B" | "B2C";
 
@@ -99,10 +99,10 @@ export interface OutstandingRow {
   agencyName: string;
   vendorCode: string | null;
   totalOutstanding: number;
-  bucket_0_30_days: OutstandingBucket;
-  bucket_31_60_days: OutstandingBucket;
-  bucket_61_90_days: OutstandingBucket;
-  bucket_91_plus_days: OutstandingBucket;
+  bucket_0_60_days: OutstandingBucket;
+  bucket_61_120_days: OutstandingBucket;
+  bucket_121_180_days: OutstandingBucket;
+  bucket_180_plus_days: OutstandingBucket;
 }
 
 export interface OutstandingDetailRow {
@@ -126,10 +126,10 @@ export interface OutstandingSummary {
   totalAgencies: number;
   totalInvoices: number;
   totalOutstanding: number;
-  bucket_0_30_days: number;
-  bucket_31_60_days: number;
-  bucket_61_90_days: number;
-  bucket_91_plus_days: number;
+  bucket_0_60_days: number;
+  bucket_61_120_days: number;
+  bucket_121_180_days: number;
+  bucket_180_plus_days: number;
 }
 
 export interface OutstandingReportResponse {
@@ -253,6 +253,45 @@ export interface GSTR1Row {
   branch_state_code: string | null;
   customer_state_code: string | null;
   invoice_total: number;
+}
+
+// =====================================================================
+// TRIAL BALANCE — GET /api/reports/trial-balance
+// =====================================================================
+
+export interface TrialBalanceRow {
+  ledgerId: string;
+  ledgerName: string;
+  ledgerCode?: string | null;
+  groupName?: string | null;
+  branch?: { id: string; name: string; code?: string } | null;
+  openingDebit: number;
+  openingCredit: number;
+  periodDebit: number;
+  periodCredit: number;
+  closingDebit: number;
+  closingCredit: number;
+}
+
+export interface TrialBalanceSummary {
+  totalOpeningDebit: number;
+  totalOpeningCredit: number;
+  totalPeriodDebit: number;
+  totalPeriodCredit: number;
+  totalClosingDebit: number;
+  totalClosingCredit: number;
+  difference: number;
+  isBalanced: boolean;
+}
+
+export interface TrialBalanceResponse {
+  reportName: string;
+  generatedAt: string | Date;
+  branchId?: string | null;
+  branch?: { id: string; name: string } | null;
+  period: ReportPeriod;
+  summary: TrialBalanceSummary;
+  rows: TrialBalanceRow[];
 }
 
 export interface GSTR1Summary {

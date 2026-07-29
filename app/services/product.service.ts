@@ -40,9 +40,9 @@ export interface CreateProductPayload {
   disclaimer?: string;
   hsnNo?: string;
   applicableGST?: number;
-  baseUnit: "KG" | "LTR";
+  baseUnit: ProductUnit;
   density?: number;
-  operationalUnit: "KG" | "LTR";
+  operationalUnit: ProductUnit;
   minimumStockKG?: number;
   sellPricePerUnit: number;
   /**
@@ -62,9 +62,9 @@ export interface UpdateProductPayload {
   disclaimer?: string;
   hsnNo?: string;
   applicableGST?: number;
-  baseUnit?: "KG" | "LTR";
+  baseUnit?: ProductUnit;
   density?: number;
-  operationalUnit?: "KG" | "LTR";
+  operationalUnit?: ProductUnit;
   minimumStockKG?: number;
   sellPricePerUnit?: number;
   productType?: ProductType;

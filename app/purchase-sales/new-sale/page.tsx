@@ -706,6 +706,7 @@ export default function NewSalePage() {
                             options={[
                               { value: "KG", label: "KG" },
                               { value: "LTR", label: "LTR" },
+                              { value: "MT", label: "MT" },
                             ]}
                           />
                         </div>
