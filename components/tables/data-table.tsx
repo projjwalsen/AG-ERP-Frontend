@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { ColumnDef, flexRender, useReactTable, getCoreRowModel, getPaginationRowModel, getSortedRowModel, getFilteredRowModel, SortingState, ColumnFiltersState, PaginationState } from "@tanstack/react-table";
-import { ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
@@ -12,9 +12,16 @@ interface DataTableProps<TData, TValue> {
   data: TData[];
   searchKey?: string;
   onRowClick?: (row: TData) => void;
+  manualPagination?: {
+    pageIndex: number;
+    pageSize: number;
+    pageCount: number;
+    total: number;
+    onPageChange: (pageIndex: number) => void;
+  };
 }
 
-export function DataTable<TData, TValue>({ columns, data, searchKey, onRowClick }: DataTableProps<TData, TValue>) {
+export function DataTable<TData, TValue>({ columns, data, searchKey, onRowClick, manualPagination }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 });
@@ -25,16 +32,58 @@ export function DataTable<TData, TValue>({ columns, data, searchKey, onRowClick 
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    getPaginationRowModel: manualPagination ? undefined : getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    onPaginationChange: setPagination,
-    state: { sorting, columnFilters, pagination },
+    onPaginationChange: manualPagination ? undefined : setPagination,
+    manualPagination: Boolean(manualPagination),
+    pageCount: manualPagination?.pageCount,
+    state: {
+      sorting,
+      columnFilters,
+      pagination: manualPagination
+        ? { pageIndex: manualPagination.pageIndex, pageSize: manualPagination.pageSize }
+        : pagination,
+    },
   });
+
+  const currentPageIndex = manualPagination
+    ? manualPagination.pageIndex
+    : table.getState().pagination.pageIndex;
+  const currentPageSize = manualPagination
+    ? manualPagination.pageSize
+    : table.getState().pagination.pageSize;
+  const totalRows = manualPagination
+    ? manualPagination.total
+    : table.getFilteredRowModel().rows.length;
+  const pageCount = manualPagination
+    ? manualPagination.pageCount
+    : table.getPageCount();
+  const pageStart = totalRows === 0 ? 0 : currentPageIndex * currentPageSize + 1;
+  const pageEnd = totalRows === 0 ? 0 : Math.min((currentPageIndex + 1) * currentPageSize, totalRows);
+
+  const handlePrevious = () => {
+    if (manualPagination) {
+      manualPagination.onPageChange(Math.max(0, currentPageIndex - 1));
+      return;
+    }
+    table.previousPage();
+  };
+
+  const handleNext = () => {
+    if (manualPagination) {
+      manualPagination.onPageChange(Math.min(pageCount - 1, currentPageIndex + 1));
+      return;
+    }
+    table.nextPage();
+  };
+
+  const canPreviousPage = manualPagination ? currentPageIndex > 0 : table.getCanPreviousPage();
+  const canNextPage = manualPagination ? currentPageIndex + 1 < pageCount : table.getCanNextPage();
 
   return (
     <div className="space-y-4">
-      {searchKey && (
+      {searchKey && !manualPagination && (
         <div className="flex items-center justify-end gap-4 pb-3 border-b border-gray-100">
           <Select value={table.getState().pagination.pageSize.toString()} onValueChange={(v) => table.setPagination({ ...table.getState().pagination, pageSize: Number(v) })}>
             <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
@@ -72,18 +121,18 @@ export function DataTable<TData, TValue>({ columns, data, searchKey, onRowClick 
         </table>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between px-4 pb-1.5">
         <p className="text-sm text-gray-500">
-          Showing <span className="font-medium">{table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}</span> to{" "}
-          <span className="font-medium">{Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, table.getFilteredRowModel().rows.length)}</span> of{" "}
-          <span className="font-medium">{table.getFilteredRowModel().rows.length}</span>
+          Showing <span className="font-medium">{pageStart}</span> to{" "}
+          <span className="font-medium">{pageEnd}</span> of{" "}
+          <span className="font-medium">{totalRows}</span>
         </p>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()} className="h-8">
+          <Button variant="outline" size="sm" onClick={handlePrevious} disabled={!canPreviousPage} className="h-8">
             <ChevronLeft className="h-4 w-4" />Prev
           </Button>
-          <span className="text-sm text-gray-600">Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}</span>
-          <Button variant="outline" size="sm" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()} className="h-8">
+          <span className="text-sm text-gray-600">Page {currentPageIndex + 1} of {pageCount || 1}</span>
+          <Button variant="outline" size="sm" onClick={handleNext} disabled={!canNextPage} className="h-8">
             Next<ChevronRight className="h-4 w-4" />
           </Button>
         </div>

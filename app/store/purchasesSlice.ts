@@ -3,6 +3,7 @@ import { purchaseApi, PurchaseTransportDetails } from "../services/purchase.serv
 import { Purchase, PurchasesListResponse } from "../types/purchase";
 
 export interface CreatePurchasePayload {
+  purchaseOrderId?: string;
   agencyId: string;
   branchId: string;
   invoiceNo: string;
@@ -16,7 +17,7 @@ export interface CreatePurchasePayload {
     productId: string;
     batchNo: string;
     quantity: number;
-    unit: "KG" | "LTR";
+    unit: "KG" | "LTR" | "MT";
     purchasePrice: number;
   }[];
 }

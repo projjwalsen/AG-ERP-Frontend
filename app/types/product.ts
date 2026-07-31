@@ -64,6 +64,7 @@ export interface Product {
     sampleKg?: number;
     equivalentLtr?: number;
   };
+  availableStockKG?:number;
 }
 
 export interface PaginationMeta {

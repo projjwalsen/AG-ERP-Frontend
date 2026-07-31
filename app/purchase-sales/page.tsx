@@ -3,7 +3,7 @@
 import * as React from "react";
 import {
   ShoppingCart, Receipt, Search, Plus, Eye,
-  Package, RefreshCw, FileText, Download
+  Package, RefreshCw, FileText, Download, ArrowRightCircle, ArrowLeftRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,11 +68,21 @@ function PurchaseSalesContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Purchase & Sales</h1>
-        <p className="text-gray-500 mt-1">
-          Manage purchase orders, sales invoices, and approvals
-        </p>
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Purchase & Sales</h1>
+          <p className="text-gray-500 mt-1">
+            Manage purchase invoices, sales invoices, and approvals
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          className="w-fit gap-2 border-blue-500 text-blue-600 hover:bg-blue-50"
+          onClick={() => router.push("/purchase-order")}
+        >
+          <ArrowLeftRight className="h-4 w-4" />
+          Purchase Order
+        </Button>
       </div>
 
       <Tabs value={defaultTab} onValueChange={handleTabChange} className="w-full">
@@ -180,6 +190,15 @@ function PurchaseTab() {
             onClick={() => router.push("/purchase-sales/pending-purchases")}
           >
             Pending Approvals
+          </Button>
+          
+          <Button
+            variant="outline"
+            className="gap-2 border-blue-500 text-blue-600 hover:bg-blue-50"
+            onClick={() => router.push("/debit-credit-notes")}
+          >
+            <ArrowRightCircle className="h-4 w-4" />
+            Debit / Credit Notes
           </Button>
           {canPurchaseWrite && (
             <>

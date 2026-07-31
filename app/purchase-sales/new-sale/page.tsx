@@ -1235,7 +1235,7 @@ export default function NewSalePage() {
             </div>
 
             {/* Remarks */}
-            <div className="space-y-2">
+            {/* <div className="space-y-2">
               <Label htmlFor="remarks">Remarks</Label>
               <Textarea
                 id="remarks"
@@ -1245,7 +1245,7 @@ export default function NewSalePage() {
                 }
                 rows={3}
               />
-            </div>
+            </div> */}
 
             {/* Actions */}
             <div className="flex items-center gap-3 pt-4">

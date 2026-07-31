@@ -9,7 +9,7 @@ import {
   ShoppingCart, FileText, History, Settings, ChevronLeft, Shield,
   Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu, CreditCard,
   ChevronRight, BookOpen, Wallet, BarChart3, AlertTriangle, Receipt,
-  Calculator, Factory, ClipboardList, ShieldCheck,
+  Calculator, Factory, ClipboardList, ShieldCheck, ArrowLeftRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -229,7 +229,8 @@ const buildSidebarItems = (): SidebarItem[] => [
     
   },
   { title: "Purchase & Sales", href: "/purchase-sales", icon: ShoppingCart, module: "PURCHASE" },
-  
+  { title: "Purchase Order", href: "/purchase-order", icon: ArrowLeftRight, module: "PURCHASE" },
+  { title: "Credit/Debit Notes", href: "/debit-credit-notes", icon: FileText, module: "PURCHASE" },
   {
     title: "Transactions",
     href: "/transactions",
