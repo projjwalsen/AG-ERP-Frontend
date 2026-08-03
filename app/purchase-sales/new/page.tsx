@@ -488,7 +488,7 @@ export default function NewPurchasePage() {
                   <thead className="bg-gray-100 border-b">
                     <tr>
                       <th className="px-4 py-3 text-left font-semibold text-nowrap min-w-[360px]">Product</th>
-                      <th className="px-4 py-3 text-left font-semibold text-nowrap">SKU</th>
+                      {/* <th className="px-4 py-3 text-left font-semibold text-nowrap">SKU</th> */}
                       <th className="px-4 py-3 text-left font-semibold text-nowrap">HSN</th>
                       <th className="px-4 py-3 text-left font-semibold text-nowrap">Batch No</th>
                       <th className="px-4 py-3 text-right font-semibold text-nowrap">Qty</th>
@@ -515,7 +515,7 @@ export default function NewPurchasePage() {
                             />
                           </td>
                           <td className="px-4 py-3">
-                            <Input value={item.sku || ""} readOnly className="text-sm" />
+                            {/* <Input value={item.sku || ""} readOnly className="text-sm" /> */}
                           </td>
                           <td className="px-4 py-3">
                             <Input value={item.hsnNo || ""} readOnly className="text-sm" />
@@ -630,7 +630,7 @@ export default function NewPurchasePage() {
             <div className="space-y-4">
               <h4 className="font-semibold text-gray-900">Transport & Reference</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="space-y-2">
+                {/* <div className="space-y-2">
                   <Label htmlFor="purchaseOrderNo">
                     Purchase Order No <span className="text-red-500">*</span>
                   </Label>
@@ -640,7 +640,7 @@ export default function NewPurchasePage() {
                     readOnly
                     required
                   />
-                </div>
+                </div> */}
                 <div className="space-y-2">
                   <Label htmlFor="purchaseOrderDate">Purchase Order Date</Label>
                   <Input
