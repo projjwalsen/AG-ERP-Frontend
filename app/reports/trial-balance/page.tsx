@@ -63,9 +63,16 @@ function TrialBalanceContent() {
 
   const columns = React.useMemo<ColumnDef<TrialBalanceRow>[]>(
     () => [
-      { accessorKey: "groupName", header: "Group" },
-      { accessorKey: "ledgerName", header: "Ledger" },
-      { accessorKey: "ledgerCode", header: "Code", cell: ({ row }) => (<span className="font-mono text-xs">{row.original.ledgerCode ?? "-"}</span>) },
+      { accessorKey: "srNo", header: "#", cell: ({ row }) => <span>{row.original.srNo}</span> },
+      { accessorKey: "ledgerCode", header: "Ledger Code", cell: ({ row }) => (<span className="font-mono text-xs">{row.original.ledgerCode}</span>) },
+      { accessorKey: "account", header: "Account" },
+      { accessorKey: "parentGroup", header: "Group" },
+      { accessorKey: "ledgerCategory", header: "Category" },
+      { accessorKey: "ledgerNature", header: "Nature" },
+      { accessorKey: "debit", header: "Debit", cell: ({ row }) => formatCurrency(row.original.debit) },
+      { accessorKey: "credit", header: "Credit", cell: ({ row }) => formatCurrency(row.original.credit) },
+      { accessorKey: "closingDebit", header: "Closing Debit", cell: ({ row }) => formatCurrency(row.original.closingDebit) },
+      { accessorKey: "closingCredit", header: "Closing Credit", cell: ({ row }) => formatCurrency(row.original.closingCredit) },
       {
         id: "viewDetails",
         header: "",
@@ -103,12 +110,12 @@ function TrialBalanceContent() {
       summary={
         data
           ? [
-              { title: "Opening Debit", value: data.summary.totalOpeningDebit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
-              { title: "Opening Credit", value: data.summary.totalOpeningCredit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
-              { title: "Period Debit", value: data.summary.totalPeriodDebit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
-              { title: "Period Credit", value: data.summary.totalPeriodCredit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
+              { title: "Total Debit", value: data.summary.totalDebit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
+              { title: "Total Credit", value: data.summary.totalCredit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
               { title: "Closing Debit", value: data.summary.totalClosingDebit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
-              { title: "Closing Credit", value: data.summary.totalClosingCredit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" as any },
+              { title: "Closing Credit", value: data.summary.totalClosingCredit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
+              { title: "Period Difference", value: data.summary.periodDifference, hint: data.summary.isPeriodBalanced ? "Balanced" : "Unbalanced", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
+              { title: "Closing Difference", value: data.summary.closingDifference, hint: data.summary.isClosingBalanced ? "Balanced" : "Unbalanced", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" as any },
             ]
           : []
       }
@@ -124,28 +131,40 @@ function TrialBalanceContent() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Ledger details</DialogTitle>
-            <DialogDescription>Breakdown of opening, period and closing amounts.</DialogDescription>
+            <DialogDescription>Breakdown of debit, credit and closing amounts.</DialogDescription>
           </DialogHeader>
 
           {selectedRow ? (
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="text-sm text-gray-500">Opening Debit</div>
-              <div className="text-sm font-medium text-right">{formatCurrency(selectedRow.openingDebit)}</div>
+              <div className="text-sm text-gray-500">Ledger</div>
+              <div className="text-sm font-medium text-right">{selectedRow.account}</div>
 
-              <div className="text-sm text-gray-500">Opening Credit</div>
-              <div className="text-sm font-medium text-right">{formatCurrency(selectedRow.openingCredit)}</div>
+              <div className="text-sm text-gray-500">Ledger Code</div>
+              <div className="text-sm font-medium text-right"><span className="font-mono">{selectedRow.ledgerCode}</span></div>
 
-              <div className="text-sm text-gray-500">Period Debit</div>
-              <div className="text-sm font-medium text-right">{formatCurrency(selectedRow.periodDebit)}</div>
+              <div className="text-sm text-gray-500">Group</div>
+              <div className="text-sm font-medium text-right">{selectedRow.parentGroup}</div>
 
-              <div className="text-sm text-gray-500">Period Credit</div>
-              <div className="text-sm font-medium text-right">{formatCurrency(selectedRow.periodCredit)}</div>
+              <div className="text-sm text-gray-500">Category</div>
+              <div className="text-sm font-medium text-right">{selectedRow.ledgerCategory}</div>
+
+              <div className="text-sm text-gray-500">Nature</div>
+              <div className="text-sm font-medium text-right">{selectedRow.ledgerNature}</div>
+
+              <div className="text-sm text-gray-500">Debit</div>
+              <div className="text-sm font-medium text-right">{formatCurrency(selectedRow.debit)}</div>
+
+              <div className="text-sm text-gray-500">Credit</div>
+              <div className="text-sm font-medium text-right">{formatCurrency(selectedRow.credit)}</div>
 
               <div className="text-sm text-gray-500">Closing Debit</div>
               <div className="text-sm font-medium text-right">{formatCurrency(selectedRow.closingDebit)}</div>
 
               <div className="text-sm text-gray-500">Closing Credit</div>
               <div className="text-sm font-medium text-right">{formatCurrency(selectedRow.closingCredit)}</div>
+
+              <div className="text-sm text-gray-500">Closing Signed</div>
+              <div className="text-sm font-medium text-right">{formatCurrency(selectedRow.closingSigned)}</div>
             </div>
           ) : null}
         </DialogContent>

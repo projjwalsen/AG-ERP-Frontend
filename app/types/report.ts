@@ -260,27 +260,32 @@ export interface GSTR1Row {
 // =====================================================================
 
 export interface TrialBalanceRow {
+  srNo: number;
   ledgerId: string;
-  ledgerName: string;
-  ledgerCode?: string | null;
-  groupName?: string | null;
-  branch?: { id: string; name: string; code?: string } | null;
-  openingDebit: number;
-  openingCredit: number;
-  periodDebit: number;
-  periodCredit: number;
+  ledgerCode: string;
+  account: string;
+  parentGroup: string;
+  groupId: string;
+  ledgerCategory: string;
+  ledgerNature: string;
+  branchId: string;
+  branchName: string;
+  debit: number;
+  credit: number;
   closingDebit: number;
   closingCredit: number;
+  closingSigned: number;
 }
 
 export interface TrialBalanceSummary {
-  totalOpeningDebit: number;
-  totalOpeningCredit: number;
-  totalPeriodDebit: number;
-  totalPeriodCredit: number;
+  totalDebit: number;
+  totalCredit: number;
   totalClosingDebit: number;
   totalClosingCredit: number;
-  difference: number;
+  periodDifference: number;
+  closingDifference: number;
+  isPeriodBalanced: boolean;
+  isClosingBalanced: boolean;
   isBalanced: boolean;
 }
 
@@ -288,7 +293,7 @@ export interface TrialBalanceResponse {
   reportName: string;
   generatedAt: string | Date;
   branchId?: string | null;
-  branch?: { id: string; name: string } | null;
+  branch?: { id: string; name: string; code?: string } | null;
   period: ReportPeriod;
   summary: TrialBalanceSummary;
   rows: TrialBalanceRow[];

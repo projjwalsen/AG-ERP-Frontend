@@ -230,12 +230,12 @@ const buildSidebarItems = (): SidebarItem[] => [
   },
   { title: "Purchase & Sales", href: "/purchase-sales", icon: ShoppingCart, module: "PURCHASE" },
   { title: "Purchase Order", href: "/purchase-order", icon: ArrowLeftRight, module: "PURCHASE" },
-  { title: "Credit/Debit Notes", href: "/debit-credit-notes", icon: FileText, module: "PURCHASE" },
+  { title: "Credit/Debit Notes", href: "/debit-credit-notes", icon: FileText, module: "DRCR_NOTE" },
   {
     title: "Transactions",
     href: "/transactions",
     icon: CreditCard,
-    module: "PAYMENT",
+    module: "TRANSACTION",
   },
   { title: "Inventory Management", href: "/inventory-management", icon: Package, module: "PRODUCT" },
   {
@@ -248,13 +248,13 @@ const buildSidebarItems = (): SidebarItem[] => [
       { title: "Financial Ledger", href: "/ledger/financial", icon: Wallet },
     ],
   },
-  { title: "Journal", href: "/journal", icon: FileText, module: null },
+  { title: "Journal", href: "/journal", icon: FileText, module: "JOURNAL" },
   // { title: "Audit Logs", href: "/audit-logs", icon: History, module: "AUDIT" },
   {
     title: "Reports",
     href: "/reports",
     icon: BarChart3,
-    module: "REPORT",
+    module: null,
     children: [
       { title: "AP/AR report", href: "/reports/outstanding", icon: FileText },
       { title: "Branch Day Book", href: "/reports/day-book", icon: BookOpen },
