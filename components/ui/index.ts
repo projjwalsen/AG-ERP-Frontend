@@ -16,3 +16,4 @@ export { Skeleton } from "./skeleton";
 export { Separator } from "./separator";
 export { ToastProvider, useToast, ToastContainer } from "./toast";
 export { Textarea } from "./textarea";
+export { DataSelect, type DataSelectOption } from "./data-select";

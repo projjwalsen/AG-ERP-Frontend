@@ -1,12 +1,21 @@
 "use client";
 
 import * as React from "react";
-import { Eye, Pencil, Printer, ArrowDownToLine, ArrowUpFromLine, Wallet, Banknote, Receipt } from "lucide-react";
+import {
+  Eye,
+  Pencil,
+  Printer,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Wallet,
+  Banknote,
+  Receipt,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { StatusBadge } from "./StatusBadge";
-import { Agency, Branch, Transaction } from "../types/transaction";
+import { Agency, Branch, Transaction } from "@/app/types/transaction";
 
 interface TransactionTableProps {
   transactions: Transaction[];
@@ -21,6 +30,12 @@ interface TransactionTableProps {
   limit: number;
   onPageChange: (page: number) => void;
   actionSlot?: React.ReactNode;
+  /**
+   * When false, the Edit button is hidden for every row regardless of
+   * transaction status. The list page wires this from the user's
+   * TRANSACTION:WRITE permission.
+   */
+  canEdit?: boolean;
 }
 
 export function TransactionTable({
@@ -36,15 +51,22 @@ export function TransactionTable({
   limit,
   onPageChange,
   actionSlot,
+  canEdit: canEditPermission = true,
 }: TransactionTableProps) {
   const startIndex = total === 0 ? 0 : (currentPage - 1) * limit + 1;
   const endIndex = Math.min(currentPage * limit, total);
 
-  const agencyName = (id?: string) => agencies.find((a) => a.id === id)?.name || "-";
-  const branchName = (id: string) => branches.find((b) => b.id === id)?.name || "-";
+  const agencyName = (txn: Transaction) =>
+    txn.agency?.name ||
+    agencies.find((a) => a.id === txn.agencyId)?.name ||
+    "-";
+  const branchName = (txn: Transaction) =>
+    txn.branch?.name ||
+    branches.find((b) => b.id === txn.branchId)?.name ||
+    "-";
 
   const canEdit = (txn: Transaction) =>
-    txn.status === "DRAFT" || txn.status === "PENDING_AUTHENTICATION";
+    canEditPermission && txn.status === "PENDING";
 
   if (transactions.length === 0) {
     return (
@@ -64,28 +86,54 @@ export function TransactionTable({
           <table className="w-full">
             <thead className="sticky top-0 z-10 bg-gray-50">
               <tr className="border-b border-gray-100">
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Voucher No</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Date</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Type</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Agency</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Invoice Ref</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Payment Mode</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">Amount</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Created By</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                  Voucher No
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                  Date
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                  Type
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                  Agency
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                  Ref No
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                  Payment Through
+                </th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                  Amount
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                  Status
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                  Created By
+                </th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {transactions.map((txn) => {
-                const isInward = txn.type === "INWARD";
+                const isInward = txn.direction === "INWARD";
                 return (
                   <tr key={txn.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
-                      <span className="font-mono text-sm font-medium">{txn.voucherNo}</span>
-                      <p className="text-[11px] text-gray-400">{branchName(txn.branchId)}</p>
+                      <span className="font-mono text-sm font-medium">
+                        {txn.transactionNo}
+                      </span>
+                      <p className="text-[11px] text-gray-400">
+                        {branchName(txn)}
+                      </p>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{formatDate(txn.voucherDate)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      {formatDate(txn.createdAt)}
+                    </td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -99,29 +147,38 @@ export function TransactionTable({
                         ) : (
                           <ArrowUpFromLine className="h-3 w-3" />
                         )}
-                        {txn.type}
+                        {isInward ? "Inward" : "Outward"}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm font-medium">
-                      {txn.isSuspense ? (
+                      {txn.suspenseAccount ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
                           Suspense
                         </span>
                       ) : (
-                        agencyName(txn.agencyId)
+                        agencyName(txn)
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm font-mono text-gray-700">
-                      {txn.invoiceId || "-"}
+                      {txn.transactionRefNo || txn.referenceNo || "-"}
                     </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-1 text-sm text-gray-700">
-                        {txn.payment.mode === "ONLINE" ? (
-                          <Banknote className="h-3.5 w-3.5 text-green-600" />
+                        {txn.paymentThrough ? (
+                          <>
+                            <Banknote className="h-3.5 w-3.5 text-green-600" />
+                            {txn.paymentThrough}
+                          </>
                         ) : (
-                          <Wallet className="h-3.5 w-3.5 text-blue-600" />
+                          <>
+                            {txn.paymentMode === "ONLINE" ? (
+                              <Banknote className="h-3.5 w-3.5 text-green-600" />
+                            ) : (
+                              <Wallet className="h-3.5 w-3.5 text-blue-600" />
+                            )}
+                            {txn.paymentMode === "ONLINE" ? "Online" : "Offline"}
+                          </>
                         )}
-                        {txn.payment.mode === "ONLINE" ? "Online" : "Offline Cash"}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -133,8 +190,12 @@ export function TransactionTable({
                       <StatusBadge status={txn.status} size="sm" />
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
-                      <p className="font-medium">{txn.createdByName}</p>
-                      <p className="text-[11px] text-gray-400">{formatDate(txn.createdAt)}</p>
+                      <p className="font-medium">
+                        {txn.createdBy?.name || "-"}
+                      </p>
+                      <p className="text-[11px] text-gray-400">
+                        {formatDate(txn.createdAt)}
+                      </p>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
@@ -147,27 +208,7 @@ export function TransactionTable({
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        {canEdit(txn) && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => onEdit(txn)}
-                            className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-                            title="Edit"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => onPrint(txn)}
-                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                          title="Print"
-                        >
-                          <Printer className="h-4 w-4" />
-                        </Button>
-                        {actionSlot}
+                        
                       </div>
                     </td>
                   </tr>
@@ -196,7 +237,9 @@ export function TransactionTable({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onPageChange(Math.min(totalPages || 1, currentPage + 1))}
+              onClick={() =>
+                onPageChange(Math.min(totalPages || 1, currentPage + 1))
+              }
               disabled={currentPage >= totalPages}
             >
               Next

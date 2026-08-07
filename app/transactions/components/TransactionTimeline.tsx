@@ -11,11 +11,11 @@ import {
   Circle,
 } from "lucide-react";
 import { formatDateTime } from "@/lib/utils";
-import { AuditLog, TransactionStatus } from "../types/transaction";
+import { AuditLog, MockTransactionStatus } from "../types/mock";
 
 interface TransactionTimelineProps {
   auditTrail: AuditLog[];
-  currentStatus: TransactionStatus;
+  currentStatus: MockTransactionStatus;
 }
 
 interface Step {

@@ -5,6 +5,12 @@ import purchasesReducer from "./purchasesSlice";
 import salesReducer from "./salesSlice";
 import transactionsReducer from "./transactionsSlice";
 import inventoryReducer from "./inventorySlice";
+import settingsReducer from "./settingsSlice";
+import ledgerReducer from "./ledgerSlice";
+import reportsReducer from "./reportsSlice";
+import dashboardReducer from "./dashboardSlice";
+import debitCreditNotesReducer from "./debitCreditNotesSlice";
+import purchaseOrdersReducer from "./purchaseOrdersSlice";
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +20,12 @@ export const store = configureStore({
     sales: salesReducer,
     transactions: transactionsReducer,
     inventory: inventoryReducer,
+    settings: settingsReducer,
+    ledger: ledgerReducer,
+    reports: reportsReducer,
+    dashboard: dashboardReducer,
+    debitCreditNotes: debitCreditNotesReducer,
+    purchaseOrders: purchaseOrdersReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

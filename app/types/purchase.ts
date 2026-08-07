@@ -1,7 +1,7 @@
 // Purchase Types - matches backend API contract
 
 export type PurchaseStatus = "PENDING" | "APPROVED" | "REJECTED";
-export type ProductUnit = "KG" | "LTR";
+export type ProductUnit = "KG" | "LTR" | "MT";
 
 export interface PurchaseItemProduct {
   id: string;

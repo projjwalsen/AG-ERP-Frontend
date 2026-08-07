@@ -3,7 +3,7 @@
 import * as React from "react";
 import {
   ShoppingCart, Receipt, Search, Plus, Eye,
-  Package, RefreshCw, FileText, Download
+  Package, RefreshCw, FileText, Download, ArrowRightCircle, ArrowLeftRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import { fetchAllPurchases } from "@/app/store/purchasesSlice";
 import { fetchAllSales } from "@/app/store/salesSlice";
 import { purchaseApi } from "@/app/services/purchase.service";
 import { salesApi } from "@/app/services/sales.service";
+import { ImportButton } from "@/app/components/import/ImportButton";
 import { Purchase } from "@/app/types/purchase";
 import { Sales } from "@/app/types/sales";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
@@ -67,11 +68,21 @@ function PurchaseSalesContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Purchase & Sales</h1>
-        <p className="text-gray-500 mt-1">
-          Manage purchase orders, sales invoices, and approvals
-        </p>
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Purchase & Sales</h1>
+          <p className="text-gray-500 mt-1">
+            Manage purchase invoices, sales invoices, and approvals
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          className="w-fit gap-2 border-blue-500 text-blue-600 hover:bg-blue-50"
+          onClick={() => router.push("/purchase-order")}
+        >
+          <ArrowLeftRight className="h-4 w-4" />
+          Purchase Order
+        </Button>
       </div>
 
       <Tabs value={defaultTab} onValueChange={handleTabChange} className="w-full">
@@ -180,11 +191,28 @@ function PurchaseTab() {
           >
             Pending Approvals
           </Button>
+          
+          <Button
+            variant="outline"
+            className="gap-2 border-blue-500 text-blue-600 hover:bg-blue-50"
+            onClick={() => router.push("/debit-credit-notes")}
+          >
+            <ArrowRightCircle className="h-4 w-4" />
+            Debit / Credit Notes
+          </Button>
           {canPurchaseWrite && (
-            <Button onClick={() => router.push("/purchase-sales/new")} className="gap-2">
-              <Plus className="h-4 w-4" />
-              New Purchase
-            </Button>
+            <>
+              <ImportButton
+                registerType="PURCHASE"
+                label="Import Purchase Register"
+                variant="outline"
+                onCompleted={() => fetchPurchases(currentPage, statusFilter)}
+              />
+              <Button onClick={() => router.push("/purchase-sales/new")} className="gap-2">
+                <Plus className="h-4 w-4" />
+                New Purchase
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -714,10 +742,18 @@ function SalesTab() {
             Pending Approvals
           </Button>
           {canSaleWrite && (
-            <Button onClick={() => router.push("/purchase-sales/new-sale")} className="gap-2">
-              <Plus className="h-4 w-4" />
-              New Sale
-            </Button>
+            <>
+              <ImportButton
+                registerType="SALE"
+                label="Import Sale Register"
+                variant="outline"
+                onCompleted={() => fetchSales(currentPage, statusFilter)}
+              />
+              <Button onClick={() => router.push("/purchase-sales/new-sale")} className="gap-2">
+                <Plus className="h-4 w-4" />
+                New Sale
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -771,6 +807,7 @@ function SalesTab() {
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Product</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Batch</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Qty</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total Amount</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Created At</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Invoice</th>
@@ -804,8 +841,12 @@ function SalesTab() {
                       <td className="px-4 py-3 text-sm">
                         <span className="font-mono">{sale.items[0]?.batch?.batchNo || "-"}</span>
                       </td>
+                      
                       <td className="px-4 py-3 text-sm">
                         {sale.items[0]?.quantity || 0} {sale.items[0]?.unit || "KG"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-green-600 font-semibold">
+                        {sale.items[0].totalAmount || 0}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[sale.status]?.bg} ${statusColors[sale.status]?.text}`}>

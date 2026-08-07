@@ -1,5 +1,6 @@
 // Branch API Service
 import { apiFetch } from "./api";
+import { fetchBlob } from "@/lib/download";
 import { Branch, BranchesListResponse, BranchResponse, PaginationMeta } from "../types/branch";
 
 export interface GetBranchesParams {
@@ -76,6 +77,16 @@ export const branchApi = {
       method: "PATCH",
       body: { isActive },
     });
+  },
+
+  // GET /api/branches/all?export=true
+  // Streams the full branches list as an .xlsx file (no pagination).
+  async exportExcel(params?: Omit<GetBranchesParams, "page" | "limit">): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params?.search) queryParams.append("search", params.search);
+
+    return fetchBlob(`api/branches/all?${queryParams.toString()}`, "branches.xlsx");
   },
 };
 

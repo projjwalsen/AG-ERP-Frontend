@@ -1,7 +1,7 @@
 // Sales Types - matches backend API contract
 
 export type SalesStatus = "PENDING" | "APPROVED" | "REJECTED";
-export type ProductUnit = "KG" | "LTR";
+export type ProductUnit = "KG" | "LTR" | "MT";
 
 export interface SalesItemProduct {
   id: string;
@@ -41,6 +41,7 @@ export interface SalesItem {
   unit: ProductUnit;
   sellingPrice?: string;
   createdAt: string;
+  totalAmount: number;
 }
 
 export interface SalesUser {
@@ -104,6 +105,28 @@ export interface Sales {
   createdBy?: SalesUser;
   createdAt: string;
   updatedAt?: string;
+  invoiceDate?: string;
+  otherReference?: string;
+  roundOffAmount?: string;
+  irn?: string;
+  ackNo?: string;
+  ackDate?: string;
+  qrCodeImage?: string;
+  modeOfPayment?: string;
+  referenceNo?: string;
+  referenceDate?: string;
+  transport?: Array<{
+    deliveryNote?: string;
+    buyerOrderNo?: string;
+    buyerOrderDate?: string;
+    termsOfDelivery?: string;
+    despatchDocNo?: string;
+    despatchDocDate?: string;
+    despatchThrough?: string;
+    destination?: string;
+    vehicleOrFlightNo?: string;
+    billOfLadingNo?: string;
+  }>;
 }
 
 export interface PaginationMeta {

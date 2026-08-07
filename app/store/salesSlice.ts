@@ -1,29 +1,9 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { salesApi } from "../services/sales.service";
+import {
+  salesApi,
+  CreateSalesPayload,
+} from "../services/sales.service";
 import { Sales, SalesListResponse } from "../types/sales";
-
-export interface CreateSalesPayload {
-  agencyId: string;
-  branchId: string;
-  items: {
-    productId: string;
-    batchId: string;
-    quantity: number;
-    unit: "KG" | "LTR";
-    unitPrice?: number;
-  }[];
-  remarks?: string;
-  deliveryNote:string;
-  suppliersRef: string;
-  otherReference:string;
-  buyerOrderNo: string;
-  buyerOrderDate: string,
-  despatchDocNo: string,
-  despatchDocDate: string,
-  despatchThrough: string,
-  destination: string,
-  invoiceDate?: string,
-}
 
 export interface ApproveSalesPayload {
   saleId: string;

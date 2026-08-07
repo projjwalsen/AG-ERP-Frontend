@@ -3,7 +3,7 @@
 import * as React from "react";
 import {
   Package, Search, RefreshCw, AlertTriangle, CheckCircle, XCircle,
-  TrendingUp, PackageX, Eye, Building2
+  TrendingUp, PackageX, Eye, Building2, Download
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,7 @@ import {
 } from "@/app/types/inventory";
 import { Product } from "@/app/types/product";
 import { formatDate, formatCurrency, formatDateTime } from "@/lib/utils";
+import { downloadFile } from "@/lib/download";
 
 const batchStatusColors: Record<string, { bg: string; text: string }> = {
   ACTIVE: { bg: "bg-green-100", text: "text-green-700" },
@@ -193,6 +194,7 @@ function BatchWiseTab() {
   const [productFilter, setProductFilter] = React.useState<string>("");
   const [statusFilter, setStatusFilter] = React.useState<string>("");
   const [currentPage, setCurrentPage] = React.useState(1);
+  const [exporting, setExporting] = React.useState(false);
 
   const [products, setProducts] = React.useState<Product[]>([]);
 
@@ -243,6 +245,27 @@ function BatchWiseTab() {
     setStatusFilter("");
     setCurrentPage(1);
     fetchInventoryData();
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const queryParams = new URLSearchParams({ export: "true" });
+      if (productFilter) queryParams.append("productId", productFilter);
+      if (searchTerm) queryParams.append("search", searchTerm);
+      if (statusFilter === "ACTIVE") queryParams.append("isActive", "true");
+      else if (statusFilter === "INACTIVE") queryParams.append("isActive", "false");
+
+      await downloadFile(
+        `api/inventory/batches/all?${queryParams.toString()}`,
+        "inventory_batches.xlsx"
+      );
+      addToast("Inventory batches exported successfully", "success");
+    } catch (err: any) {
+      addToast(err?.message || "Failed to export inventory", "error");
+    } finally {
+      setExporting(false);
+    }
   };
 
   // Calculate summary stats from batches
@@ -370,6 +393,16 @@ function BatchWiseTab() {
               Clear
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={handleExport}
+            loading={exporting}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export
+          </Button>
         </div>
       </div>
 
@@ -666,6 +699,7 @@ function ProductWiseTab() {
   const [currentPage, setCurrentPage] = React.useState(1);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("");
+  const [exporting, setExporting] = React.useState(false);
 
   const [historyModal, setHistoryModal] = React.useState<{
     open: boolean;
@@ -715,6 +749,25 @@ function ProductWiseTab() {
     setStatusFilter("");
     setCurrentPage(1);
     fetchSummary(1, "", "");
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const queryParams = new URLSearchParams({ export: "true" });
+      if (searchTerm) queryParams.append("search", searchTerm);
+      if (statusFilter) queryParams.append("status", statusFilter);
+
+      await downloadFile(
+        `api/inventory/summary?${queryParams.toString()}`,
+        "branch_inventory_summary.xlsx"
+      );
+      addToast("Inventory summary exported successfully", "success");
+    } catch (err: any) {
+      addToast(err?.message || "Failed to export summary", "error");
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleViewHistory = async (productId: string, productName: string) => {
@@ -784,6 +837,16 @@ function ProductWiseTab() {
               Clear
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={handleExport}
+            loading={exporting}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export
+          </Button>
         </div>
       </div>
 
@@ -943,6 +1006,31 @@ function ProductWiseTab() {
               All batches of this product across branches
             </DialogDescription>
           </DialogHeader>
+
+          {historyModal.productId && !historyModal.loading && historyModal.data && (
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={async () => {
+                  try {
+                    const sku = historyModal.data?.product?.sku || historyModal.productId;
+                    await downloadFile(
+                      `api/inventory/product/${historyModal.productId}/batch-history?export=true`,
+                      `product_batch_history_${sku}.xlsx`
+                    );
+                    addToast("Batch history exported successfully", "success");
+                  } catch (err: any) {
+                    addToast(err?.message || "Failed to export batch history", "error");
+                  }
+                }}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export
+              </Button>
+            </div>
+          )}
 
           {historyModal.loading ? (
             <div className="flex items-center justify-center py-12">

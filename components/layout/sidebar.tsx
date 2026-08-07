@@ -8,7 +8,8 @@ import {
   LayoutDashboard, Users, Building2, Briefcase, Package,
   ShoppingCart, FileText, History, Settings, ChevronLeft, Shield,
   Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu, CreditCard,
-  ChevronRight,
+  ChevronRight, BookOpen, Wallet, BarChart3, AlertTriangle, Receipt,
+  Calculator, Factory, ClipboardList, ShieldCheck, ArrowLeftRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -219,16 +220,51 @@ const buildSidebarItems = (): SidebarItem[] => [
   { title: "Access Control", href: "/access-control", icon: Shield, module: "ROLE" },
   { title: "Agency Management", href: "/agencies", icon: Briefcase, module: "AGENCY" },
   { title: "Product Management", href: "/inventory", icon: Package, module: "PRODUCT" },
+  {
+    title: "Manufacturing",
+    href: "/manufacturing/manufactures",
+    icon: Factory,
+    module: "PRODUCT",
+    
+    
+  },
   { title: "Purchase & Sales", href: "/purchase-sales", icon: ShoppingCart, module: "PURCHASE" },
-  // {
-  //   title: "Transactions",
-  //   href: "/transactions",
-  //   icon: CreditCard,
-  //   module: "PAYMENT",
-  // },
+  { title: "Purchase Order", href: "/purchase-order", icon: ArrowLeftRight, module: "PURCHASE" },
+  { title: "Credit/Debit Notes", href: "/debit-credit-notes", icon: FileText, module: "DRCR_NOTE" },
+  {
+    title: "Transactions",
+    href: "/transactions",
+    icon: CreditCard,
+    module: "TRANSACTION",
+  },
   { title: "Inventory Management", href: "/inventory-management", icon: Package, module: "PRODUCT" },
-  // { title: "Reports", href: "/reports", icon: FileText, module: "REPORT" },
+  {
+    title: "Ledger",
+    href: "/ledger",
+    icon: BookOpen,
+    module: "LEDGER",
+    children: [
+      { title: "Product Ledger", href: "/ledger", icon: BookOpen },
+      { title: "Financial Ledger", href: "/ledger/financial", icon: Wallet },
+    ],
+  },
+  { title: "Journal", href: "/journal", icon: FileText, module: "JOURNAL" },
   // { title: "Audit Logs", href: "/audit-logs", icon: History, module: "AUDIT" },
+  {
+    title: "Reports",
+    href: "/reports",
+    icon: BarChart3,
+    module: null,
+    children: [
+      { title: "AP/AR report", href: "/reports/outstanding", icon: FileText },
+      { title: "Branch Day Book", href: "/reports/day-book", icon: BookOpen },
+      { title: "GSTR-1 Report", href: "/reports/gstr1", icon: Receipt },
+      { title: "GST Suspense Log", href: "/reports/gst-suspense", icon: AlertTriangle },
+      { title: "GST Ledger", href: "/reports/gst-ledger", icon: Calculator },
+      { title: "Inventory Report", href: "/reports/inventory", icon: Package },
+      { title: "Trial Balance Report", href: "/reports/trial-balance", icon: ClipboardList },
+    ],
+  },
   { title: "Settings", href: "/settings", icon: Settings, module: null },
 ];
 
@@ -248,11 +284,18 @@ function NavItem({
   const Icon = item.icon;
   const hasChildren = !!item.children?.length;
 
-  const [open, setOpen] = React.useState<boolean>(isDescendantActive);
+  // Reports: open the submenu by default whenever the user is on the
+  // reports landing or any descendant, so all 5 submenus stay visible.
+  const initiallyOpen =
+    item.href === "/reports"
+      ? pathname === "/reports" || isDescendantActive
+      : isDescendantActive;
+
+  const [open, setOpen] = React.useState<boolean>(initiallyOpen);
 
   React.useEffect(() => {
-    if (isDescendantActive) setOpen(true);
-  }, [isDescendantActive]);
+    if (isDescendantActive || isExactActive) setOpen(true);
+  }, [isDescendantActive, isExactActive]);
 
   const linkContent = (
     <div
@@ -388,13 +431,18 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <ScrollArea className="flex-1 px-3 py-3">
             <nav className="space-y-0.5">
               {sidebarItems.map((item) => {
-                // Transactions module is always shown (UI-only build).
-                const isTransactionEntry = item.href === "/transactions";
+                // Transactions, Ledger, and Reports are always shown
+                // (UI-only build — permission check still happens inside
+                // the page itself).
+                const isAlwaysVisibleEntry =
+                  item.href === "/transactions" ||
+                  item.href === "/ledger" ||
+                  item.href === "/reports";
 
                 // Skip items that require module permission and user doesn't have access.
                 if (
                   item.module &&
-                  !isTransactionEntry &&
+                  !isAlwaysVisibleEntry &&
                   !showAllWhenNoPermissions &&
                   !hasModuleAccess(permissions, item.module)
                 ) {

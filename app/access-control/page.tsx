@@ -78,7 +78,6 @@ export default function AccessControlPage() {
 
 // ============== ROLES & PERMISSIONS TAB ==============
 function RolesAndPermissionsTab() {
-  const { addToast } = useToast();
   const [loading, setLoading] = React.useState(true);
   const [roles, setRoles] = React.useState<Role[]>([]);
   const [permissions, setPermissions] = React.useState<Permission[]>([]);
@@ -125,7 +124,6 @@ function RolesAndPermissionsTab() {
 
     console.log("Extracted rolesData:", rolesData);
     console.log("Extracted permsData:", permsData);
-    addToast(`Found ${rolesData.length} roles, ${permsData.length} permissions`, "success");
 
     setRoles(rolesData);
     setPermissions(permsData);
@@ -508,6 +506,23 @@ function AssignPermissionsModal({
     return Object.keys(groupedPermissions).sort();
   }, [groupedPermissions]);
 
+  // Group the *currently selected* permissions by module so the admin can
+  // see at a glance which keys the pending selection will grant. Re-runs on
+  // every checkbox toggle so it stays in sync with the matrix below.
+  const selectedGroupedByModule = React.useMemo(() => {
+    const selected = allPermissions.filter((p) => selectedIds.has(p.id));
+    const groups: Record<string, Permission[]> = {};
+    selected.forEach((p) => {
+      if (!groups[p.module]) groups[p.module] = [];
+      groups[p.module].push(p);
+    });
+    // Sort actions within each module so the display is stable across toggles.
+    Object.keys(groups).forEach((m) => {
+      groups[m].sort((a, b) => a.action.localeCompare(b.action));
+    });
+    return groups;
+  }, [allPermissions, selectedIds]);
+
   const togglePermission = (permissionId: string) => {
     setSelectedIds((prev) => {
       const newSet = new Set(prev);
@@ -592,7 +607,9 @@ function AssignPermissionsModal({
           </Button>
         </div>
 
-        <ScrollArea className="flex-1">
+        
+
+        <ScrollArea className="flex-1 overflow-y-auto">
           <div className="p-1">
             {/* Matrix Table */}
             <div className="overflow-x-auto">
@@ -937,41 +954,7 @@ function UserRolesTab() {
         </CardContent>
       </Card>
 
-      {/* User Role Display */}
-      {selectedUser && (
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="font-medium text-gray-900">{selectedUserName}</h3>
-                <p className="text-sm text-gray-500">Assigned roles</p>
-              </div>
-              <Button onClick={handleAssignRoles} className="gap-2">
-                <Edit className="h-4 w-4" />
-                Assign Roles
-              </Button>
-            </div>
-
-            {userRoles.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {userRoles.map((roleId) => {
-                  const role = roles.find((r) => r.id === roleId);
-                  return role ? (
-                    <Badge key={role.id} variant="secondary" className="px-3 py-1 text-sm">
-                      {role.name}
-                    </Badge>
-                  ) : null;
-                })}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <AlertTriangle className="h-4 w-4 text-amber-600" />
-                <span className="text-sm text-amber-800">This user has no roles assigned</span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+     
 
       {/* Assign Roles Modal */}
       <AssignUserRolesModal
@@ -1009,6 +992,10 @@ function AssignUserRolesModal({
   const [loading, setLoading] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set(currentRoleIds));
 
+  // Reseed selection whenever the parent passes a new set of role IDs
+  // (e.g. user picks a different row in the table, or the modal is re-opened
+  // for a different user). Without this, the modal would keep the previous
+  // user's selection.
   React.useEffect(() => {
     setSelectedIds(new Set(currentRoleIds));
   }, [currentRoleIds, open]);
@@ -1043,7 +1030,7 @@ function AssignUserRolesModal({
     setLoading(false);
   };
 
-  const hasChanges = Array.from(selectedIds).sort().join(",") !== currentRoleIds.sort().join(",");
+  const hasChanges = Array.from(selectedIds).sort().join(",") !== currentRoleIds.slice().sort().join(",");
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -1058,12 +1045,8 @@ function AssignUserRolesModal({
           </DialogDescription>
         </DialogHeader>
 
-        {selectedIds.size === 0 && (
-          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-            <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-            <p className="text-sm text-amber-800">This user will not have access to any modules.</p>
-          </div>
-        )}
+        
+
 
         <div className="space-y-2 max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
           {allRoles.map((role) => (

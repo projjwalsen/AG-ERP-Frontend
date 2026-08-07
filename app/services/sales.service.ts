@@ -42,29 +42,173 @@ export interface GetSalesParams {
   branchId?: string;
 }
 
-// Payload matches backend API contract
+/**
+ * Mirrors POST /api/sales/create. Items are FLAT — each row is exactly
+ * one (product, batch) pair carrying `quantity` and an optional
+ * `unitPrice` override. To allocate quantity for a single product from
+ * N batches, send N items. The backend computes GST / totals itself
+ * from the resolved batch + product + agency branch-state.
+ *
+ * Wire shape (matches `SalesItemPayload` in `sales.service.ts`):
+ *
+ * {
+ *   agencyId, branchId,
+ *   invoiceNo?, invoiceDate?, remarks?, voucherType?, otherReference?,
+ *   roundOffAmount?, suppliersRef?, deliveryNote?,
+ *   buyerOrderNo?, buyerOrderDate?, despatchDocNo?, despatchDocDate?,
+ *   despatchThrough?, destination?,
+ *   transport?: { ... },
+ *   items: [{ productId, batchId, quantity, unit, unitPrice? }]
+ * }
+ */
+export interface SaleTransportDetails {
+  /** Delivery — fields not currently filled remain blank strings. */
+  deliveryNote?: string;
+  buyerOrderNo?: string;
+  buyerOrderDate?: string;
+  termsOfDelivery?: string;
+
+  /** Dispatch. */
+  despatchDocNo?: string;
+  despatchDocDate?: string;
+  despatchThrough?: string;
+  destination?: string;
+  vehicleOrFlightNo?: string;
+
+  billOfLadingNo?: string;
+
+  /** Export. */
+  portOfLoading?: string;
+  portOfDischarge?: string;
+  countryTo?: string;
+  shippingNo?: string;
+  shippingDate?: string;
+  portCode?: string;
+
+  /** Convenience aliases kept for the form (mapped into the matching
+      backend field on submit). */
+  lrNo?: string;
+  receiptNoteNo?: string;
+  receiptNoteDate?: string;
+  purchaseOrderNo?: string;
+  purchaseOrderDate?: string;
+  dispatchThrough?: string;
+  billOfEntryNo?: string;
+  billOfEntryDate?: string;
+}
+
+export interface CreateSalesItem {
+  productId: string;
+  batchId: string;
+  quantity: number;
+  unit: "KG" | "LTR";
+  /** Optional override; backend falls back to the product's per-unit
+   *  default price when omitted. */
+  unitPrice?: number;
+}
+
 export interface CreateSalesPayload {
   agencyId: string;
   branchId: string;
-  items: {
-    productId: string;
-    batchId: string;
-    quantity: number;
-    unit: "KG" | "LTR";
-    unitPrice?: number;
-  }[];
+  invoiceNo?: string;
+  invoiceDate?: string;
   remarks?: string;
-  deliveryNote:string;
-  suppliersRef: string;
-  otherReference:string;
-  buyerOrderNo: string;
-  buyerOrderDate: string,
-  despatchDocNo: string,
-  despatchDocDate: string,
-  despatchThrough: string,
-  destination: string,
-  invoiceDate?: string,
+  voucherType?: string;
+  otherReference?: string;
+  irn?: string;
+  ackNo?: string;
+  ackDate?: string;
+  qrCodeImage?: string;
+  modeOfPayment?: string;
+  referenceNo?: string;
+  referenceDate?: string;
+  roundOffAmount?: number;
+  suppliersRef?: string;
+  deliveryNote?: string;
+  buyerOrderNo?: string;
+  buyerOrderDate?: string;
+  despatchDocNo?: string;
+  despatchDocDate?: string;
+  despatchThrough?: string;
+  destination?: string;
+  transport?: SaleTransportDetails;
+  items: CreateSalesItem[];
+}
 
+function cleanOptional(value?: string) {
+  const cleaned = value?.trim();
+  return cleaned || undefined;
+}
+
+function normalizeSalesPayload(
+  payload: CreateSalesPayload
+): CreateSalesPayload {
+  const input = payload.transport || {};
+
+  const transport: SaleTransportDetails = {
+    deliveryNote: cleanOptional(
+      input.deliveryNote || payload.deliveryNote
+    ),
+    buyerOrderNo: cleanOptional(
+      input.buyerOrderNo ||
+      input.purchaseOrderNo ||
+      payload.buyerOrderNo
+    ),
+    buyerOrderDate:
+      input.buyerOrderDate ||
+      input.purchaseOrderDate ||
+      payload.buyerOrderDate,
+    termsOfDelivery:
+      cleanOptional(input.termsOfDelivery),
+    despatchDocNo: cleanOptional(
+      input.despatchDocNo || payload.despatchDocNo
+    ),
+    despatchDocDate:
+      input.despatchDocDate || payload.despatchDocDate,
+    despatchThrough: cleanOptional(
+      input.despatchThrough ||
+      input.dispatchThrough ||
+      payload.despatchThrough
+    ),
+    destination: cleanOptional(
+      input.destination || payload.destination
+    ),
+    vehicleOrFlightNo:
+      cleanOptional(input.vehicleOrFlightNo),
+    billOfLadingNo: cleanOptional(
+      input.billOfLadingNo || input.lrNo
+    ),
+    portOfLoading: cleanOptional(input.portOfLoading),
+    portOfDischarge: cleanOptional(input.portOfDischarge),
+    countryTo: cleanOptional(input.countryTo),
+    shippingNo: cleanOptional(input.shippingNo),
+    shippingDate: input.shippingDate,
+    portCode: cleanOptional(input.portCode),
+  };
+
+  const hasTransport = Object.values(transport).some(
+    value => value !== undefined && value !== ""
+  );
+
+  return {
+    agencyId: payload.agencyId,
+    branchId: payload.branchId,
+    invoiceNo: cleanOptional(payload.invoiceNo),
+    invoiceDate: payload.invoiceDate,
+    remarks: cleanOptional(payload.remarks),
+    voucherType: cleanOptional(payload.voucherType),
+    otherReference: cleanOptional(payload.otherReference),
+    irn: cleanOptional(payload.irn),
+    ackNo: cleanOptional(payload.ackNo),
+    ackDate: payload.ackDate,
+    qrCodeImage: cleanOptional(payload.qrCodeImage),
+    modeOfPayment: cleanOptional(payload.modeOfPayment),
+    referenceNo: cleanOptional(payload.referenceNo),
+    referenceDate: payload.referenceDate,
+    roundOffAmount: payload.roundOffAmount,
+    transport: hasTransport ? transport : undefined,
+    items: payload.items,
+  };
 }
 
 export interface ApproveSalesPayload {
@@ -100,7 +244,7 @@ export const salesApi = {
   async create(payload: CreateSalesPayload): Promise<{ success: boolean; message: string; data?: Sales }> {
     return apiFetch<Sales>("api/sales/create", {
       method: "POST",
-      body: payload,
+      body: normalizeSalesPayload(payload),
     });
   },
 

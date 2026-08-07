@@ -18,6 +18,7 @@ export interface User {
     name: string;
     code: string;
   }>;
+  permissions?: UserPermission[];
   status?: "ACTIVE" | "SUSPENDED";
   isActive?: boolean;
   lastLoginAt?: string;

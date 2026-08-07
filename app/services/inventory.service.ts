@@ -1,5 +1,6 @@
 // Inventory API Service - matches backend API contract
 import { apiFetch } from "./api";
+import { fetchBlob } from "@/lib/download";
 import {
   InventoryBatch,
   InventoryListResponse,
@@ -79,5 +80,41 @@ export const inventoryApi = {
   // GET /api/inventory/product/:productId/batch-history - Branch + batch history for a product
   async getProductBatchHistory(productId: string): Promise<{ success: boolean; message: string; data?: ProductBatchHistoryResponse }> {
     return apiFetch<ProductBatchHistoryResponse>(`api/inventory/product/${productId}/batch-history`);
+  },
+
+  // ===== Export endpoints =====
+  // Each returns a streamed .xlsx file; use `downloadBlob(...)` from
+  // `@/lib/download` to save it on the user's machine.
+
+  // GET /api/inventory/batches/all?export=true
+  async exportBatches(params?: Omit<GetInventoryParams, "page" | "limit">): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.productId) queryParams.append("productId", params.productId);
+    if (params?.search) queryParams.append("search", params.search);
+    if (params?.isActive !== undefined) queryParams.append("isActive", String(params.isActive));
+
+    return fetchBlob(`api/inventory/batches/all?${queryParams.toString()}`, "inventory_batches.xlsx");
+  },
+
+  // GET /api/inventory/summary?export=true
+  async exportSummary(params?: Omit<GetInventorySummaryParams, "page" | "limit">): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.productId) queryParams.append("productId", params.productId);
+    if (params?.search) queryParams.append("search", params.search);
+    if (params?.status) queryParams.append("status", params.status);
+
+    return fetchBlob(`api/inventory/summary?${queryParams.toString()}`, "branch_inventory_summary.xlsx");
+  },
+
+  // GET /api/inventory/product/:productId/batch-history?export=true
+  async exportProductHistory(productId: string): Promise<{ blob: Blob; filename: string }> {
+    return fetchBlob(
+      `api/inventory/product/${productId}/batch-history?export=true`,
+      `product_batch_history_${productId}.xlsx`
+    );
   },
 };

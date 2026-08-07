@@ -1,7 +1,7 @@
 // Inventory Types - matches backend API contract
 
 export type BatchStatus = "ACTIVE" | "INACTIVE" | "LOW_STOCK" | "OUT_OF_STOCK" | "IN_STOCK";
-export type ProductUnit = "KG" | "LTR";
+export type ProductUnit = "KG" | "LTR" | "MT";
 
 // Available batch for sales dropdown (from /api/inventory/batches)
 export interface AvailableBatch {

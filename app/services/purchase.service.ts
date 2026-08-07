@@ -9,19 +9,57 @@ export interface GetPurchasesParams {
   branchId?: string;
 }
 
-// Payload matches backend API contract
+/**
+ * Mirrors POST /api/purchases/create. All string fields are sent through
+ * verbatim — empty strings / undefined fields are removed at the slice
+ * boundary so the wire payload matches the curl contract:
+ *
+ * {
+ *   agencyId, branchId, invoiceNo,
+ *   invoiceDate?, supplierInvoiceDate?, otherReference?,
+ *   roundOffAmount?, remarks?,
+ *   transport?: { purchaseOrderNo, purchaseOrderDate, receiptNoteNo,
+ *                 receiptNoteDate, lrNo, dispatchThrough, destination,
+ *                 vehicleOrFlightNo, portOfLoading, portOfDischarge,
+ *                 countryTo, billOfEntryNo, billOfEntryDate, portCode },
+ *   items: [{ productId, batchNo, quantity, unit, purchasePrice }]
+ * }
+ */
+export interface PurchaseTransportDetails {
+  purchaseOrderNo?: string;
+  purchaseOrderDate?: string;
+  receiptNoteNo?: string;
+  receiptNoteDate?: string;
+  lrNo?: string;
+  dispatchThrough?: string;
+  destination?: string;
+  vehicleOrFlightNo?: string;
+  portOfLoading?: string;
+  portOfDischarge?: string;
+  countryTo?: string;
+  billOfEntryNo?: string;
+  billOfEntryDate?: string;
+  portCode?: string;
+}
+
 export interface CreatePurchasePayload {
+  purchaseOrderId?: string;
   agencyId: string;
   branchId: string;
   invoiceNo: string;
+  invoiceDate?: string;
+  supplierInvoiceDate?: string;
+  otherReference?: string;
+  roundOffAmount?: number;
+  remarks?: string;
+  transport?: PurchaseTransportDetails;
   items: {
     productId: string;
     batchNo: string;
     quantity: number;
-    unit: "KG" | "LTR";
+    unit: "KG" | "LTR" | "MT";
     purchasePrice: number;
   }[];
-  remarks?: string;
 }
 
 export interface ApprovePurchasePayload {
