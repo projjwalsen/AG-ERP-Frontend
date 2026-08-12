@@ -25,14 +25,22 @@ export interface ImportProgress {
   stage?: string;
   /** Free-form message surfaced to the user. */
   message?: string;
-  /** Current row being processed, if the backend reports it. */
+  /** Current rows processed so far. */
+  processed?: number;
+  /** Current row being processed, if the backend reports a finer-grained index. */
   current?: number;
   /** Total rows being processed, if the backend reports it. */
   total?: number;
-  /** Percent complete 0-100 (computed from current/total when missing). */
-  progress?: number;
+  /** Number of successful rows so far. */
+  success?: number;
+  /** Number of failed rows so far. */
+  failed?: number;
+  /** Percent complete 0-100 (computed from processed/total when missing). */
+  percentage?: number;
   /** Backend-level success flag if the completed event carries one. */
-  success?: boolean;
+  successFlag?: boolean;
+  /** Optional URL to download an import error report. */
+  errorReportUrl?: string;
   /** Arbitrary extra fields from the backend payload. */
   [key: string]: unknown;
 }
@@ -59,6 +67,14 @@ export async function importRegister(
   const form = new FormData();
   form.append("file", file);
   form.append("type", type);
+
+  const callbacksWithAutoDownload: StreamCallbacks = {
+    ...callbacks,
+    onComplete: (final) => {
+      callbacks.onComplete?.(final);
+      downloadErrorReportIfNeeded(final.errorReportUrl as string | undefined);
+    },
+  };
 
   // `fetch` doesn't bubble SSE-progress the same way EventSource does,
   // but for an upload we need POST + multipart, so we read the body
@@ -109,14 +125,14 @@ export async function importRegister(
       while (separator !== -1) {
         const rawEvent = buffer.slice(0, separator);
         buffer = buffer.slice(separator + 2);
-        handleSseChunk(rawEvent, callbacks);
+        handleSseChunk(rawEvent, callbacksWithAutoDownload);
         separator = buffer.indexOf("\n\n");
       }
     }
 
     // Flush trailing lines without a trailing blank line.
     if (buffer.trim().length > 0) {
-      handleSseChunk(buffer, callbacks);
+      handleSseChunk(buffer, callbacksWithAutoDownload);
     }
   } catch (err: any) {
     const error = new Error(err?.message || "Stream error during import");
@@ -159,10 +175,64 @@ function handleSseChunk(chunk: string, callbacks: StreamCallbacks): void {
   }
 
   if (isCompleted) {
-    payload.success = payload.success ?? true;
-    callbacks.onComplete?.(payload);
+    const result = (payload as any)?.data ?? payload;
+    const normalized: ImportProgress = {
+      ...result,
+      success: result.success ?? true,
+      processed: result.processed ?? result.current ?? undefined,
+      current: result.current ?? undefined,
+      total: result.total ?? undefined,
+      failed: result.failed ?? undefined,
+      percentage:
+        result.percentage ??
+        (typeof result.processed === "number" && typeof result.total === "number"
+          ? Number(((result.processed / result.total) * 100).toFixed(2))
+          : undefined),
+      errorReportUrl:
+        typeof result.errorReportUrl === "string"
+          ? result.errorReportUrl
+          : undefined,
+      message: result.message ?? payload.message,
+    };
+
+    callbacks.onComplete?.(normalized);
   } else {
     callbacks.onProgress?.(payload);
+  }
+}
+
+async function downloadErrorReportIfNeeded(
+  errorReportUrl?: string
+): Promise<void> {
+  if (!errorReportUrl) return;
+
+  try {
+    const url = errorReportUrl.startsWith("http")
+      ? errorReportUrl
+      : `${API_BASE_URL}${errorReportUrl}`;
+    const response = await fetch(url, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      return;
+    }
+    const blob = await response.blob();
+    const filename = response.headers
+      .get("content-disposition")
+      ?.match(/filename="?(.*?)"?(;|$)/i)?.[1]
+      ?.trim();
+
+    const urlObject = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = urlObject;
+    anchor.download = filename || "import-error-report.xlsx";
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    window.URL.revokeObjectURL(urlObject);
+  } catch {
+    // Ignore download failures silently; the import result is already
+    // visible to the user.
   }
 }
 
@@ -210,7 +280,9 @@ export interface ProductImportResult {
   processed: number;
   success: number;
   failed: number;
+  percentage?: number;
   errors: ProductImportProgress["errors"];
+  errorReportUrl?: string;
 }
 
 export interface ProductImportCallbacks {
@@ -361,8 +433,9 @@ function handleStandardImportSseChunk(
       processed: Number(result?.processed ?? 0),
       success: Number(result?.success ?? 0),
       failed: Number(result?.failed ?? 0),
-      percentage: 100,
+      percentage: Number(result?.percentage ?? 100),
       errors: Array.isArray(result?.errors) ? result.errors : [],
+      errorReportUrl: typeof result?.errorReportUrl === "string" ? result.errorReportUrl : undefined,
     });
   } else {
     onProgress({
@@ -539,6 +612,7 @@ export interface JournalImportResult {
    * event. The shared SSE parser defaults this to 100. */
   percentage?: number;
   errors: JournalImportProgress["errors"];
+  errorReportUrl?: string;
 }
 
 export interface JournalImportCallbacks {
@@ -599,6 +673,14 @@ export async function importJournalMaster(
     throw error;
   }
 
+  const callbacksWithAutoDownload: JournalImportCallbacks = {
+    ...callbacks,
+    onComplete: (final) => {
+      callbacks.onComplete?.(final);
+      downloadErrorReportIfNeeded(final.errorReportUrl);
+    },
+  };
+
   const reader = response.body.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
@@ -615,9 +697,9 @@ export async function importJournalMaster(
         buffer = buffer.slice(separator + 2);
         handleStandardImportSseChunk(
           rawEvent,
-          (p) => callbacks.onProgress?.(p),
-          (r) => callbacks.onComplete?.(r),
-          callbacks.onError
+          (p) => callbacksWithAutoDownload.onProgress?.(p),
+          (r) => callbacksWithAutoDownload.onComplete?.(r),
+          callbacksWithAutoDownload.onError
         );
         separator = buffer.indexOf("\n\n");
       }
@@ -626,9 +708,9 @@ export async function importJournalMaster(
     if (buffer.trim().length > 0) {
       handleStandardImportSseChunk(
         buffer,
-        (p) => callbacks.onProgress?.(p),
-        (r) => callbacks.onComplete?.(r),
-        callbacks.onError
+        (p) => callbacksWithAutoDownload.onProgress?.(p),
+        (r) => callbacksWithAutoDownload.onComplete?.(r),
+        callbacksWithAutoDownload.onError
       );
     }
   } catch (err: any) {

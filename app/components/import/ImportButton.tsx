@@ -135,9 +135,9 @@ export function ImportButton({
   };
 
   const percent =
-    progress?.progress ??
-    (progress?.current != null && progress?.total
-      ? Math.round((progress.current / Math.max(progress.total, 1)) * 100)
+    progress?.percentage ??
+    (progress?.processed != null && progress?.total
+      ? Math.round((progress.processed / Math.max(progress.total, 1)) * 100)
       : null);
 
   return (
@@ -238,8 +238,8 @@ export function ImportButton({
                     {progress?.stage ?? "Working…"}
                   </span>
                   <span className="tabular-nums text-gray-500">
-                    {progress?.current != null && progress?.total
-                      ? `${progress.current} / ${progress.total}`
+                    {progress?.processed != null && progress?.total != null
+                      ? `${progress.processed} / ${progress.total}`
                       : percent != null
                       ? `${percent}%`
                       : ""}
@@ -260,6 +260,28 @@ export function ImportButton({
                   <p className="text-[11px] text-gray-600 truncate">
                     {progress.message}
                   </p>
+                )}
+                {progress?.total != null && (
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs mt-2">
+                    <div className="rounded-md bg-emerald-50 px-2 py-1.5">
+                      <p className="text-emerald-700 font-semibold">
+                        {progress.success ?? 0}
+                      </p>
+                      <p className="text-[11px] text-emerald-600">Success</p>
+                    </div>
+                    <div className="rounded-md bg-rose-50 px-2 py-1.5">
+                      <p className="text-rose-700 font-semibold">
+                        {progress.failed ?? 0}
+                      </p>
+                      <p className="text-[11px] text-rose-600">Failed</p>
+                    </div>
+                    <div className="rounded-md bg-gray-100 px-2 py-1.5">
+                      <p className="text-gray-700 font-semibold">
+                        {progress.total}
+                      </p>
+                      <p className="text-[11px] text-gray-500">Total</p>
+                    </div>
+                  </div>
                 )}
                 {running && (
                   <p className="text-[11px] text-gray-500 flex items-center gap-1.5">
