@@ -9,6 +9,7 @@ export interface CreatePurchasePayload {
   invoiceNo: string;
   invoiceDate?: string;
   supplierInvoiceDate?: string;
+  voucherType?: "PURCHASE" | "RCM_PURCHASE";
   otherReference?: string;
   roundOffAmount?: number;
   remarks?: string;
@@ -57,7 +58,7 @@ const initialState: PurchasesState = {
 // GET /api/purchases/get-all
 export const fetchAllPurchases = createAsyncThunk<
   PurchasesListResponse,
-  { page?: number; limit?: number; status?: "PENDING" | "APPROVED" | "REJECTED"; branchId?: string } | undefined,
+  { page?: number; limit?: number; status?: "PENDING" | "APPROVED" | "REJECTED"; voucherType?: "PURCHASE" | "RCM_PURCHASE"; branchId?: string; search?: string } | undefined,
   { rejectValue: string }
 >("purchases/fetchAll", async (params, { rejectWithValue }) => {
   try {

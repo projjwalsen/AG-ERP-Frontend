@@ -218,8 +218,8 @@ export function ReportTable<TData, TValue>({
         )}
 
         {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full">
+        <div className="w-full overflow-x-auto">
+          <table className="w-full min-w-[760px]">
             <thead>
               {table.getHeaderGroups().map((hg) => (
                 <tr key={hg.id} className="border-b border-gray-200 bg-gray-50">

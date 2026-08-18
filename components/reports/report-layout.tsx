@@ -57,7 +57,7 @@ export function ReportLayout({
   emptyAction,
 }: ReportLayoutProps) {
   return (
-    <div className="min-h-screen bg-gray-50 space-y-5">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-gray-50 space-y-5">
       <ReportHeader
         title={title}
         description={description}

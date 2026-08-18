@@ -40,6 +40,7 @@ export interface GetSalesParams {
   limit?: number;
   status?: "PENDING" | "APPROVED" | "REJECTED";
   branchId?: string;
+  search?: string;
 }
 
 /**
@@ -229,6 +230,7 @@ export const salesApi = {
     if (params?.limit) queryParams.append("limit", String(params.limit));
     if (params?.status) queryParams.append("status", params.status);
     if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.search?.trim()) queryParams.append("search", params.search.trim());
 
     const query = queryParams.toString();
     const url = query ? `api/sales/get-all?${query}` : "api/sales/get-all";

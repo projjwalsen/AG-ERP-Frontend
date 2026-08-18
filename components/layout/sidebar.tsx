@@ -301,6 +301,7 @@ function NavItem({
     <div
       className={cn(
         "flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
+        collapsed && "justify-center px-2",
         isActive && !hasChildren
           ? "bg-green-50 text-green-700 border-l-2 border-green-600"
           : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
@@ -323,15 +324,72 @@ function NavItem({
     </div>
   );
 
-  // When collapsed show only icon as link
+  const childMenu = hasChildren && open && (
+    <div className={cn("mt-0.5 space-y-0.5 border-l border-gray-100 pl-1", collapsed ? "ml-1 max-w-[150px]" : "ml-3") }>
+      {item.children!.map((child) => {
+        const childActive = pathname === child.href;
+        const ChildIcon = child.icon;
+        return (
+          <Link
+            key={child.href}
+            href={child.href}
+            className={cn(
+              "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+              collapsed ? "min-w-0" : "px-3",
+              childActive
+                ? "bg-green-50 text-green-700"
+                : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+            )}
+          >
+            <ChildIcon className="h-3.5 w-3.5 shrink-0" />
+            <span className={cn("truncate flex-1", collapsed && "text-[10px]")}>{child.title}</span>
+            {child.badge && (
+              <span
+                className={cn(
+                  "inline-flex items-center justify-center px-1.5 min-w-5 h-4 text-[10px] font-semibold rounded-full",
+                  child.badge.tone === "amber"
+                    ? "bg-amber-100 text-amber-700"
+                    : child.badge.tone === "rose"
+                    ? "bg-rose-100 text-rose-700"
+                    : "bg-blue-100 text-blue-700"
+                )}
+              >
+                {child.badge.count}
+              </span>
+            )}
+          </Link>
+        );
+      })}
+    </div>
+  );
+
+  // When collapsed, keep the menu visible but compact so child items stay
+  // inside the sidebar instead of disappearing from view.
   if (collapsed) {
     return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Link href={item.href}>{linkContent}</Link>
-        </TooltipTrigger>
-        <TooltipContent side="right">{item.title}</TooltipContent>
-      </Tooltip>
+      <div className="space-y-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              onClick={() => {
+                if (hasChildren) {
+                  setOpen((s) => !s);
+                } else {
+                  window.location.href = item.href;
+                }
+              }}
+            >
+              {hasChildren ? (
+                linkContent
+              ) : (
+                <Link href={item.href}>{linkContent}</Link>
+              )}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="right">{item.title}</TooltipContent>
+        </Tooltip>
+        {childMenu}
+      </div>
     );
   }
 
@@ -353,43 +411,7 @@ function NavItem({
         )}
       </div>
 
-      {hasChildren && open && (
-        <div className="mt-0.5 ml-3 space-y-0.5 border-l border-gray-100 pl-1">
-          {item.children!.map((child) => {
-            const childActive = pathname === child.href;
-            const ChildIcon = child.icon;
-            return (
-              <Link
-                key={child.href}
-                href={child.href}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
-                  childActive
-                    ? "bg-green-50 text-green-700"
-                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                )}
-              >
-                <ChildIcon className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate flex-1">{child.title}</span>
-                {child.badge && (
-                  <span
-                    className={cn(
-                      "inline-flex items-center justify-center px-1.5 min-w-5 h-4 text-[10px] font-semibold rounded-full",
-                      child.badge.tone === "amber"
-                        ? "bg-amber-100 text-amber-700"
-                        : child.badge.tone === "rose"
-                        ? "bg-rose-100 text-rose-700"
-                        : "bg-blue-100 text-blue-700"
-                    )}
-                  >
-                    {child.badge.count}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-        </div>
-      )}
+      {childMenu}
     </div>
   );
 }
@@ -415,16 +437,20 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       >
         <div className="flex h-full flex-col">
           {/* Logo */}
-          <div className={cn("flex h-14 items-center border-b border-gray-100 px-4", collapsed ? "justify-center" : "justify-between")}>
-
-                <div className="flex items-center gap-3">
-
-                  <div>
-                    <h1 className="text-sm font-bold text-gray-900">ASHTAVINAYAKA</h1>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">ERP Suite</p>
-                  </div>
-                </div>
-
+          <div className={cn("flex h-14 items-center border-b border-gray-100 px-2", collapsed ? "justify-center" : "justify-between")}>
+            <div className={cn("flex items-center overflow-hidden", collapsed ? "justify-center" : "gap-3") }>
+              <div className={cn("min-w-0", collapsed ? "text-center" : "") }>
+                <h1
+                  className={cn(
+                    "font-bold text-gray-900 truncate",
+                    collapsed ? "text-[9px] uppercase tracking-[0.12em]" : "text-sm"
+                  )}
+                >
+                  {collapsed ? "AS..." : "ASHTAVINAYAKA"}
+                </h1>
+                {!collapsed && <p className="text-[10px] text-gray-500 uppercase tracking-wider">ERP Suite</p>}
+              </div>
+            </div>
           </div>
 
           {/* Navigation */}
