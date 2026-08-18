@@ -6,7 +6,9 @@ export interface GetPurchasesParams {
   page?: number;
   limit?: number;
   status?: "PENDING" | "APPROVED" | "REJECTED";
+  voucherType?: "PURCHASE" | "RCM_PURCHASE";
   branchId?: string;
+  search?: string;
 }
 
 /**
@@ -49,6 +51,7 @@ export interface CreatePurchasePayload {
   invoiceNo: string;
   invoiceDate?: string;
   supplierInvoiceDate?: string;
+  voucherType?: "PURCHASE" | "RCM_PURCHASE";
   otherReference?: string;
   roundOffAmount?: number;
   remarks?: string;
@@ -78,7 +81,9 @@ export const purchaseApi = {
     if (params?.page) queryParams.append("page", String(params.page));
     if (params?.limit) queryParams.append("limit", String(params.limit));
     if (params?.status) queryParams.append("status", params.status);
+    if (params?.voucherType) queryParams.append("voucherType", params.voucherType);
     if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.search?.trim()) queryParams.append("search", params.search.trim());
 
     const query = queryParams.toString();
     const url = query ? `api/purchases/get-all?${query}` : "api/purchases/get-all";

@@ -100,6 +100,8 @@ export default function NewPurchasePage() {
   const [invoiceEntryLoading, setInvoiceEntryLoading] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
 
+  const [voucherType, setVoucherType] = React.useState<"PURCHASE" | "RCM_PURCHASE">("PURCHASE");
+
   const [formData, setFormData] = React.useState({
     agencyId: "",
     branchId: "",
@@ -270,11 +272,14 @@ export default function NewPurchasePage() {
       return;
     }
 
-    // Validate items
+    if (voucherType === "RCM_PURCHASE") {
+      setItems([]);
+    }
+
     const validItems = items.filter(
       (item) => item.productId && item.batchNo && item.quantity && item.purchasePrice
     );
-    if (validItems.length === 0) {
+    if (voucherType !== "RCM_PURCHASE" && validItems.length === 0) {
       addToast("Please add at least one valid product item", "error");
       return;
     }
@@ -296,17 +301,20 @@ export default function NewPurchasePage() {
           invoiceDate: dateInputToIso(formData.invoiceDate) || undefined,
           supplierInvoiceDate:
             dateInputToIso(formData.supplierInvoiceDate) || undefined,
+          voucherType,
           otherReference: formData.otherReference.trim() || undefined,
           roundOffAmount: summaryTotals.roundOff,
           remarks: formData.remarks.trim() || undefined,
           transport: compactTransport$1,
-          items: validItems.map((item) => ({
-            productId: item.productId,
-            batchNo: item.batchNo.trim(),
-            quantity: item.quantity,
-            unit: item.unit,
-            purchasePrice: item.purchasePrice,
-          })),
+          items: voucherType === "RCM_PURCHASE"
+            ? []
+            : validItems.map((item) => ({
+                productId: item.productId,
+                batchNo: item.batchNo.trim(),
+                quantity: item.quantity,
+                unit: item.unit,
+                purchasePrice: item.purchasePrice,
+              })),
         })
       ).unwrap();
 
@@ -410,6 +418,24 @@ export default function NewPurchasePage() {
                     setFormData({ ...formData, invoiceNo: e.target.value })
                   }
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="voucherType">Voucher Type</Label>
+                <select
+                  id="voucherType"
+                  value={voucherType}
+                  onChange={(e) => {
+                    const nextType = e.target.value as "PURCHASE" | "RCM_PURCHASE";
+                    setVoucherType(nextType);
+                    if (nextType === "RCM_PURCHASE") {
+                      setItems([]);
+                    }
+                  }}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="PURCHASE">Normal Purchase</option>
+                  <option value="RCM_PURCHASE">RCM Purchase</option>
+                </select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="branch">Branch *</Label>

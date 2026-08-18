@@ -124,6 +124,7 @@ function PurchaseTab() {
 
   const [searchTerm, setSearchTerm] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("");
+  const [voucherTypeFilter, setVoucherTypeFilter] = React.useState<"PURCHASE" | "RCM_PURCHASE" | "">("");
   const [currentPage, setCurrentPage] = React.useState(1);
 
   const [viewModal, setViewModal] = React.useState<{ open: boolean; purchase: Purchase | null }>({
@@ -133,13 +134,15 @@ function PurchaseTab() {
   const [viewLoading, setViewLoading] = React.useState(false);
 
   React.useEffect(() => {
-    fetchPurchases(currentPage, statusFilter);
-  }, [currentPage, statusFilter]);
+    fetchPurchases(currentPage, statusFilter, voucherTypeFilter, searchTerm);
+  }, [currentPage, statusFilter, voucherTypeFilter, searchTerm]);
 
-  const fetchPurchases = async (page = currentPage, status?: string) => {
+  const fetchPurchases = async (page = currentPage, status?: string, voucherType?: string, search?: string) => {
     try {
       const params: any = { page, limit: 10 };
       if (status) params.status = status;
+      if (voucherType) params.voucherType = voucherType;
+      if (search?.trim()) params.search = search.trim();
       await dispatch(fetchAllPurchases(params)).unwrap();
     } catch (err: any) {
       addToast(err || "Failed to fetch purchases", "error");
@@ -165,16 +168,7 @@ function PurchaseTab() {
     }
   };
 
-  const filteredPurchases = React.useMemo(() => {
-    if (!searchTerm) return purchases;
-    const term = searchTerm.toLowerCase();
-    return purchases.filter(
-      (p) =>
-        p.invoiceNo?.toLowerCase().includes(term) ||
-        p.agency?.name?.toLowerCase().includes(term) ||
-        p.items.some((item) => item.product?.name?.toLowerCase().includes(term))
-    );
-  }, [purchases, searchTerm]);
+  const filteredPurchases = purchases;
 
   return (
     <div className="space-y-6">
@@ -206,7 +200,7 @@ function PurchaseTab() {
                 registerType="PURCHASE"
                 label="Import Purchase Register"
                 variant="outline"
-                onCompleted={() => fetchPurchases(currentPage, statusFilter)}
+                onCompleted={() => fetchPurchases(currentPage, statusFilter, voucherTypeFilter, searchTerm)}
               />
               <Button onClick={() => router.push("/purchase-sales/new")} className="gap-2">
                 <Plus className="h-4 w-4" />
@@ -223,7 +217,10 @@ function PurchaseTab() {
           <Input
             placeholder="Search purchases..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
             className="pl-10"
           />
         </div>
@@ -240,7 +237,19 @@ function PurchaseTab() {
           <option value="APPROVED">Approved</option>
           <option value="REJECTED">Rejected</option>
         </select>
-        <Button variant="outline" size="sm" onClick={() => fetchPurchases(currentPage, statusFilter)}>
+        <select
+          value={voucherTypeFilter}
+          onChange={(e) => {
+            setVoucherTypeFilter(e.target.value as "PURCHASE" | "RCM_PURCHASE" | "");
+            setCurrentPage(1);
+          }}
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+        >
+          <option value="">All Voucher Types</option>
+          <option value="PURCHASE">Normal Purchase</option>
+          <option value="RCM_PURCHASE">RCM Purchase</option>
+        </select>
+        <Button variant="outline" size="sm" onClick={() => fetchPurchases(currentPage, statusFilter, voucherTypeFilter, searchTerm)}>
           <RefreshCw className="h-4 w-4" />
         </Button>
       </div>
@@ -634,8 +643,8 @@ function SalesTab() {
   const [pdfActionLoading, setPdfActionLoading] = React.useState(false);
 
   React.useEffect(() => {
-    fetchSales(currentPage, statusFilter);
-  }, [currentPage, statusFilter]);
+    fetchSales(currentPage, statusFilter, searchTerm);
+  }, [currentPage, statusFilter, searchTerm]);
 
   // Revoke any active blob URL when the preview closes / component unmounts
   React.useEffect(() => {
@@ -686,10 +695,11 @@ function SalesTab() {
     }
   };
 
-  const fetchSales = async (page = currentPage, status?: string) => {
+  const fetchSales = async (page = currentPage, status?: string, search?: string) => {
     try {
       const params: any = { page, limit: 10 };
       if (status) params.status = status;
+      if (search?.trim()) params.search = search.trim();
       await dispatch(fetchAllSales(params)).unwrap();
     } catch (err: any) {
       addToast(err || "Failed to fetch sales", "error");
@@ -715,16 +725,7 @@ function SalesTab() {
     }
   };
 
-  const filteredSales = React.useMemo(() => {
-    if (!searchTerm) return sales;
-    const term = searchTerm.toLowerCase();
-    return sales.filter(
-      (s) =>
-        s.invoiceNo?.toLowerCase().includes(term) ||
-        s.agency?.name?.toLowerCase().includes(term) ||
-        s.items.some((item) => item.product?.name?.toLowerCase().includes(term))
-    );
-  }, [sales, searchTerm]);
+  const filteredSales = sales;
 
   return (
     <div className="space-y-6">
@@ -764,7 +765,10 @@ function SalesTab() {
           <Input
             placeholder="Search sales..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
             className="pl-10"
           />
         </div>
@@ -781,7 +785,7 @@ function SalesTab() {
           <option value="APPROVED">Approved</option>
           <option value="REJECTED">Rejected</option>
         </select>
-        <Button variant="outline" size="sm" onClick={() => fetchSales(currentPage, statusFilter)}>
+        <Button variant="outline" size="sm" onClick={() => fetchSales(currentPage, statusFilter, searchTerm)}>
           <RefreshCw className="h-4 w-4" />
         </Button>
       </div>

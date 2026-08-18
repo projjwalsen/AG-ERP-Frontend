@@ -95,39 +95,48 @@ function TrialBalanceContent() {
   const exportDisabled = !data || !data.rows || data.rows.length === 0;
 
   return (
-    <ReportLayout
-      title="Trial Balance"
-      description="Closing balances per ledger for the selected period"
-      generatedAt={data?.generatedAt}
-      onRefresh={() => fetchReport()}
-      isRefreshing={loading}
-      actions={
-        <ReportExportButton
-          disabled={exportDisabled}
-          onExport={async () => reportApi.exportTrialBalanceExcel({ branchId, startDate, endDate })}
-        />
-      }
-      summary={
-        data
-          ? [
-              { title: "Total Debit", value: data.summary.totalDebit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
-              { title: "Total Credit", value: data.summary.totalCredit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
-              { title: "Closing Debit", value: data.summary.totalClosingDebit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
-              { title: "Closing Credit", value: data.summary.totalClosingCredit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
-              { title: "Period Difference", value: data.summary.periodDifference, hint: data.summary.isPeriodBalanced ? "Balanced" : "Unbalanced", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
-              { title: "Closing Difference", value: data.summary.closingDifference, hint: data.summary.isClosingBalanced ? "Balanced" : "Unbalanced", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" as any },
-            ]
-          : []
-      }
-      toolbar={null}
-      isLoading={loading}
-      isEmpty={!data || data.rows.length === 0}
-      emptyMessage={"No trial balance data"}
-      emptyDescription={"Try a different branch or date range."}
-    >
-      <ReportTable columns={columns} data={data?.rows ?? []} isLoading={loading} />
+    <div className="w-full max-w-[1500px] mx-auto">
+      <ReportLayout
+        title="Trial Balance"
+        description="Closing balances per ledger for the selected period"
+        generatedAt={data?.generatedAt}
+        onRefresh={() => fetchReport()}
+        isRefreshing={loading}
+        actions={
+          <ReportExportButton
+            disabled={exportDisabled}
+            onExport={async () => reportApi.exportTrialBalanceExcel({ branchId, startDate, endDate })}
+          />
+        }
+        summary={
+          data
+            ? [
+                { title: "Total Debit", value: data.summary.totalDebit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
+                { title: "Total Credit", value: data.summary.totalCredit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
+                { title: "Closing Debit", value: data.summary.totalClosingDebit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
+                { title: "Closing Credit", value: data.summary.totalClosingCredit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
+                { title: "Period Difference", value: data.summary.periodDifference, hint: data.summary.isPeriodBalanced ? "Balanced" : "Unbalanced", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
+                { title: "Closing Difference", value: data.summary.closingDifference, hint: data.summary.isClosingBalanced ? "Balanced" : "Unbalanced", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" as any },
+              ]
+            : []
+        }
+        toolbar={null}
+        isLoading={loading}
+        isEmpty={!data || data.rows.length === 0}
+        emptyMessage={"No trial balance data"}
+        emptyDescription={"Try a different branch or date range."}
+      >
+        <div className="w-full max-w-[1500px] mx-auto overflow-hidden rounded-xl border border-gray-200 bg-white">
+          <ReportTable
+            columns={columns}
+            data={data?.rows ?? []}
+            isLoading={loading}
+            className="border-0 shadow-none"
+            showSearch={false}
+          />
+        </div>
 
-      <Dialog open={showDetails} onOpenChange={(isOpen) => !isOpen && setShowDetails(false)}>
+        <Dialog open={showDetails} onOpenChange={(isOpen) => !isOpen && setShowDetails(false)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Ledger details</DialogTitle>
@@ -168,7 +177,8 @@ function TrialBalanceContent() {
             </div>
           ) : null}
         </DialogContent>
-      </Dialog>
-    </ReportLayout>
+        </Dialog>
+      </ReportLayout>
+    </div>
   );
 }

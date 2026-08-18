@@ -41,7 +41,7 @@ const initialState: SalesState = {
 // GET /api/sales/get-all
 export const fetchAllSales = createAsyncThunk<
   SalesListResponse,
-  { page?: number; limit?: number; status?: "PENDING" | "APPROVED" | "REJECTED"; branchId?: string } | undefined,
+  { page?: number; limit?: number; status?: "PENDING" | "APPROVED" | "REJECTED"; branchId?: string; search?: string } | undefined,
   { rejectValue: string }
 >("sales/fetchAll", async (params, { rejectWithValue }) => {
   try {
