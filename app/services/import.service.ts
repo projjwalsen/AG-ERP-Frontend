@@ -401,6 +401,7 @@ function handleStandardImportSseChunk(
      * terminal result too. Defaulted to 100 by the wrapper. */
     percentage?: number;
     errors: any[];
+    errorReportUrl?: string;
   }) => void,
   onError?: (err: Error) => void
 ): void {
