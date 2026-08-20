@@ -35,12 +35,16 @@ function LedgerContent() {
   const [exporting, setExporting] = React.useState(false);
 
   React.useEffect(() => {
-    fetchLedgers(currentPage);
-  }, [currentPage]);
+    fetchLedgers(currentPage, searchTerm);
+  }, [currentPage, searchTerm]);
 
-  const fetchLedgers = async (page = currentPage) => {
+  const fetchLedgers = async (page = currentPage, search = searchTerm) => {
     try {
-      const params: any = { page, limit: 10 };
+      const params: any = {
+        page,
+        limit: 10,
+        ...(search.trim() ? { search: search.trim() } : {}),
+      };
       await dispatch(fetchAllProductLedgers(params)).unwrap();
     } catch (err: any) {
       addToast(err || "Failed to fetch product ledgers", "error");
@@ -65,17 +69,6 @@ function LedgerContent() {
     }
   };
 
-  const filteredLedgers = React.useMemo(() => {
-    if (!searchTerm) return ledgers;
-    const term = searchTerm.toLowerCase();
-    return ledgers.filter(
-      (l) =>
-        l.productName?.toLowerCase().includes(term) ||
-        l.productSKU?.toLowerCase().includes(term) ||
-        l.code?.toLowerCase().includes(term)
-    );
-  }, [ledgers, searchTerm]);
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mb-6">
@@ -98,7 +91,10 @@ function LedgerContent() {
           <Input
             placeholder="Search by product name, SKU or ledger code..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
             className="pl-10"
           />
         </div>
@@ -127,7 +123,7 @@ function LedgerContent() {
             </div>
           </CardContent>
         </Card>
-      ) : filteredLedgers.length > 0 ? (
+      ) : ledgers.length > 0 ? (
         <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -146,7 +142,7 @@ function LedgerContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredLedgers.map((ledger) => (
+                  {ledgers.map((ledger) => (
                     <LedgerRow
                       key={ledger.id}
                       ledger={ledger}
