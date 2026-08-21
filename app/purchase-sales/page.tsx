@@ -831,7 +831,7 @@ function SalesTab() {
                       <td className="px-4 py-3 text-sm">
                         {sale.items && sale.items.length > 0 ? (
                           <div className="flex flex-col gap-1">
-                            <span className="font-medium">{sale.items[0]?.product?.name || "-"}</span>
+                            <span className="font-medium">{sale.items?.[0]?.product?.name || "-"}</span>
                             {sale.items.length > 1 && (
                               <span className="inline-flex w-fit items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700">
                                 +{sale.items.length - 1} more {sale.items.length - 1 === 1 ? "item" : "items"}
@@ -843,14 +843,14 @@ function SalesTab() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        <span className="font-mono">{sale.items[0]?.batch?.batchNo || "-"}</span>
+                        <span className="font-mono">{sale.items?.[0]?.batch?.batchNo || "-"}</span>
                       </td>
                       
                       <td className="px-4 py-3 text-sm">
-                        {sale.items[0]?.quantity || 0} {sale.items[0]?.unit || "KG"}
+                        {sale.items?.[0]?.quantity || 0} {sale.items?.[0]?.unit || "KG"}
                       </td>
                       <td className="px-4 py-3 text-sm text-green-600 font-semibold">
-                        {sale.items[0].totalAmount || 0}
+                        {sale.items?.[0]?.totalAmount || 0}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[sale.status]?.bg} ${statusColors[sale.status]?.text}`}>
