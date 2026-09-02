@@ -33,15 +33,7 @@ import {
   DebitCreditNoteType,
 } from "@/app/types/debitCreditNote";
 
-function tabToSourceType(tab: string): DebitCreditNoteSourceType {
-  return tab === "sale" ? "SALE" : "PURCHASE";
-}
-
-function sourceTypeToTab(sourceType: string | null) {
-  return sourceType === "SALE" ? "sale" : "purchase";
-}
-
-type DebitCreditNotesTab = "purchase" | "sale";
+type DebitCreditNotesTab = "debit" | "credit";
 
 export default function DebitCreditNotesPage() {
   return (
@@ -64,13 +56,23 @@ function DebitCreditNotesContent() {
   const canApprove = hasModulePermission(userPermissions, "SALE", "APPROVE");
 
   const initialSourceType = searchParams?.get("sourceType");
+  const initialNoteType = searchParams?.get("type");
   const tabFromUrl = searchParams?.get("tab");
-  const activeTab: DebitCreditNotesTab = tabFromUrl === "sale" || tabFromUrl === "sales" ? "sale" : sourceTypeToTab(initialSourceType);
+  const activeTab: DebitCreditNotesTab =
+    tabFromUrl === "credit" ||
+    tabFromUrl === "sale" ||
+    tabFromUrl === "sales" ||
+    initialNoteType === "CREDIT_NOTE" ||
+    (!initialNoteType && initialSourceType === "SALE")
+      ? "credit"
+      : "debit";
 
   const [currentTab, setCurrentTab] = React.useState(activeTab);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<DebitCreditNoteStatus | "">((searchParams?.get("status") as DebitCreditNoteStatus) || "");
-  const [typeFilter, setTypeFilter] = React.useState<DebitCreditNoteType | "">((searchParams?.get("type") as DebitCreditNoteType) || "");
+  const [sourceTypeFilter, setSourceTypeFilter] = React.useState<DebitCreditNoteSourceType | "">(
+    initialSourceType === "SALE" || initialSourceType === "PURCHASE" ? initialSourceType : ""
+  );
   const [agencyFilter, setAgencyFilter] = React.useState(searchParams?.get("agencyId") || "");
   const [branchFilter, setBranchFilter] = React.useState(searchParams?.get("branchId") || "");
   const [invoiceFilter, setInvoiceFilter] = React.useState(searchParams?.get("saleId") || searchParams?.get("purchaseId") || "");
@@ -83,7 +85,7 @@ function DebitCreditNotesContent() {
   const [pdfLoading, setPdfLoading] = React.useState(false);
   const [downloadLoading, setDownloadLoading] = React.useState(false);
 
-  const sourceType = tabToSourceType(currentTab);
+  const noteType: DebitCreditNoteType = currentTab === "credit" ? "CREDIT_NOTE" : "DEBIT_NOTE";
 
   async function fetchFilterOptions() {
     try {
@@ -109,13 +111,13 @@ function DebitCreditNotesContent() {
         fetchAllDebitCreditNotes({
           page: currentPage,
           limit: 10,
-          sourceType,
+          sourceType: sourceTypeFilter || undefined,
           status: statusFilter || undefined,
-          type: typeFilter || undefined,
+          type: noteType,
           agencyId: agencyFilter || undefined,
           branchId: branchFilter || undefined,
-          saleId: sourceType === "SALE" && invoiceFilter ? invoiceFilter : undefined,
-          purchaseId: sourceType === "PURCHASE" && invoiceFilter ? invoiceFilter : undefined,
+          saleId: sourceTypeFilter === "SALE" && invoiceFilter ? invoiceFilter : undefined,
+          purchaseId: sourceTypeFilter === "PURCHASE" && invoiceFilter ? invoiceFilter : undefined,
         })
       ).unwrap();
     } catch (err: unknown) {
@@ -124,10 +126,12 @@ function DebitCreditNotesContent() {
   }
 
   async function fetchInvoices() {
+    if (!sourceTypeFilter) return;
+
     try {
       await dispatch(
         fetchDebitCreditNoteInvoices({
-          sourceType,
+          sourceType: sourceTypeFilter,
           agencyId: agencyFilter || undefined,
           branchId: branchFilter || undefined,
         })
@@ -139,14 +143,16 @@ function DebitCreditNotesContent() {
 
   function updateUrl() {
     const params = new URLSearchParams();
-    params.set("sourceType", sourceType);
-    if (currentTab === "sale") params.set("tab", "sale");
+    if (sourceTypeFilter) params.set("sourceType", sourceTypeFilter);
+    if (currentTab === "credit") params.set("tab", "credit");
     if (currentPage > 1) params.set("page", String(currentPage));
     if (statusFilter) params.set("status", statusFilter);
-    if (typeFilter) params.set("type", typeFilter);
+    params.set("type", noteType);
     if (agencyFilter) params.set("agencyId", agencyFilter);
     if (branchFilter) params.set("branchId", branchFilter);
-    if (invoiceFilter) params.set(sourceType === "SALE" ? "saleId" : "purchaseId", invoiceFilter);
+    if (invoiceFilter && sourceTypeFilter) {
+      params.set(sourceTypeFilter === "SALE" ? "saleId" : "purchaseId", invoiceFilter);
+    }
 
     router.replace(`/debit-credit-notes?${params.toString()}`, { scroll: false });
   }
@@ -162,7 +168,7 @@ function DebitCreditNotesContent() {
     void fetchInvoices();
     updateUrl();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canView, sourceType, currentPage, statusFilter, typeFilter, agencyFilter, branchFilter, invoiceFilter]);
+  }, [canView, noteType, sourceTypeFilter, currentPage, statusFilter, agencyFilter, branchFilter, invoiceFilter]);
 
   React.useEffect(() => {
     return () => {
@@ -171,8 +177,7 @@ function DebitCreditNotesContent() {
   }, [pdfPreview.objectUrl]);
 
   const handleTabChange = (value: string) => {
-    const nextTab = value === "sale" ? "sale" : "purchase";
-    router.push(`/debit-credit-notes/new?noteType=${nextTab === "sale" ? "CREDIT" : "DEBIT"}`);
+    const nextTab = value === "credit" ? "credit" : "debit";
     setCurrentTab(nextTab);
     setCurrentPage(1);
     setInvoiceFilter("");
@@ -181,7 +186,7 @@ function DebitCreditNotesContent() {
   const resetFilters = () => {
     setSearchTerm("");
     setStatusFilter("");
-    setTypeFilter("");
+    setSourceTypeFilter("");
     setAgencyFilter("");
     setBranchFilter("");
     setInvoiceFilter("");
@@ -267,7 +272,7 @@ function DebitCreditNotesContent() {
 
   const filterBar = (
     <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
         <div className="relative xl:col-span-2">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input placeholder="Search notes..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
@@ -284,13 +289,17 @@ function DebitCreditNotesContent() {
           ]}
         />
         <DataSelect
-          value={typeFilter}
-          onChange={(v) => { setTypeFilter(v as DebitCreditNoteType | ""); setCurrentPage(1); }}
-          placeholder="All Note Types"
+          value={sourceTypeFilter}
+          onChange={(v) => {
+            setSourceTypeFilter(v as DebitCreditNoteSourceType | "");
+            setCurrentPage(1);
+            setInvoiceFilter("");
+          }}
+          placeholder="All Sources"
           clearable
           options={[
-            { value: "DEBIT_NOTE", label: "Debit Note" },
-            { value: "CREDIT_NOTE", label: "Credit Note" },
+            { value: "PURCHASE", label: "Purchase" },
+            { value: "SALE", label: "Sale" },
           ]}
         />
         <DataSelect
@@ -325,10 +334,16 @@ function DebitCreditNotesContent() {
         <DataSelect
           value={invoiceFilter}
           onChange={(v) => { setInvoiceFilter(v); setCurrentPage(1); }}
-          placeholder={invoicesLoading ? "Loading invoices..." : "All Invoices"}
+          placeholder={
+            !sourceTypeFilter
+              ? "Select a source to filter invoices"
+              : invoicesLoading
+                ? "Loading invoices..."
+                : "All Invoices"
+          }
           searchable
           clearable
-          disabled={invoicesLoading}
+          disabled={!sourceTypeFilter || invoicesLoading}
           panelClassName="w-[560px]"
           options={invoiceOptions}
           className="md:max-w-xl md:flex-1"
@@ -387,7 +402,7 @@ function DebitCreditNotesContent() {
             </Button>
           )}
           {canWrite && (
-            <Button className="gap-2" onClick={() => router.push(`/debit-credit-notes/new?noteType=${currentTab === "sale" ? "CREDIT" : "DEBIT"}`)}>
+            <Button className="gap-2" onClick={() => router.push(`/debit-credit-notes/new?noteType=${currentTab === "credit" ? "CREDIT" : "DEBIT"}`)}>
               <FilePlus2 className="h-4 w-4" />
               Create Note
             </Button>
@@ -397,18 +412,18 @@ function DebitCreditNotesContent() {
 
       <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="mb-6 grid w-full max-w-md grid-cols-2 bg-gray-100">
-          <TabsTrigger value="purchase" className="flex items-center gap-2">
+          <TabsTrigger value="debit" className="flex items-center gap-2">
             <Receipt className="h-4 w-4" />
             Debit Note
           </TabsTrigger>
-          <TabsTrigger value="sale" className="flex items-center gap-2">
+          <TabsTrigger value="credit" className="flex items-center gap-2">
             <Receipt className="h-4 w-4" />
             Credit Note
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="purchase">{notesList}</TabsContent>
-        <TabsContent value="sale">{notesList}</TabsContent>
+        <TabsContent value="debit">{notesList}</TabsContent>
+        <TabsContent value="credit">{notesList}</TabsContent>
       </Tabs>
 
       <DebitCreditNoteDetailsDialog
