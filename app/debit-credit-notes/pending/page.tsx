@@ -22,7 +22,7 @@ import {
   fetchAllDebitCreditNotes,
   rejectDebitCreditNote,
 } from "@/app/store/debitCreditNotesSlice";
-import type { DebitCreditNote, DebitCreditNoteSourceType } from "@/app/types/debitCreditNote";
+import type { DebitCreditNote, DebitCreditNoteSourceType, DebitCreditNoteType } from "@/app/types/debitCreditNote";
 import { downloadBlob } from "@/lib/download";
 import { hasModulePermission } from "@/lib/usePermissions";
 
@@ -30,6 +30,10 @@ type DebitCreditNotesTab = "purchase" | "sale";
 
 function tabToSourceType(tab: DebitCreditNotesTab): DebitCreditNoteSourceType {
   return tab === "sale" ? "SALE" : "PURCHASE";
+}
+
+function tabToNoteType(tab: DebitCreditNotesTab): DebitCreditNoteType {
+  return tab === "sale" ? "CREDIT_NOTE" : "DEBIT_NOTE";
 }
 
 export default function PendingDebitCreditNotesPage() {
@@ -73,6 +77,7 @@ function PendingDebitCreditNotesContent() {
           limit: 10,
           status: "PENDING",
           sourceType: tabToSourceType(sourceType),
+          type: tabToNoteType(sourceType),
         })
       ).unwrap();
     } catch (err: unknown) {
