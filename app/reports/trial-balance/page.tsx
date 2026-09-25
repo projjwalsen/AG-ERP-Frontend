@@ -69,6 +69,8 @@ function TrialBalanceContent() {
       { accessorKey: "parentGroup", header: "Group" },
       { accessorKey: "ledgerCategory", header: "Category" },
       { accessorKey: "ledgerNature", header: "Nature" },
+      { accessorKey: "openingDebit", header: "Opening Debit", cell: ({ row }) => formatCurrency(row.original.openingDebit) },
+      { accessorKey: "openingCredit", header: "Opening Credit", cell: ({ row }) => formatCurrency(row.original.openingCredit) },
       { accessorKey: "debit", header: "Debit", cell: ({ row }) => formatCurrency(row.original.debit) },
       { accessorKey: "credit", header: "Credit", cell: ({ row }) => formatCurrency(row.original.credit) },
       { accessorKey: "closingDebit", header: "Closing Debit", cell: ({ row }) => formatCurrency(row.original.closingDebit) },
@@ -165,6 +167,12 @@ function TrialBalanceContent() {
 
               <div className="text-sm text-gray-500">Credit</div>
               <div className="text-sm font-medium text-right">{formatCurrency(selectedRow.credit)}</div>
+
+              <div className="text-sm text-gray-500">Opening Debit</div>
+              <div className="text-sm font-medium text-right">{formatCurrency(selectedRow.openingDebit)}</div>
+
+              <div className="text-sm text-gray-500">Opening Credit</div>
+              <div className="text-sm font-medium text-right">{formatCurrency(selectedRow.openingCredit)}</div>
 
               <div className="text-sm text-gray-500">Closing Debit</div>
               <div className="text-sm font-medium text-right">{formatCurrency(selectedRow.closingDebit)}</div>
