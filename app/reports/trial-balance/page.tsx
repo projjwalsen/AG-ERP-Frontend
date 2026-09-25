@@ -98,7 +98,7 @@ function TrialBalanceContent() {
     <div className="w-full max-w-[1500px] mx-auto">
       <ReportLayout
         title="Trial Balance"
-        description="Closing balances per ledger for the selected period"
+        description="Closing balances from approved journal entries for the selected period"
         generatedAt={data?.generatedAt}
         onRefresh={() => fetchReport()}
         isRefreshing={loading}
