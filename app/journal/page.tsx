@@ -3,7 +3,7 @@
 import * as React from "react";
 import {
   BookOpen, Plus, Search, Edit, Eye, MoreHorizontal, RefreshCw,
-  Tag, FileText, Clock,
+  Tag, FileText, Clock, FolderPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import { JournalImportButton } from "@/app/components/import/JournalImportButton
 import {
   journalApi,
   journalHeadApi,
+  journalCategoryApi,
   CreateJournalHeadPayload,
   CreateJournalPayload,
   UpdateJournalPayload,
@@ -43,9 +44,11 @@ import {
 import {
   Journal,
   JournalHead,
+  JournalCategory,
   JournalStatus,
   PaymentMode,
   PaymentType,
+  getJournalHeadPath,
 } from "@/app/types/journal";
 import { Branch } from "@/app/types/branch";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
@@ -122,7 +125,7 @@ function JournalContent() {
       </div>
 
       <Tabs defaultValue="journals" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md mb-6 bg-gray-100">
+        <TabsList className="grid w-full grid-cols-3 max-w-xl mb-6 bg-gray-100">
           <TabsTrigger value="journals" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
             Journals
@@ -130,6 +133,10 @@ function JournalContent() {
           <TabsTrigger value="heads" className="flex items-center gap-2">
             <Tag className="h-4 w-4" />
             Journal Heads
+          </TabsTrigger>
+          <TabsTrigger value="categories" className="flex items-center gap-2">
+            <FolderPlus className="h-4 w-4" />
+            Categories
           </TabsTrigger>
         </TabsList>
 
@@ -140,9 +147,64 @@ function JournalContent() {
         <TabsContent value="heads">
           <JournalHeadsTab />
         </TabsContent>
+        <TabsContent value="categories">
+          <JournalCategoriesTab />
+        </TabsContent>
       </Tabs>
 
       <ToastContainer />
+    </div>
+  );
+}
+
+function JournalCategoriesTab() {
+  const { addToast } = useToast();
+  const [categories, setCategories] = React.useState<JournalCategory[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  const loadCategories = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await journalCategoryApi.list({ isActive: true });
+      if (response.success) setCategories(response.data?.categories ?? []);
+      else addToast(response.message || "Failed to load categories", "error");
+    } catch (error: any) {
+      addToast(error?.message || "Failed to load categories", "error");
+    } finally { setLoading(false); }
+  }, [addToast]);
+
+  React.useEffect(() => { loadCategories(); }, [loadCategories]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Journal Categories</h2>
+          <p className="text-sm text-gray-500">Organize journal entries under reusable categories</p>
+        </div>
+        <Link href="/journal/categories/new">
+          <Button className="gap-2"><Plus className="h-4 w-4" />Add Category</Button>
+        </Link>
+      </div>
+      <Card>
+        <CardContent className="p-0">
+          {loading ? <div className="p-6 text-sm text-gray-500">Loading categories...</div> : categories.length === 0 ? (
+            <div className="p-10 text-center text-sm text-gray-500">No journal categories found.</div>
+          ) : (
+            <div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b bg-gray-50">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Category</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Linked Subhead</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Status</th>
+            </tr></thead><tbody className="divide-y divide-gray-100">
+              {categories.map((category) => <tr key={category.id} className="hover:bg-gray-50">
+                <td className="px-4 py-3 text-sm font-medium text-gray-900">{category.name}</td>
+                <td className="px-4 py-3 text-sm text-gray-600">{category.journalHead?.name || "—"}</td>
+                <td className="px-4 py-3"><Badge variant="success" className="bg-green-100 text-green-700">Active</Badge></td>
+              </tr>)}
+            </tbody></table></div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -304,7 +366,7 @@ function JournalsTab() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3 bg-white p-4 rounded-lg border border-gray-200">
-        <div className="relative flex-1 min-w-[220px] max-w-sm">
+        <div className="relative flex-1 min-w-55 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             placeholder="Search remarks, head, branch..."
@@ -347,14 +409,14 @@ function JournalsTab() {
           type="date"
           value={fromDate}
           onChange={(e) => setFromDate(e.target.value)}
-          className="w-[160px]"
+          className="w-40"
           title="From date"
         />
         <Input
           type="date"
           value={toDate}
           onChange={(e) => setToDate(e.target.value)}
-          className="w-[160px]"
+          className="w-40"
           title="To date"
         />
         {hasFilters && (
@@ -648,10 +710,12 @@ function JournalHeadsTab() {
           <h2 className="text-lg font-semibold text-gray-900">Journal Heads</h2>
           <p className="text-sm text-gray-500">Categories of journal entries (auto-create ledger)</p>
         </div>
-        <Button onClick={handleCreate} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Journal Head
-        </Button>
+        <Link href="/journal/heads/new">
+          <Button className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Journal Head
+          </Button>
+        </Link>
       </div>
 
       <div className="flex items-center gap-4 bg-white p-4 rounded-lg border border-gray-200">
@@ -710,7 +774,14 @@ function JournalHeadsTab() {
                           <div className="p-1.5 bg-indigo-100 rounded-lg">
                             <Tag className="h-4 w-4 text-indigo-600" />
                           </div>
-                          <span className="font-medium text-gray-900">{h.name}</span>
+                          <div>
+                            <span className="font-medium text-gray-900">{h.name}</span>
+                            {h.parentId && (
+                              <p className="text-xs text-gray-500">
+                                {getJournalHeadPath(h, heads)}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -775,10 +846,12 @@ function JournalHeadsTab() {
           <CardContent className="p-12 text-center">
             <Tag className="h-12 w-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500">No journal heads found</p>
-            <Button variant="outline" className="mt-4 gap-2" onClick={handleCreate}>
-              <Plus className="h-4 w-4" />
-              Add First Journal Head
-            </Button>
+            <Link href="/journal/heads/new">
+              <Button variant="outline" className="mt-4 gap-2">
+                <Plus className="h-4 w-4" />
+                Add First Journal Head
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       )}
@@ -834,7 +907,7 @@ function JournalFormModal({
   const { addToast } = useToast();
   const [loading, setLoading] = React.useState(false);
   const [showConfirm, setShowConfirm] = React.useState(false);
-  const [form, setForm] = React.useState<CreateJournalPayload & { type: "" | "INWARD" | "OUTWARD" }>({
+  const [form, setForm] = React.useState<CreateJournalPayload & { type: "" | "INWARD" | "OUTWARD" | "BOTH" }>({
     branchId: "",
     journalHeadId: "",
     type: "",
@@ -1030,7 +1103,7 @@ function JournalFormModal({
                     .filter((h) => h.type === form.type)
                     .map<DataSelectOption>((h) => ({
                       value: h.id,
-                      label: h.name,
+                      label: getJournalHeadPath(h, journalHeads),
                       description: h.ledger
                         ? `${h.ledger.code ?? ""}${h.ledger.name ? " • " + h.ledger.name : ""}`
                         : undefined,

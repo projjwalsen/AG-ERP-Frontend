@@ -1,6 +1,8 @@
 // Journal Types - matches backend API contract
 
 export type JournalHeadType = "INWARD" | "OUTWARD";
+export type JournalDirection = JournalHeadType | "BOTH";
+export type JournalHeadLevel = "PARENT" | "SUBHEAD";
 
 export type JournalStatus = "PENDING" | "APPROVED" | "REJECTED";
 
@@ -44,11 +46,30 @@ export interface VoucherSummary {
 export interface JournalHead {
   id: string;
   name: string;
-  type: JournalHeadType;
+  type: JournalDirection;
+  headType?: JournalHeadLevel;
+  parentId?: string | null;
+  parent?: Pick<JournalHead, "id" | "name" | "parentId"> | null;
   isActive?: boolean;
   ledger?: LedgerSummary | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export function getJournalHeadPath(head: JournalHead, heads: JournalHead[]): string {
+  const names = [head.name];
+  const visited = new Set([head.id]);
+  let parentId = head.parentId ?? head.parent?.id ?? null;
+
+  while (parentId && !visited.has(parentId)) {
+    visited.add(parentId);
+    const parent = heads.find((candidate) => candidate.id === parentId);
+    if (!parent) break;
+    names.unshift(parent.name);
+    parentId = parent.parentId ?? parent.parent?.id ?? null;
+  }
+
+  return names.join(" / ");
 }
 
 export interface Journal {
@@ -63,6 +84,8 @@ export interface Journal {
   status: JournalStatus;
   branch?: BranchSummary;
   journalHead?: JournalHead;
+  categoryId?: string | null;
+  category?: JournalCategory | null;
   voucher?: VoucherSummary | null;
   createdBy?: UserSummary;
   approvedBy?: UserSummary | null;
@@ -93,4 +116,12 @@ export interface JournalResponse {
 
 export interface JournalHeadResponse {
   journalHead: JournalHead;
+}
+
+export interface JournalCategory {
+  id: string;
+  name: string;
+  isActive?: boolean;
+  journalHeadId?: string | null;
+  journalHead?: JournalHead | null;
 }
