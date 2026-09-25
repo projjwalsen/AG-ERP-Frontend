@@ -14,12 +14,14 @@ import { DataSelect, type DataSelectOption } from "@/components/ui/data-select";
 import { useToast, ToastContainer } from "@/components/ui/toast";
 import { PageHeader } from "@/components/layout";
 import { branchApi } from "@/app/services/branch.service";
-import { journalApi, journalHeadApi } from "@/app/services/journal.service";
+import { journalApi, journalHeadApi, journalCategoryApi } from "@/app/services/journal.service";
 import {
   JournalHead,
   JournalHeadType,
+  JournalCategory,
   PaymentMode,
   PaymentType,
+  getJournalHeadPath,
 } from "@/app/types/journal";
 import { Branch } from "@/app/types/branch";
 import { formatCurrency } from "@/lib/utils";
@@ -55,6 +57,7 @@ interface FormState {
   branchId: string;
   type: "" | JournalHeadType;
   journalHeadId: string;
+  categoryId: string;
   amount: number;
   paymentMode: PaymentMode;
   paymentThrough: PaymentType;
@@ -66,6 +69,7 @@ const initialForm: FormState = {
   branchId: "",
   type: "",
   journalHeadId: "",
+  categoryId: "",
   amount: 0,
   paymentMode: "OFFLINE",
   paymentThrough: "CASH",
@@ -81,6 +85,7 @@ export default function NewJournalPage() {
   const [showConfirm, setShowConfirm] = React.useState(false);
   const [branches, setBranches] = React.useState<Branch[]>([]);
   const [journalHeads, setJournalHeads] = React.useState<JournalHead[]>([]);
+  const [categories, setCategories] = React.useState<JournalCategory[]>([]);
   const [loadingBranches, setLoadingBranches] = React.useState(true);
   const [loadingHeads, setLoadingHeads] = React.useState(true);
   const [form, setForm] = React.useState<FormState>(initialForm);
@@ -88,6 +93,9 @@ export default function NewJournalPage() {
   React.useEffect(() => {
     fetchBranches();
     fetchJournalHeads();
+    journalCategoryApi.list({ isActive: true }).then((res) => {
+      if (res.success) setCategories(res.data?.categories || []);
+    }).catch(() => addToast("Failed to load journal categories", "error"));
   }, []);
 
   const fetchBranches = async () => {
@@ -162,6 +170,7 @@ export default function NewJournalPage() {
       const res = await journalApi.create({
         branchId: form.branchId,
         journalHeadId: form.journalHeadId,
+        categoryId: form.categoryId || null,
         amount: Number(form.amount),
         paymentMode: form.paymentMode,
         paymentThrough: form.paymentThrough,
@@ -189,10 +198,10 @@ export default function NewJournalPage() {
 
   const headOptions: DataSelectOption[] = form.type
     ? journalHeads
-        .filter((h) => h.type === form.type)
+        .filter((h) => h.type === form.type || h.type === "BOTH")
         .map((h) => ({
           value: h.id,
-          label: h.name,
+          label: getJournalHeadPath(h, journalHeads),
           description: h.ledger
             ? `${h.ledger.code ?? ""}${h.ledger.name ? " • " + h.ledger.name : ""}`
             : undefined,
@@ -313,6 +322,22 @@ export default function NewJournalPage() {
                   options={headOptions}
                   disabled={!form.type || loadingHeads}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="journal-category">Journal Category</Label>
+                <select
+                  id="journal-category"
+                  value={form.categoryId}
+                  onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+                  className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm"
+                  disabled={loading}
+                >
+                  <option value="">Select category (optional)</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>{category.name}</option>
+                  ))}
+                </select>
               </div>
             </CardContent>
           </Card>

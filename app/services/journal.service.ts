@@ -4,6 +4,8 @@ import {
   Journal,
   JournalHead,
   JournalHeadType,
+  JournalDirection,
+  JournalHeadLevel,
   JournalStatus,
   JournalHeadResponse,
   JournalHeadsListResponse,
@@ -12,6 +14,7 @@ import {
   PaginationMeta,
   PaymentMode,
   PaymentType,
+  JournalCategory,
 } from "../types/journal";
 
 export interface GetJournalsParams {
@@ -27,18 +30,23 @@ export interface GetJournalsParams {
 
 export interface CreateJournalHeadPayload {
   name: string;
-  type: JournalHeadType;
+  type?: JournalDirection;
+  headType?: JournalHeadLevel;
+  parentId?: string | null;
 }
 
 export interface UpdateJournalHeadPayload {
   name?: string;
-  type?: JournalHeadType;
+  type?: JournalDirection;
+  headType?: JournalHeadLevel;
+  parentId?: string | null;
   isActive?: boolean;
 }
 
 export interface CreateJournalPayload {
   branchId: string;
   journalHeadId: string;
+  categoryId?: string | null;
   amount: number;
   paymentMode: PaymentMode;
   paymentThrough?: PaymentType;
@@ -49,6 +57,7 @@ export interface CreateJournalPayload {
 export interface UpdateJournalPayload {
   branchId?: string;
   journalHeadId?: string;
+  categoryId?: string | null;
   amount?: number;
   paymentMode?: PaymentMode;
   paymentThrough?: PaymentType;
@@ -57,10 +66,11 @@ export interface UpdateJournalPayload {
 }
 
 export const journalHeadApi = {
-  async list(params?: { search?: string; type?: JournalHeadType; isActive?: boolean }): Promise<{ success: boolean; message: string; data?: JournalHeadsListResponse }> {
+  async list(params?: { search?: string; type?: JournalDirection; headType?: JournalHeadLevel; isActive?: boolean }): Promise<{ success: boolean; message: string; data?: JournalHeadsListResponse }> {
     const queryParams = new URLSearchParams();
     if (params?.search) queryParams.append("search", params.search);
     if (params?.type) queryParams.append("type", params.type);
+    if (params?.headType) queryParams.append("headType", params.headType);
     if (params?.isActive !== undefined) queryParams.append("isActive", String(params.isActive));
 
     const query = queryParams.toString();
@@ -100,6 +110,25 @@ export const journalHeadApi = {
     return apiFetch(`/api/journal/head/${journalHeadId}`, {
       method: "DELETE",
     });
+  },
+};
+
+export interface JournalCategoryPayload {
+  name: string;
+  isActive?: boolean;
+  journalHeadId?: string | null;
+}
+
+export const journalCategoryApi = {
+  async list(params?: { search?: string; isActive?: boolean }) {
+    const query = new URLSearchParams();
+    if (params?.search) query.set("search", params.search);
+    if (params?.isActive !== undefined) query.set("isActive", String(params.isActive));
+    const suffix = query.toString() ? `?${query}` : "";
+    return apiFetch<{ categories: JournalCategory[] }>(`/api/journal/categories${suffix}`);
+  },
+  async create(payload: JournalCategoryPayload) {
+    return apiFetch<{ category: JournalCategory }>("/api/journal/category/create", { method: "POST", body: payload });
   },
 };
 
