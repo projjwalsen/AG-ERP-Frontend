@@ -13,9 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   importJournalMaster,
+  importOpeningBalanceJournals,
+  JournalImportCallbacks,
   JournalImportProgress,
 } from "@/app/services/import.service";
 import { useToast } from "@/components/ui/toast";
+import { Branch } from "@/app/types/branch";
 
 interface JournalImportButtonProps {
   /**
@@ -31,6 +34,8 @@ interface JournalImportButtonProps {
    * Optional fixed label; defaults to "Import Journal Register".
    */
   label?: string;
+  openingBalanceOnly?: boolean;
+  branches?: Branch[];
 }
 
 const ACCEPTED_EXTENSIONS = [".xlsx", ".xls", ".csv"];
@@ -46,6 +51,8 @@ export function JournalImportButton({
   onCompleted,
   variant = "outline",
   label = "Import Journal Register",
+  openingBalanceOnly = false,
+  branches = [],
 }: JournalImportButtonProps) {
   const { addToast } = useToast();
   const [open, setOpen] = React.useState(false);
@@ -53,6 +60,8 @@ export function JournalImportButton({
   const [running, setRunning] = React.useState(false);
   const [progress, setProgress] =
     React.useState<JournalImportProgress | null>(null);
+  const [branchId, setBranchId] = React.useState("");
+  const [openingDate, setOpeningDate] = React.useState("");
 
   const handleSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0] ?? null;
@@ -63,6 +72,8 @@ export function JournalImportButton({
   const reset = () => {
     setFile(null);
     setProgress(null);
+    setBranchId("");
+    setOpeningDate("");
   };
 
   const closeModal = () => {
@@ -76,10 +87,14 @@ export function JournalImportButton({
       addToast("Please select an Excel file to import", "error");
       return;
     }
+    if (openingBalanceOnly && !branchId) {
+      addToast("Select the branch for these opening balances", "error");
+      return;
+    }
     setRunning(true);
     setProgress({ total: 0, processed: 0, success: 0, failed: 0, percentage: 0, errors: [] });
     try {
-      await importJournalMaster(file, {
+      const callbacks: JournalImportCallbacks = {
         onProgress: (p) => setProgress(p),
         onComplete: (r) => {
           setProgress(r);
@@ -100,7 +115,12 @@ export function JournalImportButton({
           setRunning(false);
           addToast(err.message || "Import failed", "error");
         },
-      });
+      };
+      if (openingBalanceOnly) {
+        await importOpeningBalanceJournals(file, branchId, openingDate || undefined, callbacks);
+      } else {
+        await importJournalMaster(file, callbacks);
+      }
     } catch (err: any) {
       setRunning(false);
       addToast(err?.message || "Import failed", "error");
@@ -140,16 +160,32 @@ export function JournalImportButton({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
-              Import Journal Register
+              {openingBalanceOnly ? "Import Opening Balance Journals" : "Import Journal Register"}
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
             <p className="text-sm text-gray-600">
-              Upload an Excel workbook (.xlsx / .xls) of the journal
-              register. The importer accepts both Journal and Transaction
-              voucher rows in a single upload.
+              {openingBalanceOnly
+                ? "Upload a Tally Trial Balance. Only leaf opening-balance rows are posted; parent totals are never posted again."
+                : "Upload an Excel workbook (.xlsx / .xls) of the journal register. The importer accepts both Journal and Transaction voucher rows in a single upload."}
             </p>
+
+            {openingBalanceOnly && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="opening-balance-branch">Branch *</Label>
+                  <select id="opening-balance-branch" value={branchId} onChange={(e) => setBranchId(e.target.value)} disabled={running} className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm">
+                    <option value="">Select branch</option>
+                    {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="opening-balance-date">Opening date</Label>
+                  <input id="opening-balance-date" type="date" value={openingDate} onChange={(e) => setOpeningDate(e.target.value)} disabled={running} className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm" />
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="journal-import-file">Excel File *</Label>

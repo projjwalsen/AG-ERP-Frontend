@@ -720,3 +720,49 @@ export async function importJournalMaster(
     throw error;
   }
 }
+
+/** Upload only opening balances from a Tally Trial Balance workbook. */
+export async function importOpeningBalanceJournals(
+  file: File,
+  branchId: string,
+  openingDate: string | undefined,
+  callbacks: JournalImportCallbacks = {}
+): Promise<void> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("branchId", branchId);
+  if (openingDate) form.append("openingDate", openingDate);
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/migration/import/opening-balance-journals`,
+    { method: "POST", body: form, credentials: "include", signal: callbacks.signal }
+  );
+  if (!response.ok || !response.body) {
+    const error = new Error(`Opening-balance import failed (HTTP ${response.status})`);
+    callbacks.onError?.(error);
+    throw error;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let separator = buffer.indexOf("\n\n");
+    while (separator !== -1) {
+      handleStandardImportSseChunk(
+        buffer.slice(0, separator),
+        p => callbacks.onProgress?.(p),
+        r => callbacks.onComplete?.(r),
+        callbacks.onError
+      );
+      buffer = buffer.slice(separator + 2);
+      separator = buffer.indexOf("\n\n");
+    }
+  }
+  if (buffer.trim()) {
+    handleStandardImportSseChunk(buffer, p => callbacks.onProgress?.(p), r => callbacks.onComplete?.(r), callbacks.onError);
+  }
+}

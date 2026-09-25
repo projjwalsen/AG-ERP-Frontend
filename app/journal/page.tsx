@@ -356,6 +356,13 @@ function JournalsTab() {
             variant="outline"
             onCompleted={() => fetchJournals(currentPage)}
           />
+          <JournalImportButton
+            label="Import Opening Balances"
+            variant="outline"
+            openingBalanceOnly
+            branches={branches}
+            onCompleted={() => fetchJournals(currentPage)}
+          />
           <Link href="/journal/new">
             <Button className="gap-2">
               <Plus className="h-4 w-4" />
