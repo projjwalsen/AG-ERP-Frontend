@@ -272,6 +272,8 @@ export interface TrialBalanceRow {
   branchName: string;
   debit: number;
   credit: number;
+  openingDebit: number;
+  openingCredit: number;
   closingDebit: number;
   closingCredit: number;
   closingSigned: number;
