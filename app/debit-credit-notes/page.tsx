@@ -68,7 +68,8 @@ function DebitCreditNotesContent() {
       : "debit";
 
   const [currentTab, setCurrentTab] = React.useState(activeTab);
-  const [searchTerm, setSearchTerm] = React.useState("");
+  const [searchTerm, setSearchTerm] = React.useState(searchParams?.get("search") || "");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState(searchParams?.get("search") || "");
   const [statusFilter, setStatusFilter] = React.useState<DebitCreditNoteStatus | "">((searchParams?.get("status") as DebitCreditNoteStatus) || "");
   const [sourceTypeFilter, setSourceTypeFilter] = React.useState<DebitCreditNoteSourceType | "">(
     initialSourceType === "SALE" || initialSourceType === "PURCHASE" ? initialSourceType : ""
@@ -86,6 +87,13 @@ function DebitCreditNotesContent() {
   const [downloadLoading, setDownloadLoading] = React.useState(false);
 
   const noteType: DebitCreditNoteType = currentTab === "credit" ? "CREDIT_NOTE" : "DEBIT_NOTE";
+
+  React.useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm.trim());
+    }, 300);
+    return () => window.clearTimeout(timeout);
+  }, [searchTerm]);
 
   async function fetchFilterOptions() {
     try {
@@ -111,6 +119,7 @@ function DebitCreditNotesContent() {
         fetchAllDebitCreditNotes({
           page: currentPage,
           limit: 10,
+          search: debouncedSearchTerm || undefined,
           sourceType: sourceTypeFilter || undefined,
           status: statusFilter || undefined,
           type: noteType,
@@ -147,6 +156,7 @@ function DebitCreditNotesContent() {
     if (currentTab === "credit") params.set("tab", "credit");
     if (currentPage > 1) params.set("page", String(currentPage));
     if (statusFilter) params.set("status", statusFilter);
+    if (debouncedSearchTerm) params.set("search", debouncedSearchTerm);
     params.set("type", noteType);
     if (agencyFilter) params.set("agencyId", agencyFilter);
     if (branchFilter) params.set("branchId", branchFilter);
@@ -168,7 +178,7 @@ function DebitCreditNotesContent() {
     void fetchInvoices();
     updateUrl();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canView, noteType, sourceTypeFilter, currentPage, statusFilter, agencyFilter, branchFilter, invoiceFilter]);
+  }, [canView, noteType, sourceTypeFilter, currentPage, debouncedSearchTerm, statusFilter, agencyFilter, branchFilter, invoiceFilter]);
 
   React.useEffect(() => {
     return () => {
@@ -247,21 +257,6 @@ function DebitCreditNotesContent() {
       setDownloadLoading(false);
     }
   };
-
-  const filteredNotes = React.useMemo(() => {
-    if (!searchTerm) return notes;
-    const term = searchTerm.toLowerCase();
-    return notes.filter((note) => {
-      const ref = note.sale?.invoiceNo || note.purchase?.invoiceNo || "";
-      return (
-        note.noteNo?.toLowerCase().includes(term) ||
-        ref.toLowerCase().includes(term) ||
-        note.agency?.name?.toLowerCase().includes(term) ||
-        note.branch?.name?.toLowerCase().includes(term) ||
-        note.particulars.some((particular) => particular.description.toLowerCase().includes(term))
-      );
-    });
-  }, [notes, searchTerm]);
 
   const invoiceOptions = invoices.map<DataSelectOption>((invoice) => ({
     value: invoice.id,
@@ -367,9 +362,9 @@ function DebitCreditNotesContent() {
             ))}
           </CardContent>
         </Card>
-      ) : filteredNotes.length > 0 ? (
+      ) : notes.length > 0 ? (
         <DebitCreditNoteTable
-          notes={filteredNotes}
+          notes={notes}
           pagination={pagination}
           onPageChange={setCurrentPage}
           onViewDetails={handleViewDetails}

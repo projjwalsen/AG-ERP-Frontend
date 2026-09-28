@@ -12,6 +12,7 @@ import {
 export interface GetDebitCreditNotesParams {
   page?: number;
   limit?: number;
+  search?: string;
   status?: DebitCreditNoteStatus;
   sourceType?: DebitCreditNoteSourceType;
   type?: DebitCreditNoteType;
@@ -92,6 +93,7 @@ export const debitCreditNoteApi = {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append("page", String(params.page));
     if (params?.limit) queryParams.append("limit", String(params.limit));
+    if (params?.search) queryParams.append("search", params.search);
     if (params?.status) queryParams.append("status", params.status);
     if (params?.sourceType) queryParams.append("sourceType", params.sourceType);
     if (params?.type) queryParams.append("type", params.type);
