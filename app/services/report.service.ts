@@ -138,6 +138,20 @@ export const reportApi = {
     return apiFetch(url as any);
   },
 
+  /** GET /api/reports/trial-balance/ledger/:ledgerId/transactions */
+  async getTrialBalanceLedgerTransactions(
+    ledgerId: string,
+    params?: { startDate?: string; endDate?: string; page?: number; limit?: number }
+  ): Promise<{ success: boolean; message: string; data?: import("@/app/types/report").TrialBalanceLedgerTransactionsResponse }> {
+    const queryParams = new URLSearchParams();
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    if (params?.page) queryParams.append("page", String(params.page));
+    if (params?.limit) queryParams.append("limit", String(params.limit));
+    const query = queryParams.toString();
+    return apiFetch<import("@/app/types/report").TrialBalanceLedgerTransactionsResponse>(`api/reports/trial-balance/ledger/${encodeURIComponent(ledgerId)}/transactions${query ? `?${query}` : ""}`);
+  },
+
   // ===================================================================
   // EXCEL EXPORTS
   //
