@@ -25,6 +25,8 @@ import {
   ReportFilterValues,
   SummaryCardItem,
 } from "@/components/reports";
+import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
+import { fetchOutstandingReport } from "@/app/store/reportsSlice";
 import { reportApi } from "@/app/services/report.service";
 import {
   OutstandingDetailRow,
@@ -64,11 +66,13 @@ function formatDate(d: string | Date | null | undefined): string {
 // here (BucketsDialog + BucketInvoiceTable) was removed.
 
 export default function OutstandingReportPage() {
+  const dispatch = useAppDispatch();
   const router = useRouter();
   const { addToast } = useToast();
-  const [data, setData] = React.useState<import("@/app/types/report").OutstandingReportResponse | null>(null);
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+
+  const { data, isLoading, error } = useAppSelector(
+    (s) => s.reports.outstanding
+  );
 
   const [outstandingType, setOutstandingType] =
     React.useState<OutstandingType>("AR");
@@ -83,21 +87,17 @@ export default function OutstandingReportPage() {
 
   const load = React.useCallback(
     (overrides?: { type?: OutstandingType; branchId?: string }) => {
-      setIsLoading(true);
-      setError(null);
-      reportApi.getFakeAPARReport(toBackendType(overrides?.type ?? outstandingType))
-        .then((response) => {
-          if (!response.success || !response.data) throw new Error(response.message || "Failed to load report");
-          setData(response.data);
-        })
-        .catch((err: unknown) => {
-          const message = err instanceof Error ? err.message : "Failed to load report";
-          setError(message);
-          addToast(message, "error");
-        })
-        .finally(() => setIsLoading(false));
+      const params = {
+        // Frontend value stays as AR/AP; the slice remaps to
+        // RECEIVABLE/PAYABLE before hitting the backend.
+        type: toBackendType(overrides?.type ?? outstandingType),
+        branchId: overrides?.branchId ?? filters.branchId,
+      };
+      dispatch(fetchOutstandingReport(params))
+        .unwrap()
+        .catch((err: string) => addToast(err || "Failed to load report", "error"));
     },
-    [outstandingType, addToast]
+    [dispatch, outstandingType, filters.branchId, addToast]
   );
 
   React.useEffect(() => {
@@ -164,27 +164,7 @@ export default function OutstandingReportPage() {
   }, [data, isReceivable]);
 
   const agencyRows = data?.rows ?? [];
-  const detailRows: OutstandingDetailRow[] = React.useMemo(() => {
-    if (data?.detailRows?.length) return data.detailRows;
-    return (data?.rows ?? []).flatMap((agency) => BUCKET_COLUMNS.flatMap(({ key }) =>
-      (agency[key]?.invoices ?? []).map((invoice) => ({
-        vendorCode: agency.vendorCode ?? "-",
-        vendorName: agency.agencyName,
-        billNo: invoice.invoiceNo,
-        billDate: invoice.invoiceDate,
-        dueDate: invoice.invoiceDate,
-        billAmount: Number(invoice.grandTotal ?? 0),
-        gstAmount: 0,
-        tds: 0,
-        paidAmount: 0,
-        balanceAmount: Number(invoice.outstandingAmount ?? invoice.grandTotal ?? 0),
-        agingDays: invoice.invoiceAgeDays ?? 0,
-        agingBucket: key,
-        branch: null,
-        remarks: "Pending amount imported from the Tally fixture.",
-      }))
-    ));
-  }, [data]);
+  const detailRows: OutstandingDetailRow[] = data?.detailRows ?? [];
   const tableData = viewMode === "agency" ? agencyRows : detailRows;
   const tableIsEmpty =
     !isLoading && viewMode === "agency"
@@ -469,7 +449,10 @@ export default function OutstandingReportPage() {
         <ReportExportButton
           disabled={!data || tableData.length === 0}
           onExport={() =>
-            reportApi.exportFakeAPARExcel(toBackendType(outstandingType))
+            reportApi.exportOutstandingExcel({
+              branchId: filters.branchId,
+              type: toBackendType(outstandingType),
+            })
           }
         />
       }

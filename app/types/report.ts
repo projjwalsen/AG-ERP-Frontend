@@ -36,6 +36,7 @@ export type GSTRClassification = "B2B" | "B2C";
 export interface ReportPeriod {
   startDate?: string | Date | null;
   endDate?: string | Date | null;
+  label?: string | null;
 }
 
 // =====================================================================
@@ -304,6 +305,8 @@ export interface TrialBalanceNode {
   code?: string;
   periodDebit?: number;
   periodCredit?: number;
+  openingDebit?: number;
+  openingCredit?: number;
   closingDebit?: number;
   closingCredit?: number;
   closingBalance?: number;
@@ -373,6 +376,45 @@ export interface GSTR1ReportResponse {
   branchId?: string | null;
   summary: GSTR1Summary;
   rows: GSTR1Row[];
+  branch?: { name?: string; branchName?: string; gstin?: string; branchGst?: string } | null;
+  b2bSummary?: GSTR1SummaryLine[];
+  creditDebitNoteSummary?: Array<GSTR1SummaryLine & { summaryOnly?: boolean }>;
+  gstrStatus?: GSTR1Status;
+  diagnostics?: {
+    source?: string;
+    voucherLevelRowsAvailable?: boolean;
+    sourceB2BSummary?: GSTR1SummaryLine | null;
+    sourceGrandTotal?: GSTR1SummaryLine | null;
+    creditDebitNotesIncludedInReturn?: boolean;
+  };
+}
+
+export interface GSTR1SummaryLine {
+  agency_id?: string | null;
+  customer_gstin?: string | null;
+  agency_name: string;
+  voucher_count: number;
+  taxable_value: number;
+  igst_rate_amount: number;
+  cgst_rate_amount: number;
+  sgst_rate_amount: number;
+  cess_amount: number;
+  gst_amount: number;
+  invoice_total: number;
+}
+
+export interface GSTR1Status {
+  totalVouchers: number;
+  includedInReturn: number;
+  readyForUpload: number;
+  modifiedAfterExport: number;
+  noActionRequired: number;
+  notRelevant: number;
+  uncertain: number;
+  markedForDeletion: number;
+  conflictsWithMasters: number;
+  filingStatus: string;
+  lastOnlineActivity: string;
 }
 
 export interface GetGSTR1Params {

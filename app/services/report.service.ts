@@ -27,6 +27,33 @@ import {
 } from "@/app/types/report";
 
 export const reportApi = {
+  /** Static Tally-backed report fixtures used by the report preview pages. */
+  async getFakeTrialBalanceReport(): Promise<{ success: boolean; message: string; data?: import("@/app/types/report").TrialBalanceResponse }> {
+    return apiFetch("api/reports/fake-trial-balance");
+  },
+
+  async getFakeAPARReport(
+    type: OutstandingBackendType
+  ): Promise<{ success: boolean; message: string; data?: OutstandingReportResponse }> {
+    return apiFetch<OutstandingReportResponse>(`api/reports/fake-ap-ar?type=${type}`);
+  },
+
+  async getFakeGSTR1Report(): Promise<{ success: boolean; message: string; data?: GSTR1ReportResponse }> {
+    return apiFetch<GSTR1ReportResponse>("api/reports/fake-gstr1");
+  },
+
+  async exportFakeTrialBalanceExcel(): Promise<{ blob: Blob; filename: string }> {
+    return fetchBlob("api/reports/fake-trial-balance?export=true", "trial-balance.xlsx");
+  },
+
+  async exportFakeAPARExcel(type: OutstandingBackendType): Promise<{ blob: Blob; filename: string }> {
+    return fetchBlob(`api/reports/fake-ap-ar?type=${type}&export=TRUE`, "ap-ar.xlsx");
+  },
+
+  async exportFakeGSTR1Excel(): Promise<{ blob: Blob; filename: string }> {
+    return fetchBlob("api/reports/fake-gstr1?export=true", "gstr1.xlsx");
+  },
+
   /**
    * GET /api/reports/outstanding-report?branchId=&type=RECEIVABLE|PAYABLE
    */
