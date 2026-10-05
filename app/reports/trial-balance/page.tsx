@@ -62,7 +62,7 @@ function TrialBalanceContent() {
     setLoading(true);
     setError(null);
     try {
-      const res = await reportApi.getFakeTrialBalanceReport();
+      const res = await reportApi.getsrv1TrialBalanceReport();
       if (res.success && res.data) {
         setData(res.data);
         setExpanded(new Set());
@@ -187,7 +187,7 @@ function TrialBalanceContent() {
   const exportDisabled = !tree.some(hasValues);
   return <div className="mx-auto w-full max-w-[1500px]">
     <ReportLayout title="Trial Balance" description="Period activity and closing balances by accounting group and ledger" generatedAt={data?.generatedAt} onRefresh={() => void fetchReport()} isRefreshing={loading}
-      actions={<ReportExportButton disabled={exportDisabled} onExport={async () => reportApi.exportFakeTrialBalanceExcel()} />}
+      actions={<ReportExportButton disabled={exportDisabled} onExport={async () => reportApi.exportsrv1TrialBalanceExcel()} />}
       summary={data?.summary ? [
         { title: "Total Debit", value: data.summary.totalDebit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
         { title: "Total Credit", value: data.summary.totalCredit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },

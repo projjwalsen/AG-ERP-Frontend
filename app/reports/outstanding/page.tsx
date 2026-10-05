@@ -85,7 +85,7 @@ export default function OutstandingReportPage() {
     (overrides?: { type?: OutstandingType; branchId?: string }) => {
       setIsLoading(true);
       setError(null);
-      reportApi.getFakeAPARReport(toBackendType(overrides?.type ?? outstandingType))
+      reportApi.getsrv1APARReport(toBackendType(overrides?.type ?? outstandingType))
         .then((response) => {
           if (!response.success || !response.data) throw new Error(response.message || "Failed to load report");
           setData(response.data);
@@ -469,7 +469,7 @@ export default function OutstandingReportPage() {
         <ReportExportButton
           disabled={!data || tableData.length === 0}
           onExport={() =>
-            reportApi.exportFakeAPARExcel(toBackendType(outstandingType))
+            reportApi.exportsrv1APARExcel(toBackendType(outstandingType))
           }
         />
       }
