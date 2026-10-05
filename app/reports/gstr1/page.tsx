@@ -42,7 +42,7 @@ export default function GSTR1ReportPage() {
   const load = React.useCallback(() => {
     setIsLoading(true);
     setError(null);
-    reportApi.getFakeGSTR1Report()
+    reportApi.getsrv1GSTR1Report()
       .then((response) => {
         if (!response.success || !response.data) throw new Error(response.message || "Failed to load GSTR-1 report");
         setData(response.data);
@@ -240,7 +240,7 @@ export default function GSTR1ReportPage() {
         <ReportExportButton
           disabled={!data}
           onExport={() =>
-            reportApi.exportFakeGSTR1Excel()
+            reportApi.exportsrv1GSTR1Excel()
           }
         />
       }

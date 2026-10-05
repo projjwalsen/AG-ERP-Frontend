@@ -28,30 +28,30 @@ import {
 
 export const reportApi = {
   /** Static Tally-backed report fixtures used by the report preview pages. */
-  async getFakeTrialBalanceReport(): Promise<{ success: boolean; message: string; data?: import("@/app/types/report").TrialBalanceResponse }> {
-    return apiFetch("api/reports/fake-trial-balance");
+  async getsrv1TrialBalanceReport(): Promise<{ success: boolean; message: string; data?: import("@/app/types/report").TrialBalanceResponse }> {
+    return apiFetch("api/reports/srv1-trial-balance");
   },
 
-  async getFakeAPARReport(
+  async getsrv1APARReport(
     type: OutstandingBackendType
   ): Promise<{ success: boolean; message: string; data?: OutstandingReportResponse }> {
-    return apiFetch<OutstandingReportResponse>(`api/reports/fake-ap-ar?type=${type}`);
+    return apiFetch<OutstandingReportResponse>(`api/reports/srv1-ap-ar?type=${type}`);
   },
 
-  async getFakeGSTR1Report(): Promise<{ success: boolean; message: string; data?: GSTR1ReportResponse }> {
-    return apiFetch<GSTR1ReportResponse>("api/reports/fake-gstr1");
+  async getsrv1GSTR1Report(): Promise<{ success: boolean; message: string; data?: GSTR1ReportResponse }> {
+    return apiFetch<GSTR1ReportResponse>("api/reports/srv1-gstr1");
   },
 
-  async exportFakeTrialBalanceExcel(): Promise<{ blob: Blob; filename: string }> {
-    return fetchBlob("api/reports/fake-trial-balance?export=true", "trial-balance.xlsx");
+  async exportsrv1TrialBalanceExcel(): Promise<{ blob: Blob; filename: string }> {
+    return fetchBlob("api/reports/srv1-trial-balance?export=true", "trial-balance.xlsx");
   },
 
-  async exportFakeAPARExcel(type: OutstandingBackendType): Promise<{ blob: Blob; filename: string }> {
-    return fetchBlob(`api/reports/fake-ap-ar?type=${type}&export=TRUE`, "ap-ar.xlsx");
+  async exportsrv1APARExcel(type: OutstandingBackendType): Promise<{ blob: Blob; filename: string }> {
+    return fetchBlob(`api/reports/srv1-ap-ar?type=${type}&export=TRUE`, "ap-ar.xlsx");
   },
 
-  async exportFakeGSTR1Excel(): Promise<{ blob: Blob; filename: string }> {
-    return fetchBlob("api/reports/fake-gstr1?export=true", "gstr1.xlsx");
+  async exportsrv1GSTR1Excel(): Promise<{ blob: Blob; filename: string }> {
+    return fetchBlob("api/reports/srv1-gstr1?export=true", "gstr1.xlsx");
   },
 
   /**
