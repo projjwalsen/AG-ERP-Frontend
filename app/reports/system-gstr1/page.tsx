@@ -20,8 +20,10 @@ import {
   ReportFilterValues,
   SummaryCardItem,
 } from "@/components/reports";
+import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
+import { fetchGSTR1Report } from "@/app/store/reportsSlice";
 import { reportApi } from "@/app/services/report.service";
-import { GSTR1ReportResponse, GSTR1Row } from "@/app/types/report";
+import { GSTR1Row } from "@/app/types/report";
 import { formatCurrency } from "@/lib/utils";
 
 /**
@@ -32,28 +34,26 @@ import { formatCurrency } from "@/lib/utils";
  * summary block the backend returns.
  */
 export default function GSTR1ReportPage() {
+  const dispatch = useAppDispatch();
   const { addToast } = useToast();
-  const [data, setData] = React.useState<GSTR1ReportResponse | null>(null);
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+
+  const { data, isLoading, error } = useAppSelector((s) => s.reports.gstr1);
 
   const [filters, setFilters] = React.useState<ReportFilterValues>({});
 
   const load = React.useCallback(() => {
-    setIsLoading(true);
-    setError(null);
-    reportApi.getFakeGSTR1Report()
-      .then((response) => {
-        if (!response.success || !response.data) throw new Error(response.message || "Failed to load GSTR-1 report");
-        setData(response.data);
+    dispatch(
+      fetchGSTR1Report({
+        branchId: filters.branchId,
+        startDate: filters.startDate,
+        endDate: filters.endDate,
       })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : "Failed to load GSTR-1 report";
-        setError(message);
-        addToast(message, "error");
-      })
-      .finally(() => setIsLoading(false));
-  }, [addToast]);
+    )
+      .unwrap()
+      .catch((err: string) =>
+        addToast(err || "Failed to load GSTR-1 report", "error")
+      );
+  }, [dispatch, filters.branchId, filters.startDate, filters.endDate, addToast]);
 
   React.useEffect(() => {
     load();
@@ -111,11 +111,6 @@ export default function GSTR1ReportPage() {
   }, [data]);
 
   const rows = data?.rows ?? [];
-  const summaryRows = [
-    ...(data?.b2bSummary ?? []),
-    ...(data?.creditDebitNoteSummary ?? []),
-  ];
-  const status = data?.gstrStatus;
 
   const columns: ColumnDef<GSTR1Row>[] = React.useMemo(
     () => [
@@ -238,9 +233,13 @@ export default function GSTR1ReportPage() {
       isRefreshing={isLoading}
       actions={
         <ReportExportButton
-          disabled={!data}
+          disabled={rows.length === 0}
           onExport={() =>
-            reportApi.exportFakeGSTR1Excel()
+            reportApi.exportGSTR1Excel({
+              branchId: filters.branchId,
+              startDate: filters.startDate,
+              endDate: filters.endDate,
+            })
           }
         />
       }
@@ -258,47 +257,15 @@ export default function GSTR1ReportPage() {
         />
       }
       isLoading={isLoading}
-      isEmpty={!isLoading && !data}
-      emptyMessage="No GSTR-1 data"
-      emptyDescription="Try refreshing the report."
+      isEmpty={!isLoading && rows.length === 0}
+      emptyMessage="No invoices for the selected period"
+      emptyDescription="Try widening the date range or selecting a different branch."
     >
-      <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Company</p>
-            <p className="mt-1 text-lg font-semibold text-gray-900">{data?.branch?.branchName ?? data?.branch?.name ?? "-"}</p>
-            <p className="mt-1 font-mono text-xs text-gray-500">GSTIN: {data?.branch?.gstin ?? data?.branch?.branchGst ?? "-"}</p>
-          </div>
-          <div className="text-left sm:text-right">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Reporting period</p>
-            <p className="mt-1 font-medium text-gray-900">{data?.period?.label ?? "-"}</p>
-            <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">{status?.filingStatus ?? "Not Filed"}</span>
-          </div>
-        </div>
-      </div>
-
-      {status ? <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {[
-          ["Total vouchers", status.totalVouchers],
-          ["Included", status.includedInReturn],
-          ["Ready to upload", status.readyForUpload],
-          ["Needs correction", status.uncertain],
-          ["Conflicts", status.conflictsWithMasters],
-        ].map(([label, value]) => <div key={String(label)} className="rounded-xl border border-gray-200 bg-white p-3"><p className="text-xs text-gray-500">{label}</p><p className="mt-1 text-lg font-semibold tabular-nums text-gray-900">{value}</p></div>)}
-      </div> : null}
-
-      {summaryRows.length ? <div className="mb-5 overflow-x-auto rounded-xl border border-gray-200 bg-white">
-        <div className="border-b px-4 py-3"><p className="font-semibold text-gray-900">Return summary</p><p className="text-xs text-gray-500">Summary-level data from the Tally GSTR-1 export</p></div>
-        <table className="w-full min-w-[980px] text-sm"><thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500"><tr><th className="px-4 py-3 text-left">Section</th><th className="px-4 py-3 text-right">Vouchers</th><th className="px-4 py-3 text-right">Taxable</th><th className="px-4 py-3 text-right">IGST</th><th className="px-4 py-3 text-right">CGST</th><th className="px-4 py-3 text-right">SGST</th><th className="px-4 py-3 text-right">GST</th><th className="px-4 py-3 text-right">Invoice value</th></tr></thead><tbody className="divide-y divide-gray-100">{summaryRows.map((row, index) => <tr key={`${row.agency_name}-${index}`}><td className="px-4 py-3 font-medium text-gray-900">{row.agency_name || "Credit / debit notes"}</td><td className="px-4 py-3 text-right tabular-nums">{row.voucher_count}</td><td className="px-4 py-3 text-right tabular-nums">{formatCurrency(row.taxable_value)}</td><td className="px-4 py-3 text-right tabular-nums">{formatCurrency(row.igst_rate_amount)}</td><td className="px-4 py-3 text-right tabular-nums">{formatCurrency(row.cgst_rate_amount)}</td><td className="px-4 py-3 text-right tabular-nums">{formatCurrency(row.sgst_rate_amount)}</td><td className="px-4 py-3 text-right tabular-nums">{formatCurrency(row.gst_amount)}</td><td className="px-4 py-3 text-right font-semibold tabular-nums">{formatCurrency(row.invoice_total)}</td></tr>)}</tbody></table>
-      </div> : null}
-
-      
-
-      {/* <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+      <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
         <Layers className="h-3.5 w-3.5" />
         Showing {rows.length} invoice{rows.length === 1 ? "" : "s"}
       </div>
-      <ReportTable columns={columns} data={rows} isLoading={isLoading} /> */}
+      <ReportTable columns={columns} data={rows} isLoading={isLoading} />
     </ReportLayout>
   );
 }

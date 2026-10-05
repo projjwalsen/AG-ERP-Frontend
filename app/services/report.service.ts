@@ -27,6 +27,33 @@ import {
 } from "@/app/types/report";
 
 export const reportApi = {
+  /** Static Tally-backed report fixtures used by the report preview pages. */
+  async getFakeTrialBalanceReport(): Promise<{ success: boolean; message: string; data?: import("@/app/types/report").TrialBalanceResponse }> {
+    return apiFetch("api/reports/fake-trial-balance");
+  },
+
+  async getFakeAPARReport(
+    type: OutstandingBackendType
+  ): Promise<{ success: boolean; message: string; data?: OutstandingReportResponse }> {
+    return apiFetch<OutstandingReportResponse>(`api/reports/fake-ap-ar?type=${type}`);
+  },
+
+  async getFakeGSTR1Report(): Promise<{ success: boolean; message: string; data?: GSTR1ReportResponse }> {
+    return apiFetch<GSTR1ReportResponse>("api/reports/fake-gstr1");
+  },
+
+  async exportFakeTrialBalanceExcel(): Promise<{ blob: Blob; filename: string }> {
+    return fetchBlob("api/reports/fake-trial-balance?export=true", "trial-balance.xlsx");
+  },
+
+  async exportFakeAPARExcel(type: OutstandingBackendType): Promise<{ blob: Blob; filename: string }> {
+    return fetchBlob(`api/reports/fake-ap-ar?type=${type}&export=TRUE`, "ap-ar.xlsx");
+  },
+
+  async exportFakeGSTR1Excel(): Promise<{ blob: Blob; filename: string }> {
+    return fetchBlob("api/reports/fake-gstr1?export=true", "gstr1.xlsx");
+  },
+
   /**
    * GET /api/reports/outstanding-report?branchId=&type=RECEIVABLE|PAYABLE
    */
@@ -136,6 +163,20 @@ export const reportApi = {
     const query = queryParams.toString();
     const url = query ? `api/reports/trial-balance?${query}` : `api/reports/trial-balance`;
     return apiFetch(url as any);
+  },
+
+  /** GET /api/reports/trial-balance/ledger/:ledgerId/transactions */
+  async getTrialBalanceLedgerTransactions(
+    ledgerId: string,
+    params?: { startDate?: string; endDate?: string; page?: number; limit?: number }
+  ): Promise<{ success: boolean; message: string; data?: import("@/app/types/report").TrialBalanceLedgerTransactionsResponse }> {
+    const queryParams = new URLSearchParams();
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    if (params?.page) queryParams.append("page", String(params.page));
+    if (params?.limit) queryParams.append("limit", String(params.limit));
+    const query = queryParams.toString();
+    return apiFetch<import("@/app/types/report").TrialBalanceLedgerTransactionsResponse>(`api/reports/trial-balance/ledger/${encodeURIComponent(ledgerId)}/transactions${query ? `?${query}` : ""}`);
   },
 
   // ===================================================================

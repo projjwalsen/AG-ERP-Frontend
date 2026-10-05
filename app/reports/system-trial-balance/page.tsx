@@ -62,7 +62,7 @@ function TrialBalanceContent() {
     setLoading(true);
     setError(null);
     try {
-      const res = await reportApi.getFakeTrialBalanceReport();
+      const res = await reportApi.getTrialBalanceReport({ branchId, startDate, endDate, includeZero: false });
       if (res.success && res.data) {
         setData(res.data);
         setExpanded(new Set());
@@ -145,8 +145,6 @@ function TrialBalanceContent() {
       rowType: "ledger",
       periodDebit: row.debit,
       periodCredit: row.credit,
-      openingDebit: row.openingDebit,
-      openingCredit: row.openingCredit,
       closingDebit: row.closingDebit,
       closingCredit: row.closingCredit,
       closingBalance: row.closingSigned ?? row.closingDebit - row.closingCredit,
@@ -158,7 +156,7 @@ function TrialBalanceContent() {
     } as TrialBalanceNode);
     return groups;
   }, []);
-  const hasValues = (node: TrialBalanceNode) => [node.openingDebit, node.openingCredit, node.closingDebit, node.closingCredit, node.closingBalance].some((v) => Number(v ?? 0) !== 0);
+  const hasValues = (node: TrialBalanceNode) => [node.periodDebit, node.periodCredit, node.closingDebit, node.closingCredit, node.closingBalance].some((v) => Number(v ?? 0) !== 0);
   const ledgerName = (node: TrialBalanceNode) => node.name?.trim() || (node as any).ledgerName || (node as any).ledger?.name || (node as any).account || node.code || node.ledgerId || node.id.replace(/^ledger:/, "") || "Unnamed ledger";
 
   const renderNodes = (nodes: TrialBalanceNode[], depth = 0): React.ReactNode => nodes.map((node) => {
@@ -173,10 +171,8 @@ function TrialBalanceContent() {
           {!isGroup && node.code ? <span className="ml-2 font-mono text-xs text-gray-400">{node.code}</span> : null}
           {!isGroup && (node.branch || node.branchId) ? <span className="ml-2 text-xs text-gray-400">{displayName(node.branch) !== "-" ? displayName(node.branch) : branches.find((branch) => branch.id === node.branchId)?.name ?? ""}</span> : null}
         </td>
-        <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(node.openingDebit ?? 0)}</td>
-        <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(node.openingCredit ?? 0)}</td>
-        <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(node.closingDebit ?? 0)}</td>
-        <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(node.closingCredit ?? 0)}</td>
+        <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(node.periodDebit ?? 0)}</td>
+        <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(node.periodCredit ?? 0)}</td>
         <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(node.closingBalance ?? ((node.closingDebit ?? 0) - (node.closingCredit ?? 0)))}</td>
         <td className="px-4 py-3 text-center">{node.closingBalanceType ?? ((node.closingDebit ?? 0) > 0 ? "Dr" : (node.closingCredit ?? 0) > 0 ? "Cr" : "-")}</td>
       </tr>
@@ -187,7 +183,7 @@ function TrialBalanceContent() {
   const exportDisabled = !tree.some(hasValues);
   return <div className="mx-auto w-full max-w-[1500px]">
     <ReportLayout title="Trial Balance" description="Period activity and closing balances by accounting group and ledger" generatedAt={data?.generatedAt} onRefresh={() => void fetchReport()} isRefreshing={loading}
-      actions={<ReportExportButton disabled={exportDisabled} onExport={async () => reportApi.exportFakeTrialBalanceExcel()} />}
+      actions={<ReportExportButton disabled={exportDisabled} onExport={async () => reportApi.exportTrialBalanceExcel({ branchId, startDate, endDate })} />}
       summary={data?.summary ? [
         { title: "Total Debit", value: data.summary.totalDebit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
         { title: "Total Credit", value: data.summary.totalCredit, hint: "", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" },
@@ -198,7 +194,7 @@ function TrialBalanceContent() {
       {error && !loading ? <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error} <button className="ml-2 underline" onClick={() => void fetchReport()}>Retry</button></div> : null}
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
         <table className="w-full min-w-[760px] text-sm">
-          <thead className="border-b bg-gray-100 text-xs uppercase tracking-wide text-gray-600"><tr><th className="px-4 py-3 text-left">Account</th><th className="px-4 py-3 text-right">Opening debit</th><th className="px-4 py-3 text-right">Opening credit</th><th className="px-4 py-3 text-right">Closing debit</th><th className="px-4 py-3 text-right">Closing credit</th><th className="px-4 py-3 text-right">Closing balance</th><th className="px-4 py-3 text-center">Dr/Cr</th></tr></thead>
+          <thead className="border-b bg-gray-100 text-xs uppercase tracking-wide text-gray-600"><tr><th className="px-4 py-3 text-left">Account</th><th className="px-4 py-3 text-right">Debit</th><th className="px-4 py-3 text-right">Credit</th><th className="px-4 py-3 text-right">Closing balance</th><th className="px-4 py-3 text-center">Dr/Cr</th></tr></thead>
           <tbody className="divide-y divide-gray-100">{loading ? <tr><td colSpan={5} className="px-4 py-12 text-center text-gray-500"><Loader2 className="mr-2 inline animate-spin" size={16} />Loading trial balance…</td></tr> : renderNodes(tree)}</tbody>
         </table>
       </div>

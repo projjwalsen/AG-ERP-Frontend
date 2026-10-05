@@ -36,6 +36,7 @@ export type GSTRClassification = "B2B" | "B2C";
 export interface ReportPeriod {
   startDate?: string | Date | null;
   endDate?: string | Date | null;
+  label?: string | null;
 }
 
 // =====================================================================
@@ -260,6 +261,7 @@ export interface GSTR1Row {
 // =====================================================================
 
 export interface TrialBalanceRow {
+  id?: string;
   srNo: number;
   ledgerId: string;
   ledgerCode: string;
@@ -268,8 +270,11 @@ export interface TrialBalanceRow {
   groupId: string;
   ledgerCategory: string;
   ledgerNature: string;
-  branchId: string;
-  branchName: string;
+  branchId?: string;
+  branch?: { id?: string; name?: string; code?: string } | string | null;
+  branchName?: string;
+  agencyId?: string;
+  agency?: { id?: string; name?: string } | string | null;
   debit: number;
   credit: number;
   openingDebit: number;
@@ -291,6 +296,27 @@ export interface TrialBalanceSummary {
   isBalanced: boolean;
 }
 
+export interface TrialBalanceNode {
+  id: string;
+  name: string;
+  rowType: string;
+  children?: TrialBalanceNode[];
+  ledgerId?: string;
+  code?: string;
+  periodDebit?: number;
+  periodCredit?: number;
+  openingDebit?: number;
+  openingCredit?: number;
+  closingDebit?: number;
+  closingCredit?: number;
+  closingBalance?: number;
+  closingBalanceType?: string;
+  branchId?: string;
+  branch?: { id?: string; name?: string; code?: string } | string | null;
+  agencyId?: string;
+  agency?: { id?: string; name?: string } | string | null;
+}
+
 export interface TrialBalanceResponse {
   reportName: string;
   generatedAt: string | Date;
@@ -298,7 +324,37 @@ export interface TrialBalanceResponse {
   branch?: { id: string; name: string; code?: string } | null;
   period: ReportPeriod;
   summary: TrialBalanceSummary;
-  rows: TrialBalanceRow[];
+  tree?: TrialBalanceNode[];
+  rows?: TrialBalanceRow[];
+}
+
+export interface TrialBalanceTransaction {
+  date?: string | Date;
+  voucherId?: string | null;
+  voucherNo?: string | null;
+  voucherType?: string | null;
+  narration?: string | null;
+  particular?: string;
+  debit?: number;
+  credit?: number;
+  paymentMode?: string;
+  paymentType?: string;
+  paymentThrough?: string;
+  transactionNo?: string;
+  invoiceNo?: string;
+  counterLedgers?: Array<string | { name?: string }>;
+  runningBalance?: number;
+  balance?: number;
+  balanceType?: string;
+  branch?: string | { name?: string };
+  sourceDocument?: string | { name?: string };
+}
+
+export interface TrialBalanceLedgerTransactionsResponse {
+  transactions?: TrialBalanceTransaction[];
+  rows?: TrialBalanceTransaction[];
+  pagination?: { page: number; totalPages: number; totalEntries: number; limit: number };
+  [key: string]: unknown;
 }
 
 export interface GSTR1Summary {
@@ -320,6 +376,45 @@ export interface GSTR1ReportResponse {
   branchId?: string | null;
   summary: GSTR1Summary;
   rows: GSTR1Row[];
+  branch?: { name?: string; branchName?: string; gstin?: string; branchGst?: string } | null;
+  b2bSummary?: GSTR1SummaryLine[];
+  creditDebitNoteSummary?: Array<GSTR1SummaryLine & { summaryOnly?: boolean }>;
+  gstrStatus?: GSTR1Status;
+  diagnostics?: {
+    source?: string;
+    voucherLevelRowsAvailable?: boolean;
+    sourceB2BSummary?: GSTR1SummaryLine | null;
+    sourceGrandTotal?: GSTR1SummaryLine | null;
+    creditDebitNotesIncludedInReturn?: boolean;
+  };
+}
+
+export interface GSTR1SummaryLine {
+  agency_id?: string | null;
+  customer_gstin?: string | null;
+  agency_name: string;
+  voucher_count: number;
+  taxable_value: number;
+  igst_rate_amount: number;
+  cgst_rate_amount: number;
+  sgst_rate_amount: number;
+  cess_amount: number;
+  gst_amount: number;
+  invoice_total: number;
+}
+
+export interface GSTR1Status {
+  totalVouchers: number;
+  includedInReturn: number;
+  readyForUpload: number;
+  modifiedAfterExport: number;
+  noActionRequired: number;
+  notRelevant: number;
+  uncertain: number;
+  markedForDeletion: number;
+  conflictsWithMasters: number;
+  filingStatus: string;
+  lastOnlineActivity: string;
 }
 
 export interface GetGSTR1Params {
