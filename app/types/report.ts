@@ -13,6 +13,21 @@ import type { Branch } from "./branch";
 // =====================================================================
 
 export type OutstandingType = "AR" | "AP";
+
+export type FinancialStatementType = "PROFIT_AND_LOSS" | "BALANCE_SHEET";
+
+export interface FinancialStatementReport {
+  statementType: FinancialStatementType;
+  reportName: string;
+  company: string;
+  period: string;
+  companyDetails: {
+    address: string[];
+    identifier: string;
+    email: string;
+  };
+  rows: unknown[][];
+}
 /**
  * Backend's wire-level type. The frontend keeps the AR/AP union for
  * tab labels, but the GET endpoint expects one of these long-form

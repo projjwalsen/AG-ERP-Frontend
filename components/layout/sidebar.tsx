@@ -9,7 +9,7 @@ import {
   ShoppingCart, FileText, History, Settings, ChevronLeft, Shield,
   Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu, CreditCard,
   ChevronRight, BookOpen, Wallet, BarChart3, AlertTriangle, Receipt,
-  Calculator, Factory, ClipboardList, ShieldCheck, ArrowLeftRight,
+  Calculator, Factory, ClipboardList, ShieldCheck, ArrowLeftRight, Scale,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -257,6 +257,8 @@ const buildSidebarItems = (): SidebarItem[] => [
     module: null,
     children: [
       { title: "AP/AR report", href: "/reports/outstanding", icon: FileText },
+      { title: "Balance Sheet", href: "/reports/balance-sheet", icon: Scale },
+      { title: "Profit & Loss", href: "/reports/profit-and-loss", icon: BarChart3 },
       { title: "Branch Day Book", href: "/reports/day-book", icon: BookOpen },
       { title: "GSTR-1 Report", href: "/reports/gstr1", icon: Receipt },
       { title: "GST Suspense Log", href: "/reports/gst-suspense", icon: AlertTriangle },
