@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import {
-  BookOpen, Plus, Search, Edit, Eye, MoreHorizontal, RefreshCw,
+  BookOpen, Plus, Search, Edit, Eye, MoreHorizontal, RefreshCw, Trash2,
   Tag, FileText, Clock, FolderPlus,
 } from "lucide-react";
 import Link from "next/link";
@@ -160,20 +160,105 @@ function JournalContent() {
 function JournalCategoriesTab() {
   const { addToast } = useToast();
   const [categories, setCategories] = React.useState<JournalCategory[]>([]);
+  const [heads, setHeads] = React.useState<JournalHead[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [categorySearch, setCategorySearch] = React.useState("");
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  const [editing, setEditing] = React.useState<JournalCategory | null>(null);
+  const [editName, setEditName] = React.useState("");
+  const [editHeadId, setEditHeadId] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
 
   const loadCategories = React.useCallback(async () => {
     setLoading(true);
     try {
-      const response = await journalCategoryApi.list({ isActive: true });
+      const response = await journalCategoryApi.list({ search: categorySearch.trim() || undefined, isActive: true });
       if (response.success) setCategories(response.data?.categories ?? []);
       else addToast(response.message || "Failed to load categories", "error");
     } catch (error: any) {
       addToast(error?.message || "Failed to load categories", "error");
     } finally { setLoading(false); }
+  }, [addToast, categorySearch]);
+
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => { void loadCategories(); }, 250);
+    return () => window.clearTimeout(timer);
+  }, [loadCategories]);
+
+  React.useEffect(() => {
+    journalHeadApi.list({ headType: "SUBHEAD", isActive: true })
+      .then((response) => {
+        if (response.success) setHeads(response.data?.journalHeads ?? []);
+        else addToast(response.message || "Failed to load journal subheads", "error");
+      })
+      .catch((error: any) => addToast(error?.message || "Failed to load journal subheads", "error"));
   }, [addToast]);
 
-  React.useEffect(() => { loadCategories(); }, [loadCategories]);
+  const openEdit = (category: JournalCategory) => {
+    setEditing(category);
+    setEditName(category.name);
+    setEditHeadId(category.journalHeadId ?? category.journalHead?.id ?? "");
+  };
+
+  const saveEdit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const name = editName.trim();
+    if (!name) {
+      addToast("Category name is required", "error");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await journalCategoryApi.update(editing!.id, {
+        name,
+        journalHeadId: editHeadId || null,
+      });
+      if (!response.success) {
+        addToast(response.message || "Failed to update category", "error");
+        return;
+      }
+      addToast("Journal category updated successfully", "success");
+      setEditing(null);
+      await loadCategories();
+    } catch (error: any) {
+      addToast(error?.message || "Failed to update category", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteCategory = async (category: JournalCategory) => {
+    if (!window.confirm(`Delete category "${category.name}"? Journals using it will be unlinked, but their accounting entries will remain.`)) return;
+
+    setDeletingId(category.id);
+    try {
+      const response = await journalCategoryApi.remove(category.id);
+      if (!response.success) {
+        addToast(response.message || "Failed to delete category", "error");
+        return;
+      }
+      addToast(response.message || "Journal category deleted successfully", "success");
+      await loadCategories();
+    } catch (error: any) {
+      addToast(error?.message || "Failed to delete category", "error");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const availableHeads = React.useMemo(() => {
+    if (editing?.journalHead && !heads.some((head) => head.id === editing.journalHead?.id)) {
+      return [...heads, editing.journalHead];
+    }
+    return heads;
+  }, [editing, heads]);
+
+  const headOptions: DataSelectOption[] = availableHeads.map((head) => ({
+    value: head.id,
+    label: getJournalHeadPath(head, availableHeads),
+    badge: head.type ?? undefined,
+  }));
 
   return (
     <div className="space-y-6">
@@ -186,6 +271,16 @@ function JournalCategoriesTab() {
           <Button className="gap-2"><Plus className="h-4 w-4" />Add Category</Button>
         </Link>
       </div>
+      <div className="relative max-w-xl">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <Input
+          value={categorySearch}
+          onChange={(event) => setCategorySearch(event.target.value)}
+          placeholder="Search categories or linked subheads..."
+          className="pl-9"
+          aria-label="Search journal categories"
+        />
+      </div>
       <Card>
         <CardContent className="p-0">
           {loading ? <div className="p-6 text-sm text-gray-500">Loading categories...</div> : categories.length === 0 ? (
@@ -195,16 +290,64 @@ function JournalCategoriesTab() {
               <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Category</th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Linked Subhead</th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Status</th>
+              <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Actions</th>
             </tr></thead><tbody className="divide-y divide-gray-100">
               {categories.map((category) => <tr key={category.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">{category.name}</td>
                 <td className="px-4 py-3 text-sm text-gray-600">{category.journalHead?.name || "—"}</td>
                 <td className="px-4 py-3"><Badge variant="success" className="bg-green-100 text-green-700">Active</Badge></td>
+                <td className="px-4 py-3 text-right">
+                  <Button variant="ghost" size="sm" className="gap-2" onClick={() => openEdit(category)}>
+                    <Edit className="h-4 w-4" />Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2 text-red-600 hover:text-red-700"
+                    onClick={() => void deleteCategory(category)}
+                    disabled={deletingId === category.id}
+                  >
+                    <Trash2 className="h-4 w-4" />{deletingId === category.id ? "Deleting..." : "Delete"}
+                  </Button>
+                </td>
               </tr>)}
             </tbody></table></div>
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={Boolean(editing)} onOpenChange={(open) => { if (!open && !saving) setEditing(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit journal category</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={saveEdit} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="edit-category-name">Category name</Label>
+              <Input id="edit-category-name" value={editName} onChange={(event) => setEditName(event.target.value)} disabled={saving} autoFocus />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-category-head">Journal subhead</Label>
+              <DataSelect
+                id="edit-category-head"
+                value={editHeadId}
+                onChange={setEditHeadId}
+                options={headOptions}
+                placeholder="Select journal subhead"
+                searchable
+                clearable
+                disablePortal
+                panelClassName="w-full"
+                disabled={saving}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditing(null)} disabled={saving}>Cancel</Button>
+              <Button type="submit" loading={saving}>Save changes</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

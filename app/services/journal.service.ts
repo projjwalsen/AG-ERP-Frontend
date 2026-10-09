@@ -130,6 +130,12 @@ export const journalCategoryApi = {
   async create(payload: JournalCategoryPayload) {
     return apiFetch<{ category: JournalCategory }>("/api/journal/category/create", { method: "POST", body: payload });
   },
+  async update(categoryId: string, payload: Partial<JournalCategoryPayload>) {
+    return apiFetch<{ category: JournalCategory }>(`/api/journal/category/${categoryId}`, { method: "PUT", body: payload });
+  },
+  async remove(categoryId: string) {
+    return apiFetch<{ category: JournalCategory }>(`/api/journal/category/${categoryId}`, { method: "DELETE" });
+  },
 };
 
 export const journalApi = {

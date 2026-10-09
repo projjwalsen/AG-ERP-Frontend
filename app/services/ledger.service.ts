@@ -161,7 +161,6 @@ export const ledgerApi = {
           };
         }
       }
-
       const list = Array.isArray(raw.data) ? raw.data : [];
       return {
         success: true,

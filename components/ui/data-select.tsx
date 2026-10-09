@@ -232,17 +232,16 @@ export const DataSelect = React.forwardRef<HTMLButtonElement, DataSelectProps>(
         tabIndex={-1}
         onKeyDown={handleListKeyDown}
         style={{
-          position: "fixed",
-          top: panelPos?.top ?? 0,
-          left: panelPos?.left ?? 0,
-          width: panelMinWidth
-            ? Math.max(panelPos?.width ?? 0, panelMinWidth)
-            : panelPos?.width ?? 0,
-          // disablePortal keeps the panel in the React tree of the trigger
-          // (so it isn't intercepted by an ancestor Radix dialog), but it
-          // still uses fixed positioning so it can escape the dialog's
-          // overflow-y-auto clipping. Use z-50 to stay above the dialog
-          // overlay (which is itself z-50 in its own portal).
+          position: disablePortal ? "absolute" : "fixed",
+          top: disablePortal ? "calc(100% + 4px)" : (panelPos?.top ?? 0),
+          left: disablePortal ? 0 : (panelPos?.left ?? 0),
+          width: disablePortal
+            ? "100%"
+            : panelMinWidth
+              ? Math.max(panelPos?.width ?? 0, panelMinWidth)
+              : panelPos?.width ?? 0,
+          // Inline panels use absolute positioning so they align with the
+          // trigger inside dialogs. Portaled panels use fixed positioning.
           zIndex: disablePortal ? 60 : 9999,
         }}
         className={cn(
