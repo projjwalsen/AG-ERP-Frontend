@@ -92,7 +92,7 @@ export function JournalImportButton({
       return;
     }
     setRunning(true);
-    setProgress({ total: 0, processed: 0, success: 0, failed: 0, percentage: 0, errors: [] });
+    setProgress({ total: 0, processed: 0, success: 0, failed: 0, skipped: 0, percentage: 0, errors: [] });
     try {
       const callbacks: JournalImportCallbacks = {
         onProgress: (p) => setProgress(p),
@@ -100,8 +100,8 @@ export function JournalImportButton({
           setProgress(r);
           addToast(
             r.failed > 0
-              ? `Imported ${r.success}/${r.total} (${r.failed} failed)`
-              : `Imported ${r.success} rows successfully`,
+              ? `Imported ${r.success}/${r.total} (${r.failed} failed, ${r.skipped ?? 0} skipped)`
+              : `Imported ${r.success} rows successfully (${r.skipped ?? 0} skipped)`,
             r.failed > 0 ? "error" : "success"
           );
           onCompleted?.();
@@ -137,6 +137,7 @@ export function JournalImportButton({
   const processed = progress?.processed ?? 0;
   const successCount = progress?.success ?? 0;
   const failedCount = progress?.failed ?? 0;
+  const skippedCount = progress?.skipped ?? 0;
 
   return (
     <>
@@ -250,7 +251,7 @@ export function JournalImportButton({
                     }}
                   />
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="grid grid-cols-4 gap-2 text-center text-xs">
                   <div className="rounded-md bg-emerald-50 px-2 py-1.5">
                     <p className="text-emerald-700 font-semibold">{successCount}</p>
                     <p className="text-[11px] text-emerald-600">Imported</p>
@@ -258,6 +259,10 @@ export function JournalImportButton({
                   <div className="rounded-md bg-rose-50 px-2 py-1.5">
                     <p className="text-rose-700 font-semibold">{failedCount}</p>
                     <p className="text-[11px] text-rose-600">Failed</p>
+                  </div>
+                  <div className="rounded-md bg-amber-50 px-2 py-1.5">
+                    <p className="text-amber-700 font-semibold">{skippedCount}</p>
+                    <p className="text-[11px] text-amber-600">Skipped</p>
                   </div>
                   <div className="rounded-md bg-gray-100 px-2 py-1.5">
                     <p className="text-gray-700 font-semibold">{total}</p>

@@ -389,6 +389,7 @@ function handleStandardImportSseChunk(
     processed: number;
     success: number;
     failed: number;
+    skipped?: number;
     percentage: number;
     errors: any[];
   }) => void,
@@ -397,6 +398,7 @@ function handleStandardImportSseChunk(
     processed: number;
     success: number;
     failed: number;
+    skipped?: number;
     /** Optional — some callers (e.g. journal) want percentage on the
      * terminal result too. Defaulted to 100 by the wrapper. */
     percentage?: number;
@@ -434,6 +436,7 @@ function handleStandardImportSseChunk(
       processed: Number(result?.processed ?? 0),
       success: Number(result?.success ?? 0),
       failed: Number(result?.failed ?? 0),
+      skipped: Number(result?.skipped ?? 0),
       percentage: Number(result?.percentage ?? 100),
       errors: Array.isArray(result?.errors) ? result.errors : [],
       errorReportUrl: typeof result?.errorReportUrl === "string" ? result.errorReportUrl : undefined,
@@ -444,6 +447,7 @@ function handleStandardImportSseChunk(
       processed: Number(payload?.processed ?? 0),
       success: Number(payload?.success ?? 0),
       failed: Number(payload?.failed ?? 0),
+      skipped: Number(payload?.skipped ?? 0),
       percentage: Number(payload?.percentage ?? 0),
       errors: Array.isArray(payload?.errors) ? payload.errors : [],
     });
@@ -594,6 +598,7 @@ export interface JournalImportProgress {
   processed: number;
   success: number;
   failed: number;
+  skipped?: number;
   /** Optional — intermediate SSE chunks always carry it, but the
    * final event may omit it. */
   percentage?: number;
@@ -609,6 +614,7 @@ export interface JournalImportResult {
   processed: number;
   success: number;
   failed: number;
+  skipped?: number;
   /** Optional — included when the backend reports it on the completed
    * event. The shared SSE parser defaults this to 100. */
   percentage?: number;

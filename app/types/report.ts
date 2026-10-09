@@ -99,11 +99,33 @@ export interface OutstandingRow {
   agencyId: string;
   agencyName: string;
   vendorCode: string | null;
+  branchName?: string | null;
+  createdAt?: string | Date | null;
+  agingDays?: number;
   totalOutstanding: number;
   bucket_0_60_days: OutstandingBucket;
   bucket_61_120_days: OutstandingBucket;
   bucket_121_180_days: OutstandingBucket;
   bucket_180_plus_days: OutstandingBucket;
+}
+
+export interface OutstandingLedgerRow {
+  account: string;
+  openingBalance: number | null;
+  transactionDebit: number | null;
+  transactionCredit: number | null;
+  closingBalance: number | null;
+}
+
+export interface OutstandingAgingRow {
+  partyCode: string;
+  agencyName: string;
+  branch: string | null;
+  gstin: string | null;
+  outstandingAmount: number;
+  balanceType: string;
+  agingDays: number;
+  billCount: number;
 }
 
 export interface OutstandingDetailRow {
@@ -131,13 +153,27 @@ export interface OutstandingSummary {
   bucket_61_120_days: number;
   bucket_121_180_days: number;
   bucket_180_plus_days: number;
+  totalLedgers?: number;
+  openingBalance?: number;
+  transactionDebit?: number;
+  transactionCredit?: number;
+  closingBalance?: number;
 }
 
 export interface OutstandingReportResponse {
   reportName: string;
   generatedAt: string | Date;
+  period?: ReportPeriod;
   summary: OutstandingSummary;
   rows?: OutstandingRow[];
+  agingRows?: OutstandingAgingRow[];
+  type?: OutstandingBackendType;
+  company?: string;
+  companyDetails?: { addressLines?: string[]; identifier?: string; email?: string };
+  group?: string;
+  branchHeading?: string;
+  layout?: { columns?: Array<{ key: string; label: string; section?: string }> };
+  diagnostics?: Record<string, unknown>;
   detailRows?: OutstandingDetailRow[];
   /**
    * Single-agency bucket breakdown. Populated only when the request
@@ -287,6 +323,8 @@ export interface TrialBalanceRow {
 export interface TrialBalanceSummary {
   totalDebit: number;
   totalCredit: number;
+  totalOpeningDebit?: number;
+  totalOpeningCredit?: number;
   totalClosingDebit: number;
   totalClosingCredit: number;
   periodDifference: number;
