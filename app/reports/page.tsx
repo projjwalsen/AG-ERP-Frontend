@@ -11,6 +11,8 @@ import {
   Package,
   FileSpreadsheet,
   Scale,
+  Landmark,
+  BarChart3,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +37,22 @@ const REPORT_CARDS: ReportCardData[] = [
     icon: FileText,
     iconBg: "bg-blue-50",
     iconColor: "text-blue-600",
+  },
+  {
+    title: "Balance Sheet",
+    description: "Assets, liabilities and equity presented from the imported financial statement source.",
+    href: "/reports/balance-sheet",
+    icon: Landmark,
+    iconBg: "bg-indigo-50",
+    iconColor: "text-indigo-600",
+  },
+  {
+    title: "Profit & Loss",
+    description: "Income and expenditure for the source reporting period, with totals and control check.",
+    href: "/reports/profit-and-loss",
+    icon: BarChart3,
+    iconBg: "bg-orange-50",
+    iconColor: "text-orange-600",
   },
   {
     title: "Branch Day Book",

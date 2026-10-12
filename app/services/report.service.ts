@@ -24,6 +24,7 @@ import {
   GetSuspenseParams,
   InventoryReportResponse,
   GetInventoryParams,
+  FinancialStatementReport,
 } from "@/app/types/report";
 
 export const reportApi = {
@@ -42,6 +43,14 @@ export const reportApi = {
     return apiFetch<GSTR1ReportResponse>("api/reports/srv1-gstr1");
   },
 
+  async getsrv1ProfitAndLossReport(): Promise<{ success: boolean; message: string; data?: FinancialStatementReport }> {
+    return apiFetch<FinancialStatementReport>("api/reports/srv1-profit&loss");
+  },
+
+  async getsrv1BalanceSheetReport(): Promise<{ success: boolean; message: string; data?: FinancialStatementReport }> {
+    return apiFetch<FinancialStatementReport>("api/reports/srv1-BlSheet");
+  },
+
   async exportsrv1TrialBalanceExcel(): Promise<{ blob: Blob; filename: string }> {
     return fetchBlob("api/reports/srv1-trial-balance?export=true", "trial-balance.xlsx");
   },
@@ -52,6 +61,14 @@ export const reportApi = {
 
   async exportsrv1GSTR1Excel(): Promise<{ blob: Blob; filename: string }> {
     return fetchBlob("api/reports/srv1-gstr1?export=true", "gstr1.xlsx");
+  },
+
+  async exportsrv1ProfitAndLossExcel(): Promise<{ blob: Blob; filename: string }> {
+    return fetchBlob("api/reports/srv1-profit&loss?export=true", "srv1-profit-and-loss.xlsx");
+  },
+
+  async exportsrv1BalanceSheetExcel(): Promise<{ blob: Blob; filename: string }> {
+    return fetchBlob("api/reports/srv1-BlSheet?export=true", "srv1-balance-sheet.xlsx");
   },
 
   /**
