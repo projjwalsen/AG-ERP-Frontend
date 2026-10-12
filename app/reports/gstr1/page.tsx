@@ -23,6 +23,7 @@ import {
 import { reportApi } from "@/app/services/report.service";
 import { GSTR1ReportResponse, GSTR1Row } from "@/app/types/report";
 import { formatCurrency } from "@/lib/utils";
+import { ReportBranchSelect, useReportBranchSelection } from "@/components/reports/report-branch-select";
 
 /**
  * GSTR-1 Outward Supplies Report — GET /api/reports/gstr1
@@ -33,6 +34,7 @@ import { formatCurrency } from "@/lib/utils";
  */
 export default function GSTR1ReportPage() {
   const { addToast } = useToast();
+  const { branches, selectedBranch, setSelectedBranch } = useReportBranchSelection();
   const [data, setData] = React.useState<GSTR1ReportResponse | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -265,8 +267,8 @@ export default function GSTR1ReportPage() {
       <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Company</p>
-            <p className="mt-1 text-lg font-semibold text-gray-900">{data?.branch?.branchName ?? data?.branch?.name ?? "-"}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Company / branch</p>
+            <div className="mt-2"><ReportBranchSelect branches={branches} value={selectedBranch} onChange={setSelectedBranch} light /></div>
             <p className="mt-1 font-mono text-xs text-gray-500">GSTIN: {data?.branch?.gstin ?? data?.branch?.branchGst ?? "-"}</p>
           </div>
           <div className="text-left sm:text-right">

@@ -56,7 +56,8 @@ export const reportApi = {
   },
 
   async exportsrv1APARExcel(type: OutstandingBackendType): Promise<{ blob: Blob; filename: string }> {
-    return fetchBlob(`api/reports/srv1-ap-ar?type=${type}&export=TRUE`, "ap-ar.xlsx");
+    const filename = type === "PAYABLE" ? "sundry-debtors.xlsx" : "sundry-creditors.xlsx";
+    return fetchBlob(`api/reports/srv1-ap-ar?type=${type}&export=TRUE`, filename);
   },
 
   async exportsrv1GSTR1Excel(): Promise<{ blob: Blob; filename: string }> {
