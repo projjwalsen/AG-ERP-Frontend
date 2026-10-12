@@ -7,6 +7,7 @@ import { ReportLayout } from "./report-layout";
 import { useToast } from "@/components/ui/toast";
 import { FinancialStatementReport } from "@/app/types/report";
 import { cn, formatCurrency } from "@/lib/utils";
+import { ReportBranchSelect, useReportBranchSelection } from "./report-branch-select";
 
 type StatementKind = "BALANCE_SHEET" | "PROFIT_AND_LOSS";
 
@@ -35,6 +36,7 @@ function amountFor(row: unknown[], side: "left" | "right") {
 
 export function FinancialStatementReportPage({ kind, load, exportReport }: FinancialStatementReportProps) {
   const { addToast } = useToast();
+  const { branches, selectedBranch, setSelectedBranch } = useReportBranchSelection();
   const [data, setData] = React.useState<FinancialStatementReport | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -76,7 +78,7 @@ export function FinancialStatementReportPage({ kind, load, exportReport }: Finan
         { title: "Statement rows", value: bodyRows.length, hint: "Rows from source workbook", icon: FileSpreadsheet, iconBg: "bg-amber-50", iconColor: "text-amber-700" },
         { title: "Control check", value: leftTotal !== null && rightTotal !== null ? (isBalanced ? "Balanced" : "Difference") : "Source view", hint: leftTotal !== null && rightTotal !== null ? formatCurrency(Math.abs(leftTotal - rightTotal)) : "Preserved source layout", icon: CheckCircle2, iconBg: isBalanced ? "bg-green-50" : "bg-slate-100", iconColor: isBalanced ? "text-green-700" : "text-slate-600" },
       ]}
-      toolbar={<StatementContext data={data} kind={kind} />}
+      toolbar={<StatementContext data={data} kind={kind} branches={branches} selectedBranch={selectedBranch} onBranchChange={setSelectedBranch} />}
       isLoading={loading}
       isEmpty={!loading && !error && bodyRows.length === 0}
       emptyMessage={`No ${title.toLowerCase()} data`}
@@ -88,8 +90,8 @@ export function FinancialStatementReportPage({ kind, load, exportReport }: Finan
   </div>;
 }
 
-function StatementContext({ data, kind }: { data: FinancialStatementReport | null; kind: StatementKind }) {
-  return <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm md:grid-cols-[1.5fr_1fr_1fr]"><div className="flex gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-slate-950"><Building2 size={19} /></div><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Financial statement</p><p className="mt-1 truncate text-base font-semibold">{data?.company || "Company"}</p><p className="mt-1 truncate text-xs text-slate-400">{data?.companyDetails.address.filter(Boolean).join(" · ") || "Company details unavailable"}</p></div></div><ContextItem icon={<CalendarRange size={15} />} label="Reporting period" value={data?.period || "Not specified"} /><ContextItem icon={<FileSpreadsheet size={15} />} label="Statement" value={kind === "BALANCE_SHEET" ? "Assets & liabilities" : "Income & expenditure"} /></div>;
+function StatementContext({ data, kind, branches, selectedBranch, onBranchChange }: { data: FinancialStatementReport | null; kind: StatementKind; branches: string[]; selectedBranch: string; onBranchChange: (value: string) => void }) {
+  return <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm md:grid-cols-[1.5fr_1fr_1fr]"><div className="flex gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-slate-950"><Building2 size={19} /></div><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Company / branch</p><div className="mt-2"><ReportBranchSelect branches={branches} value={selectedBranch} onChange={onBranchChange} /></div><p className="mt-2 truncate text-xs text-slate-400">{data?.companyDetails.address.filter(Boolean).join(" · ") || "Company details unavailable"}</p></div></div><ContextItem icon={<CalendarRange size={15} />} label="Reporting period" value={data?.period || "Not specified"} /><ContextItem icon={<FileSpreadsheet size={15} />} label="Statement" value={kind === "BALANCE_SHEET" ? "Assets & liabilities" : "Income & expenditure"} /></div>;
 }
 
 function ContextItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) { return <div className="border-t border-white/10 pt-3 md:border-l md:border-t-0 md:pl-5"><div className="flex items-center gap-2 text-xs text-slate-400">{icon}{label}</div><p className="mt-1 text-sm font-medium text-slate-100">{value}</p></div>; }

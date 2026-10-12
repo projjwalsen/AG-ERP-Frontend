@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/toast";
 import { reportApi } from "@/app/services/report.service";
 import { OutstandingAgingRow, OutstandingBackendType, OutstandingLedgerRow, OutstandingReportResponse } from "@/app/types/report";
 import { cn, formatCurrency } from "@/lib/utils";
+import { ReportBranchSelect, useReportBranchSelection } from "@/components/reports/report-branch-select";
 
 type ReportType = "AR" | "AP";
 type ViewMode = "ledger" | "aging";
@@ -18,6 +19,7 @@ const money = (value: number | null | undefined) => formatCurrency(value ?? 0);
 
 export default function OutstandingReportPage() {
   const { addToast } = useToast();
+  const { branches, selectedBranch, setSelectedBranch } = useReportBranchSelection();
   const [type, setType] = React.useState<ReportType>("AR");
   const [view, setView] = React.useState<ViewMode>("ledger");
   const [data, setData] = React.useState<OutstandingReportResponse | null>(null);
@@ -61,7 +63,7 @@ export default function OutstandingReportPage() {
       { title: "Credit movement", value: money(summary?.transactionCredit), hint: "Transactions in period", icon: ArrowUpFromLine, iconBg: "bg-amber-50", iconColor: "text-amber-700" },
       { title: "Closing balance", value: money(summary?.closingBalance), hint: `${agingRows.length} parties · ${money(outstandingTotal)}`, icon: Users, iconBg: "bg-violet-50", iconColor: "text-violet-700" },
     ]}
-    toolbar={<div className="space-y-4"><ReportContext data={data} /><div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm"><div className="flex items-center gap-2"><span className="hidden pl-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:inline">View report</span><SegmentedButton active={type === "AR"} onClick={() => setType("AR")}><ArrowDownToLine size={15} /> Receivable</SegmentedButton><SegmentedButton active={type === "AP"} onClick={() => setType("AP")}><ArrowUpFromLine size={15} /> Payable</SegmentedButton></div><div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1"><ViewButton active={view === "ledger"} onClick={() => setView("ledger")}><FileSpreadsheet size={15} /> Ledger summary</ViewButton><ViewButton active={view === "aging"} onClick={() => setView("aging")}><Users size={15} /> Aging parties</ViewButton></div></div></div>}
+    toolbar={<div className="space-y-4"><ReportContext data={data} branches={branches} selectedBranch={selectedBranch} onBranchChange={setSelectedBranch} /><div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm"><div className="flex items-center gap-2"><span className="hidden pl-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:inline">View report</span><SegmentedButton active={type === "AR"} onClick={() => setType("AR")}><ArrowDownToLine size={15} /> Receivable</SegmentedButton><SegmentedButton active={type === "AP"} onClick={() => setType("AP")}><ArrowUpFromLine size={15} /> Payable</SegmentedButton></div><div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1"><ViewButton active={view === "ledger"} onClick={() => setView("ledger")}><FileSpreadsheet size={15} /> Ledger summary</ViewButton><ViewButton active={view === "aging"} onClick={() => setView("aging")}><Users size={15} /> Aging parties</ViewButton></div></div></div>}
     isLoading={loading} isEmpty={!loading && !error && (view === "ledger" ? ledgerRows.length === 0 : agingRows.length === 0)} emptyMessage="No outstanding report data" emptyDescription="The AP / AR service returned no rows for this report."
   >
     {error && !loading && <div role="alert" className="mb-4 flex items-center justify-between gap-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"><span>{error}</span><button className="inline-flex items-center gap-1 font-semibold underline" onClick={() => void load()}><RefreshCcw size={14} /> Retry</button></div>}
@@ -70,9 +72,9 @@ export default function OutstandingReportPage() {
   </ReportLayout>;
 }
 
-function ReportContext({ data }: { data: OutstandingReportResponse | null }) {
+function ReportContext({ data, branches, selectedBranch, onBranchChange }: { data: OutstandingReportResponse | null; branches: string[]; selectedBranch: string; onBranchChange: (value: string) => void }) {
   const details = data?.companyDetails;
-  return <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm md:grid-cols-[1.5fr_1fr_1fr]"><div className="flex gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-slate-950"><Building2 size={19} /></div><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Report context</p><p className="mt-1 truncate text-base font-semibold">{data?.company ?? "Company"}</p><p className="mt-1 truncate text-xs text-slate-400">{details?.addressLines?.filter(Boolean).join(" · ") || data?.group || "Sundry accounts"}</p></div></div><ContextItem icon={<CalendarRange size={15} />} label="Reporting period" value={data?.period?.label || "Not specified"} /><ContextItem icon={<FileSpreadsheet size={15} />} label="Source group" value={data?.group || "AP / AR"} /></div>;
+  return <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm md:grid-cols-[1.5fr_1fr_1fr]"><div className="flex gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-slate-950"><Building2 size={19} /></div><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Company / branch</p><div className="mt-2"><ReportBranchSelect branches={branches} value={selectedBranch} onChange={onBranchChange} /></div><p className="mt-2 truncate text-xs text-slate-400">{details?.addressLines?.filter(Boolean).join(" · ") || data?.group || "Sundry accounts"}</p></div></div><ContextItem icon={<CalendarRange size={15} />} label="Reporting period" value={data?.period?.label || "Not specified"} /><ContextItem icon={<FileSpreadsheet size={15} />} label="Source group" value={data?.group || "AP / AR"} /></div>;
 }
 
 function ContextItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) { return <div className="border-t border-white/10 pt-3 md:border-l md:border-t-0 md:pl-5"><div className="flex items-center gap-2 text-xs text-slate-400">{icon}{label}</div><p className="mt-1 text-sm font-medium text-slate-100">{value}</p></div>; }
