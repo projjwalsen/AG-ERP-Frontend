@@ -328,6 +328,10 @@ export interface TrialBalanceRow {
   agency?: { id?: string; name?: string } | string | null;
   debit: number;
   credit: number;
+  periodDebit?: number;
+  periodCredit?: number;
+  transactionDebit?: number;
+  transactionCredit?: number;
   openingDebit: number;
   openingCredit: number;
   closingDebit: number;
