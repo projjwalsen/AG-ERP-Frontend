@@ -79,6 +79,7 @@ export interface PurchaseBranch {
 export interface Purchase {
   id: string;
   invoiceNo: string;
+  path?: string | null;
   agencyId: string;
   agency?: PurchaseAgency;
   branchId: string;
