@@ -214,10 +214,12 @@ export const reportApi = {
     queryParams.append("export", "true");
     if (params?.branchId) queryParams.append("branchId", params.branchId);
     if (params?.type) queryParams.append("type", params.type);
-    return fetchBlob(
+    const filename = params?.type === "PAYABLE" ? "sundry-debtors.xlsx" : "sundry-creditors.xlsx";
+    const { blob } = await fetchBlob(
       `api/reports/outstanding-report?${queryParams.toString()}`,
-      "outstanding-report.xlsx"
+      filename
     );
+    return { blob, filename };
   },
 
   /**

@@ -130,17 +130,18 @@ export interface OutstandingLedgerRow {
   transactionDebit: number | null;
   transactionCredit: number | null;
   closingBalance: number | null;
+  agingDays?: number | null;
 }
 
 export interface OutstandingAgingRow {
-  partyCode: string;
+  partyCode?: string;
   agencyName: string;
-  branch: string | null;
-  gstin: string | null;
+  branch?: string | null;
+  gstin?: string | null;
   outstandingAmount: number;
-  balanceType: string;
+  balanceType?: string;
   agingDays: number;
-  billCount: number;
+  billCount?: number;
 }
 
 export interface OutstandingDetailRow {
@@ -180,7 +181,7 @@ export interface OutstandingReportResponse {
   generatedAt: string | Date;
   period?: ReportPeriod;
   summary: OutstandingSummary;
-  rows?: OutstandingRow[];
+  rows?: Array<OutstandingRow | OutstandingLedgerRow>;
   agingRows?: OutstandingAgingRow[];
   type?: OutstandingBackendType;
   company?: string;
@@ -294,6 +295,8 @@ export interface GSTR1Row {
   classification: GSTRClassification;
   branchName?: string | null;
   branchGst?: string | null;
+  agency_id?: string | null;
+  agency_name?: string | null;
   customer_gstin: string | null;
   invoice_number: string;
   invoice_date: string | Date;
@@ -302,6 +305,7 @@ export interface GSTR1Row {
   cgst_rate_amount: number;
   sgst_rate_amount: number;
   igst_rate_amount: number;
+  gst_amount?: number;
   branch_state_code: string | null;
   customer_state_code: string | null;
   invoice_total: number;
@@ -436,6 +440,7 @@ export interface GSTR1ReportResponse {
   branch?: { name?: string; branchName?: string; gstin?: string; branchGst?: string } | null;
   b2bSummary?: GSTR1SummaryLine[];
   creditDebitNoteSummary?: Array<GSTR1SummaryLine & { summaryOnly?: boolean }>;
+  sections?: GSTR1Section[];
   gstrStatus?: GSTR1Status;
   diagnostics?: {
     source?: string;
@@ -458,6 +463,21 @@ export interface GSTR1SummaryLine {
   cess_amount: number;
   gst_amount: number;
   invoice_total: number;
+  vouchers?: GSTR1Row[];
+}
+
+export interface GSTR1Section {
+  key: string;
+  title: string;
+  voucher_count: number;
+  taxable_value: number;
+  igst_rate_amount: number;
+  cgst_rate_amount: number;
+  sgst_rate_amount: number;
+  cess_amount?: number;
+  gst_amount: number;
+  invoice_total: number;
+  parties: GSTR1SummaryLine[];
 }
 
 export interface GSTR1Status {
