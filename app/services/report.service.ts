@@ -51,6 +51,42 @@ export const reportApi = {
     return apiFetch<FinancialStatementReport>("api/reports/srv1-BlSheet");
   },
 
+  /**
+   * GET /api/reports/profit-and-loss?branchId=&startDate=&endDate=&includeZero=
+   * Live Tally-style P&L built from the Trial Balance tree.
+   */
+  async getProfitAndLossReport(
+    params?: { branchId?: string; startDate?: string; endDate?: string; includeZero?: boolean }
+  ): Promise<{ success: boolean; message: string; data?: FinancialStatementReport }> {
+    const queryParams = new URLSearchParams();
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    if (params?.includeZero) queryParams.append("includeZero", String(params.includeZero));
+    const query = queryParams.toString();
+    return apiFetch<FinancialStatementReport>(
+      query ? `api/reports/profit-and-loss?${query}` : "api/reports/profit-and-loss"
+    );
+  },
+
+  /**
+   * GET /api/reports/balance-sheet?branchId=&startDate=&endDate=&includeZero=
+   * Live Tally-style Balance Sheet built from the Trial Balance tree.
+   */
+  async getBalanceSheetReport(
+    params?: { branchId?: string; startDate?: string; endDate?: string; includeZero?: boolean }
+  ): Promise<{ success: boolean; message: string; data?: FinancialStatementReport }> {
+    const queryParams = new URLSearchParams();
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    if (params?.includeZero) queryParams.append("includeZero", String(params.includeZero));
+    const query = queryParams.toString();
+    return apiFetch<FinancialStatementReport>(
+      query ? `api/reports/balance-sheet?${query}` : "api/reports/balance-sheet"
+    );
+  },
+
   async exportsrv1TrialBalanceExcel(): Promise<{ blob: Blob; filename: string }> {
     return fetchBlob("api/reports/srv1-trial-balance?export=true", "trial-balance.xlsx");
   },
@@ -70,6 +106,38 @@ export const reportApi = {
 
   async exportsrv1BalanceSheetExcel(): Promise<{ blob: Blob; filename: string }> {
     return fetchBlob("api/reports/srv1-BlSheet?export=true", "srv1-balance-sheet.xlsx");
+  },
+
+  /** GET /api/reports/profit-and-loss?export=true&branchId=&startDate=&endDate= */
+  async exportProfitAndLossExcel(
+    params?: { branchId?: string; startDate?: string; endDate?: string; includeZero?: boolean }
+  ): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    if (params?.includeZero) queryParams.append("includeZero", String(params.includeZero));
+    return fetchBlob(
+      `api/reports/profit-and-loss?${queryParams.toString()}`,
+      "profit-and-loss.xlsx"
+    );
+  },
+
+  /** GET /api/reports/balance-sheet?export=true&branchId=&startDate=&endDate= */
+  async exportBalanceSheetExcel(
+    params?: { branchId?: string; startDate?: string; endDate?: string; includeZero?: boolean }
+  ): Promise<{ blob: Blob; filename: string }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("export", "true");
+    if (params?.branchId) queryParams.append("branchId", params.branchId);
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    if (params?.includeZero) queryParams.append("includeZero", String(params.includeZero));
+    return fetchBlob(
+      `api/reports/balance-sheet?${queryParams.toString()}`,
+      "balance-sheet.xlsx"
+    );
   },
 
   /**
