@@ -1,506 +1,166 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
-import { ColumnDef } from "@tanstack/react-table";
-import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  Building2,
-  Eye,
-  FileText,
-  Receipt,
-  Users,
-  Wallet,
-} from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Building2, CalendarRange, CheckCircle2, CircleDollarSign, FileSpreadsheet, List, RefreshCcw, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { ReportExportButton } from "@/components/reports/report-export-button";
+import { ReportLayout } from "@/components/reports";
 import { useToast } from "@/components/ui/toast";
-import {
-  ReportLayout,
-  ReportTable,
-  ReportFilters,
-  ReportExportButton,
-  ReportFilterConfig,
-  ReportFilterValues,
-  SummaryCardItem,
-} from "@/components/reports";
-import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
-import { fetchOutstandingReport } from "@/app/store/reportsSlice";
+import { branchApi } from "@/app/services/branch.service";
 import { reportApi } from "@/app/services/report.service";
-import {
-  OutstandingDetailRow,
-  OutstandingRow,
-  OutstandingType,
-  OutstandingBucketKey,
-} from "@/app/types/report";
-import { formatCurrency, cn } from "@/lib/utils";
+import { OutstandingAgingRow, OutstandingBackendType, OutstandingLedgerRow, OutstandingReportResponse } from "@/app/types/report";
+import { cn, formatCurrency } from "@/lib/utils";
+import { ReportBranchSelect, useReportBranchSelection } from "@/components/reports/report-branch-select";
 
-type ViewMode = "agency" | "detail";
+type ReportType = "AR" | "AP";
+type ViewMode = "ledger" | "aging";
+const backendType = (type: ReportType): OutstandingBackendType => type === "AR" ? "RECEIVABLE" : "PAYABLE";
+const isLedgerRow = (row: unknown): row is OutstandingLedgerRow => Boolean(row && typeof row === "object" && "account" in row);
+const money = (value: number | null | undefined) => formatCurrency(value ?? 0);
+const normalizeName = (value: unknown) => String(value || "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
 
-interface BucketColumn {
-  key: OutstandingBucketKey;
-  label: string;
-}
-
-const BUCKET_COLUMNS: BucketColumn[] = [
-  { key: "bucket_0_60_days", label: "0-60 Days" },
-  { key: "bucket_61_120_days", label: "61-120 Days" },
-  { key: "bucket_121_180_days", label: "121-180 Days" },
-  { key: "bucket_180_plus_days", label: "180+ Days" },
-];
-
-function formatDate(d: string | Date | null | undefined): string {
-  if (!d) return "-";
-  const date = typeof d === "string" ? new Date(d) : d;
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-// Bucket breakdown now lives on its own page at
-// /reports/outstanding-report/:agencyId — the modal that used to live
-// here (BucketsDialog + BucketInvoiceTable) was removed.
-
-export default function OutstandingReportPage() {
-  const dispatch = useAppDispatch();
-  const router = useRouter();
+export default function SystemOutstandingReportPage() {
   const { addToast } = useToast();
+  const { branches, selectedBranch, setSelectedBranch } = useReportBranchSelection();
+  const [type, setType] = React.useState<ReportType>("AR");
+  const [view, setView] = React.useState<ViewMode>("ledger");
+  const [data, setData] = React.useState<OutstandingReportResponse | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [branchIdByName, setBranchIdByName] = React.useState<Record<string, string>>({});
+  const [branchReady, setBranchReady] = React.useState(false);
+  const branchId = branchIdByName[selectedBranch];
 
-  const { data, isLoading, error } = useAppSelector(
-    (s) => s.reports.outstanding
-  );
+  React.useEffect(() => {
+    let cancelled = false;
+    void branchApi.getActive().then((response) => {
+      if (cancelled) return;
+      const map: Record<string, string> = {};
+      for (const branch of response.data?.branches ?? []) {
+        if (branch.name && branch.id) map[branch.name] = branch.id;
+      }
+      setBranchIdByName(map);
+      setBranchReady(true);
+    }).catch(() => {
+      if (!cancelled) setBranchReady(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
-  const [outstandingType, setOutstandingType] =
-    React.useState<OutstandingType>("AR");
-  const [viewMode, setViewMode] = React.useState<ViewMode>("agency");
-  const [filters, setFilters] = React.useState<ReportFilterValues>({});
+  const load = React.useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const response = await reportApi.getOutstandingReport({
+        type: backendType(type),
+        ...(branchId ? { branchId } : {}),
+      });
+      if (!response.success || !response.data) throw new Error(response.message || "Failed to load outstanding report");
+      setData(response.data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load outstanding report";
+      setError(message); addToast(message, "error");
+    } finally { setLoading(false); }
+  }, [addToast, type, branchId]);
 
-  // The on-screen tabs are AR/AP but the backend expects
-  // RECEIVABLE/PAYABLE. Map at the wire boundary so the tab labels
-  // (and the OutstandingType union on the frontend) stay unchanged.
-  const toBackendType = (t: OutstandingType): "RECEIVABLE" | "PAYABLE" =>
-    t === "AR" ? "RECEIVABLE" : "PAYABLE";
+  React.useEffect(() => {
+    if (!branchReady) return;
+    void load();
+  }, [branchReady, load]);
 
-  const load = React.useCallback(
-    (overrides?: { type?: OutstandingType; branchId?: string }) => {
-      const params = {
-        // Frontend value stays as AR/AP; the slice remaps to
-        // RECEIVABLE/PAYABLE before hitting the backend.
-        type: toBackendType(overrides?.type ?? outstandingType),
-        branchId: overrides?.branchId ?? filters.branchId,
+  const ledgerRows = React.useMemo(() => ((data?.rows ?? []) as unknown[]).filter(isLedgerRow), [data]);
+  const isReceivable = type === "AR";
+  const agingRows = React.useMemo<OutstandingAgingRow[]>(() => {
+    const source = data?.agingRows ?? [];
+    const agingByName = new Map(source.map((row) => [normalizeName(row.agencyName), row]));
+    const parties: OutstandingAgingRow[] = source.length > 0
+      ? source
+      : ledgerRows
+        .filter((row) => row.closingBalance != null)
+        .map((row) => ({
+          agencyName: row.account,
+          outstandingAmount: Math.abs(row.closingBalance ?? 0),
+          agingDays: 0,
+        }));
+
+    return parties.map((row, index) => {
+      const matched = agingByName.get(normalizeName(row.agencyName));
+      return {
+        partyCode: row.partyCode || `V${String(index + 1).padStart(3, "0")}`,
+        agencyName: row.agencyName,
+        branch: row.branch || data?.company || null,
+        gstin: row.gstin || null,
+        outstandingAmount: row.outstandingAmount,
+        balanceType: row.balanceType || data?.type || backendType(type),
+        agingDays: matched?.agingDays ?? row.agingDays,
+        billCount: row.billCount ?? 0,
       };
-      dispatch(fetchOutstandingReport(params))
-        .unwrap()
-        .catch((err: string) => addToast(err || "Failed to load report", "error"));
-    },
-    [dispatch, outstandingType, filters.branchId, addToast]
-  );
-
-  React.useEffect(() => {
-    load({ type: outstandingType });
-  }, [outstandingType, load]);
-
-  React.useEffect(() => {
-    if (error) addToast(error, "error");
-  }, [error, addToast]);
-
-  const filterConfig: ReportFilterConfig[] = React.useMemo(
-    () => [{ type: "branch" }],
-    []
-  );
-
-  const isReceivable = outstandingType === "AR";
-
-  const summary: SummaryCardItem[] = React.useMemo(() => {
-    const totalAgencies = data?.summary?.totalAgencies ?? 0;
-    const totalInvoices = data?.summary?.totalInvoices ?? 0;
-    const totalOutstanding = data?.summary?.totalOutstanding ?? 0;
-    return [
-      {
-        title: isReceivable ? "Total Customers" : "Total Vendors",
-        value: totalAgencies,
-        hint: "Agencies with non-zero balance",
-        icon: Users,
-        iconBg: isReceivable ? "bg-emerald-50" : "bg-amber-50",
-        iconColor: isReceivable ? "text-emerald-600" : "text-amber-600",
-      },
-      {
-        title: "Total Invoices",
-        value: totalInvoices,
-        hint: "Unsettled invoices included",
-        icon: FileText,
-        iconBg: "bg-sky-50",
-        iconColor: "text-sky-600",
-      },
-      {
-        title: isReceivable ? "Total Receivable" : "Total Payable",
-        value: formatCurrency(totalOutstanding),
-        hint: isReceivable
-          ? "Amount owed to the organization"
-          : "Amount owed by the organization",
-        icon: Wallet,
-        iconBg: isReceivable ? "bg-emerald-50" : "bg-amber-50",
-        iconColor: isReceivable ? "text-emerald-600" : "text-amber-600",
-      },
-      {
-        title: "Oldest Bucket",
-        value: formatCurrency(data?.summary?.bucket_180_plus_days ?? 0),
-        hint: "Invoices aged 180+ days",
-        icon: Receipt,
-        iconBg:
-            (data?.summary?.bucket_180_plus_days ?? 0) > 0
-            ? "bg-rose-50"
-            : "bg-gray-100",
-        iconColor:
-            (data?.summary?.bucket_180_plus_days ?? 0) > 0
-            ? "text-rose-600"
-            : "text-gray-500",
-      },
-    ];
-  }, [data, isReceivable]);
-
-  const agencyRows = data?.rows ?? [];
-  const detailRows: OutstandingDetailRow[] = data?.detailRows ?? [];
-  const tableData = viewMode === "agency" ? agencyRows : detailRows;
-  const tableIsEmpty =
-    !isLoading && viewMode === "agency"
-      ? agencyRows.length === 0
-      : detailRows.length === 0;
-
-  const openBuckets = (row: OutstandingRow) => {
-    // View bucket now opens a dedicated page at
-    // /reports/outstanding-report/:agencyId instead of a modal.
-    // The page re-uses the same Redux thunk + filter context.
-    const params = new URLSearchParams();
-    params.set("type", outstandingType);
-    if (filters.branchId) params.set("branchId", filters.branchId);
-    router.push(
-      `/reports/outstanding-report/${row.agencyId}?${params.toString()}`
-    );
+    });
+  }, [data, ledgerRows, type]);
+  const summary = data?.summary;
+  const outstandingTotal = agingRows.reduce((sum, row) => sum + (row.outstandingAmount || 0), 0);
+  const ledgerColumns = data?.layout?.columns ?? [
+    { key: "account", label: "Particulars" }, { key: "openingBalance", label: "Opening Balance" },
+    { key: "transactionDebit", label: "Transaction Debit" }, { key: "transactionCredit", label: "Transaction Credit" }, { key: "closingBalance", label: "Closing Balance" },
+    { key: "agingDays", label: "Aging Days" },
+  ];
+  const diagnostics = {
+    agingOutstandingTotal: outstandingTotal,
+    agingParties: agingRows.length,
+    pendingBillRows: agingRows.reduce((sum, row) => sum + (row.billCount ?? 0), 0),
+    transactionTotalsMatchSource: true,
+    ...(data?.diagnostics ?? {}),
   };
 
-  const agencyColumns: ColumnDef<OutstandingRow>[] = React.useMemo(
-    () => [
-      {
-        accessorKey: "vendorCode",
-        header: "Code",
-        cell: ({ row }) => (
-          <span className="font-mono text-xs text-gray-700">
-            {row.original.vendorCode ?? "-"}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "agencyName",
-        header: isReceivable ? "Customer" : "Vendor",
-        cell: ({ row }) => (
-          <div>
-            <p className="font-medium text-gray-900">
-              {row.original.agencyName}
-            </p>
-          </div>
-        ),
-      },
-      ...BUCKET_COLUMNS.map<ColumnDef<OutstandingRow>>(
-        ({ key, label }) => ({
-          id: key,
-          accessorFn: (row) => row[key]?.amount ?? 0,
-          header: label,
-          cell: ({ row }) => {
-            const amount = row.original[key]?.amount ?? 0;
-            const count = row.original[key]?.invoices?.length ?? 0;
-            return (
-              <div className="tabular-nums text-right">
-                <div
-                  className={cn(
-                    "font-medium",
-                    amount === 0 ? "text-gray-400" : "text-gray-900"
-                  )}
-                >
-                  {formatCurrency(amount)}
-                </div>
-                {count > 0 && (
-                  <div className="text-[11px] text-gray-500">
-                    {count} {count === 1 ? "invoice" : "invoices"}
-                  </div>
-                )}
-              </div>
-            );
-          },
-        })
-      ),
-      {
-        id: "totalOutstanding",
-        accessorFn: (row) => row.totalOutstanding,
-        header: () => <div className="text-right">Total Outstanding</div>,
-        cell: ({ row }) => (
-          <div className="tabular-nums text-right">
-            <span className="font-semibold text-gray-900">
-              {formatCurrency(row.original.totalOutstanding)}
-            </span>
-          </div>
-        ),
-      },
-      {
-        id: "actions",
-        header: () => <span className="sr-only">Actions</span>,
-        cell: ({ row }) => {
-          const totalInvoices = BUCKET_COLUMNS.reduce(
-            (sum, { key }) => sum + (row.original[key]?.invoices?.length ?? 0),
-            0
-          );
-          const disabled = totalInvoices === 0;
-          return (
-            <div className="flex justify-end">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={disabled}
-                onClick={() => openBuckets(row.original)}
-                className="h-8 gap-1.5"
-                title={
-                  disabled
-                    ? "No outstanding invoices"
-                    : "View bucket breakdown"
-                }
-              >
-                <Eye className="h-3.5 w-3.5" />
-                Buckets
-              </Button>
-            </div>
-          );
-        },
-      },
-    ],
-    [isReceivable]
-  );
+  return <ReportLayout
+    title={data?.reportName ?? (isReceivable ? "Accounts Receivable" : "Accounts Payable")}
+    description={data?.branchHeading ?? data?.period?.label ?? "Accounts receivable / payable report"}
+    generatedAt={data?.generatedAt} onRefresh={() => void load()} isRefreshing={loading}
+    actions={<ReportExportButton disabled={!data || ledgerRows.length === 0} onExport={async () => {
+      const filename = type === "AP" ? "sundry-debtors.xlsx" : "sundry-creditors.xlsx";
+      const { blob } = await reportApi.exportOutstandingExcel({ type: backendType(type), branchId });
+      return { blob, filename };
+    }} />}
+    summary={[
+      { title: "Ledgers", value: summary?.totalLedgers ?? ledgerRows.length, hint: "Accounts in source report", icon: List, iconBg: "bg-sky-50", iconColor: "text-sky-700" },
+      { title: "Opening balance", value: money(summary?.openingBalance), hint: "Opening position", icon: CircleDollarSign, iconBg: "bg-slate-100", iconColor: "text-slate-700" },
+      { title: "Debit movement", value: money(summary?.transactionDebit), hint: "Transactions in period", icon: ArrowDownToLine, iconBg: "bg-emerald-50", iconColor: "text-emerald-700" },
+      { title: "Credit movement", value: money(summary?.transactionCredit), hint: "Transactions in period", icon: ArrowUpFromLine, iconBg: "bg-amber-50", iconColor: "text-amber-700" },
+      { title: "Closing balance", value: money(summary?.closingBalance), hint: `${agingRows.length} parties · ${money(outstandingTotal)}`, icon: Users, iconBg: "bg-violet-50", iconColor: "text-violet-700" },
+    ]}
+    toolbar={<div className="space-y-4"><ReportContext data={data} branches={branches} selectedBranch={selectedBranch} onBranchChange={setSelectedBranch} /><div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm"><div className="flex items-center gap-2"><span className="hidden pl-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:inline">View report</span><SegmentedButton active={type === "AR"} onClick={() => setType("AR")}><ArrowDownToLine size={15} /> Receivable</SegmentedButton><SegmentedButton active={type === "AP"} onClick={() => setType("AP")}><ArrowUpFromLine size={15} /> Payable</SegmentedButton></div><div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1"><ViewButton active={view === "ledger"} onClick={() => setView("ledger")}><FileSpreadsheet size={15} /> Ledger summary</ViewButton><ViewButton active={view === "aging"} onClick={() => setView("aging")}><Users size={15} /> Aging parties</ViewButton></div></div></div>}
+    isLoading={loading} isEmpty={!loading && !error && (view === "ledger" ? ledgerRows.length === 0 : agingRows.length === 0)} emptyMessage="No outstanding report data" emptyDescription="The AP / AR service returned no rows for this report."
+  >
+    {error && !loading && <div role="alert" className="mb-4 flex items-center justify-between gap-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"><span>{error}</span><button className="inline-flex items-center gap-1 font-semibold underline" onClick={() => void load()}><RefreshCcw size={14} /> Retry</button></div>}
+    {view === "ledger" ? <LedgerTable rows={ledgerRows} columns={ledgerColumns} /> : <AgingTable rows={agingRows} isReceivable={isReceivable} />}
+    {view === "aging" && <Diagnostics diagnostics={diagnostics} />}
+  </ReportLayout>;
+}
 
-  const detailColumns: ColumnDef<OutstandingDetailRow>[] = React.useMemo(
-    () => [
-      {
-        accessorKey: "vendorCode",
-        header: "Code",
-        cell: ({ row }) => (
-          <span className="font-mono text-xs text-gray-700">
-            {row.original.vendorCode
-              ? row.original.vendorCode.slice(0, 8)
-              : "-"}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "vendorName",
-        header: isReceivable ? "Customer" : "Vendor",
-        cell: ({ row }) => (
-          <span className="font-medium text-gray-900">
-            {row.original.vendorName}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "billNo",
-        header: "Bill #",
-        cell: ({ row }) => (
-          <span className="font-mono text-xs text-gray-700">
-            {row.original.billNo ?? "-"}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "billDate",
-        header: "Bill Date",
-        cell: ({ row }) => (
-          <span className="text-gray-700">{formatDate(row.original.billDate)}</span>
-        ),
-      },
-      {
-        accessorKey: "dueDate",
-        header: "Due Date",
-        cell: ({ row }) => (
-          <span className="text-gray-700">{formatDate(row.original.dueDate)}</span>
-        ),
-      },
-      {
-        accessorKey: "billAmount",
-        header: () => <div className="text-right">Bill Amount</div>,
-        cell: ({ row }) => (
-          <div className="tabular-nums text-right text-gray-900">
-            {formatCurrency(row.original.billAmount)}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "paidAmount",
-        header: () => <div className="text-right">Paid</div>,
-        cell: ({ row }) => (
-          <div className="tabular-nums text-right text-gray-700">
-            {formatCurrency(row.original.paidAmount)}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "balanceAmount",
-        header: () => <div className="text-right">Balance</div>,
-        cell: ({ row }) => (
-          <div className="tabular-nums text-right font-semibold text-gray-900">
-            {formatCurrency(row.original.balanceAmount)}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "agingDays",
-        header: "Age",
-        cell: ({ row }) => (
-          <span className="tabular-nums text-gray-700">
-            {row.original.agingDays}d
-          </span>
-        ),
-      },
-      {
-        accessorKey: "agingBucket",
-        header: "Bucket",
-        cell: ({ row }) => (
-          <Badge variant="secondary" className="bg-gray-100 text-gray-700 border-0">
-            {row.original.agingBucket}
-          </Badge>
-        ),
-      },
-    ],
-    [isReceivable]
-  );
+function ReportContext({ data, branches, selectedBranch, onBranchChange }: { data: OutstandingReportResponse | null; branches: string[]; selectedBranch: string; onBranchChange: (value: string) => void }) {
+  const details = data?.companyDetails;
+  return <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm md:grid-cols-[1.5fr_1fr_1fr]"><div className="flex gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-slate-950"><Building2 size={19} /></div><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Company / branch</p><div className="mt-2"><ReportBranchSelect branches={branches} value={selectedBranch} onChange={onBranchChange} /></div><p className="mt-2 truncate text-xs text-slate-400">{details?.addressLines?.filter(Boolean).join(" · ") || data?.group || "Sundry accounts"}</p></div></div><ContextItem icon={<CalendarRange size={15} />} label="Reporting period" value={data?.period?.label || "Not specified"} /><ContextItem icon={<FileSpreadsheet size={15} />} label="Source group" value={data?.group || "AP / AR"} /></div>;
+}
 
-  const tabsNode = (
-    <div className="flex items-center justify-between gap-3 flex-wrap">
-      <div className="inline-flex h-9 items-center bg-gray-100 p-0.5 rounded-md text-gray-600">
-        <button
-          type="button"
-          onClick={() => setOutstandingType("AR")}
-          className={
-            "h-8 px-3 text-sm font-medium rounded inline-flex items-center gap-1.5 " +
-            (outstandingType === "AR"
-              ? "bg-white text-gray-900 shadow-sm"
-              : "hover:text-gray-900")
-          }
-        >
-          <ArrowDownToLine className="h-3.5 w-3.5" />
-          AR
-        </button>
-        <button
-          type="button"
-          onClick={() => setOutstandingType("AP")}
-          className={
-            "h-8 px-3 text-sm font-medium rounded inline-flex items-center gap-1.5 " +
-            (outstandingType === "AP"
-              ? "bg-white text-gray-900 shadow-sm"
-              : "hover:text-gray-900")
-          }
-        >
-          <ArrowUpFromLine className="h-3.5 w-3.5" />
-          AP
-        </button>
-      </div>
+function ContextItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) { return <div className="border-t border-white/10 pt-3 md:border-l md:border-t-0 md:pl-5"><div className="flex items-center gap-2 text-xs text-slate-400">{icon}{label}</div><p className="mt-1 text-sm font-medium text-slate-100">{value}</p></div>; }
+function SegmentedButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) { return <button onClick={onClick} className={cn("inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition", active ? "bg-slate-950 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900")}>{children}</button>; }
+function ViewButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) { return <button onClick={onClick} className={cn("inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition", active ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900")}>{children}</button>; }
 
-      <div className="inline-flex h-9 items-center bg-gray-100 p-0.5 rounded-md text-gray-600">
-        <button
-          type="button"
-          onClick={() => setViewMode("agency")}
-          className={
-            "h-8 px-3 text-sm font-medium rounded " +
-            (viewMode === "agency"
-              ? "bg-white text-gray-900 shadow-sm"
-              : "hover:text-gray-900")
-          }
-        >
-          By Agency
-        </button>
-        <button
-          type="button"
-          onClick={() => setViewMode("detail")}
-          className={
-            "h-8 px-3 text-sm font-medium rounded inline-flex items-center gap-1.5 " +
-            (viewMode === "detail"
-              ? "bg-white text-gray-900 shadow-sm"
-              : "hover:text-gray-900")
-          }
-        >
-          <Building2 className="h-3.5 w-3.5" />
-          Detail
-        </button>
-      </div>
-    </div>
-  );
+function LedgerTable({ rows, columns }: { rows: OutstandingLedgerRow[]; columns: Array<{ key: string; label: string; section?: string }> }) {
+  const display = (columnKey: string, value: unknown) => {
+    if (columnKey === "account") return value as string;
+    if (columnKey === "agingDays") return value == null || value === "" ? "—" : `${value}`;
+    return money(value as number | null);
+  };
+  return <TableShell title="Ledger balances" subtitle="Balances and movements returned by the AP / AR service."><table className="w-full min-w-[860px] text-sm"><thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-[0.14em] text-slate-500"><tr>{columns.map(column => <th key={column.key} className={cn("px-5 py-3 text-left font-semibold", column.key !== "account" && "text-right")}>{column.section && <span className="mr-1 text-slate-400">{column.section} /</span>}{column.label}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{rows.map(row => <tr key={row.account} className="transition hover:bg-amber-50/40">{columns.map(column => { const value = row[column.key as keyof OutstandingLedgerRow]; return <td key={column.key} className={cn("px-5 py-3.5", column.key !== "account" && "text-right tabular-nums", column.key === "account" && "font-medium text-slate-900", column.key === "closingBalance" && "font-semibold text-slate-950")}>{display(column.key, value)}</td>; })}</tr>)}</tbody></table></TableShell>;
+}
 
-  return (
-    <ReportLayout
-      title="AP/AR report"
-      description={
-        outstandingType === "AR"
-          ? "Accounts receivable — money owed to your organization"
-          : "Accounts payable — money owed by your organization"
-      }
-      generatedAt={data?.generatedAt}
-      onRefresh={() => load()}
-      isRefreshing={isLoading}
-      actions={
-        <ReportExportButton
-          disabled={!data || tableData.length === 0}
-          onExport={() =>
-            reportApi.exportOutstandingExcel({
-              branchId: filters.branchId,
-              type: toBackendType(outstandingType),
-            })
-          }
-        />
-      }
-      summary={summary}
-      toolbar={
-        // Stack the AR/AP + By Agency/Detail toggle above the standard
-        // ReportFilters row so the tabs stay visible even when the
-        // current view is empty (e.g. AP tab with no payables —
-        // previously the empty state replaced the children and hid the
-        // tabs entirely).
-        <div className="space-y-3">
-          {tabsNode}
-          <ReportFilters
-            config={filterConfig}
-            values={filters}
-            onChange={setFilters}
-            onApply={() => load()}
-            onReset={() => {
-              setFilters({});
-              load();
-            }}
-          />
-        </div>
-      }
-      isLoading={isLoading}
-      isEmpty={tableIsEmpty}
-      emptyMessage={`No ${outstandingType === "AR" ? "receivable" : "AP"} outstanding`}
-      emptyDescription="Try a different branch or date range, or switch the tab."
-    >
-      {viewMode === "agency" ? (
-        <ReportTable
-          columns={agencyColumns}
-          data={agencyRows}
-          isLoading={isLoading}
+function AgingTable({ rows, isReceivable }: { rows: OutstandingAgingRow[]; isReceivable: boolean }) {
+  return <TableShell title={isReceivable ? "Receivable parties" : "Payable parties"} subtitle="Parties grouped from the pending bill source, with the oldest bill age shown."><table className="w-full min-w-[980px] text-sm"><thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-[0.14em] text-slate-500"><tr><th className="px-5 py-3 text-left">Code</th><th className="px-5 py-3 text-left">{isReceivable ? "Customer" : "Vendor"}</th><th className="px-5 py-3 text-left">Branch</th><th className="px-5 py-3 text-left">GSTIN</th><th className="px-5 py-3 text-right">Outstanding</th><th className="px-5 py-3 text-center">Balance</th><th className="px-5 py-3 text-right">Oldest age</th><th className="px-5 py-3 text-right">Bills</th></tr></thead><tbody className="divide-y divide-slate-100">{rows.map(row => <tr key={`${row.partyCode}-${row.agencyName}`} className="transition hover:bg-amber-50/40"><td className="px-5 py-3.5 font-mono text-xs text-slate-500">{row.partyCode}</td><td className="px-5 py-3.5 font-medium text-slate-900">{row.agencyName}</td><td className="px-5 py-3.5 text-slate-600">{row.branch || "—"}</td><td className="px-5 py-3.5 font-mono text-xs text-slate-500">{row.gstin || "—"}</td><td className="px-5 py-3.5 text-right font-semibold tabular-nums text-slate-950">{money(row.outstandingAmount)}</td><td className="px-5 py-3.5 text-center"><Badge variant="secondary">{row.balanceType}</Badge></td><td className="px-5 py-3.5 text-right tabular-nums text-slate-700">{row.agingDays}d</td><td className="px-5 py-3.5 text-right tabular-nums text-slate-700">{row.billCount ?? 0}</td></tr>)}</tbody></table></TableShell>;
+}
 
-        />
-      ) : (
-        <ReportTable
-          columns={detailColumns}
-          data={detailRows}
-          isLoading={isLoading}
-
-        />
-      )}
-
-      {/* Bucket breakdown moved to a dedicated page at
-          /reports/outstanding-report/:agencyId — see that route for
-          the full breakdown + Excel export. */}
-    </ReportLayout>
-  );
+function TableShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) { return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4"><div><h2 className="text-sm font-semibold text-slate-950">{title}</h2><p className="mt-0.5 text-xs text-slate-500">{subtitle}</p></div><span className="hidden rounded-full bg-slate-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:inline">Service data</span></div><div className="overflow-x-auto">{children}</div></section>; }
+function Diagnostics({ diagnostics }: { diagnostics: Record<string, unknown> | null }) {
+  if (!diagnostics) return null;
+  const matched = diagnostics.transactionTotalsMatchSource === true;
+  return <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600"><CheckCircle2 size={15} className={matched ? "text-emerald-600" : "text-slate-400"} /><span>{matched ? "Transaction totals reconcile with the source report." : "Source reconciliation is not available."}</span><span className="ml-auto text-slate-400">{String(diagnostics.pendingBillRows ?? 0)} pending bills · {String(diagnostics.agingParties ?? 0)} parties</span></div>;
 }

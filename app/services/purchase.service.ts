@@ -8,6 +8,7 @@ export interface GetPurchasesParams {
   status?: "PENDING" | "APPROVED" | "REJECTED";
   voucherType?: "PURCHASE" | "RCM_PURCHASE";
   branchId?: string;
+  path?: string;
   search?: string;
 }
 
@@ -55,6 +56,7 @@ export interface CreatePurchasePayload {
   otherReference?: string;
   roundOffAmount?: number;
   remarks?: string;
+  path?: string;
   transport?: PurchaseTransportDetails;
   items: {
     productId: string;
@@ -84,6 +86,7 @@ export const purchaseApi = {
     if (params?.voucherType) queryParams.append("voucherType", params.voucherType);
     if (params?.branchId) queryParams.append("branchId", params.branchId);
     if (params?.search?.trim()) queryParams.append("search", params.search.trim());
+    if (params?.path?.trim()) queryParams.append("path", params.path.trim());
 
     const query = queryParams.toString();
     const url = query ? `api/purchases/get-all?${query}` : "api/purchases/get-all";

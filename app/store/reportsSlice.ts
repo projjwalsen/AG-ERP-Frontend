@@ -165,6 +165,29 @@ function castDayBook(r: DayBookResponse): DayBookResponse {
   };
 }
 
+function castGSTR1Line(row: NonNullable<GSTR1ReportResponse["b2bSummary"]>[number]) {
+  return {
+    ...row,
+    voucher_count: toNumber(row.voucher_count),
+    taxable_value: toNumber(row.taxable_value),
+    igst_rate_amount: toNumber(row.igst_rate_amount),
+    cgst_rate_amount: toNumber(row.cgst_rate_amount),
+    sgst_rate_amount: toNumber(row.sgst_rate_amount),
+    cess_amount: toNumber(row.cess_amount),
+    gst_amount: toNumber(row.gst_amount),
+    invoice_total: toNumber(row.invoice_total),
+    vouchers: (row.vouchers || []).map((voucher) => ({
+      ...voucher,
+      taxable_value: toNumber(voucher.taxable_value),
+      cgst_rate_amount: toNumber(voucher.cgst_rate_amount),
+      sgst_rate_amount: toNumber(voucher.sgst_rate_amount),
+      igst_rate_amount: toNumber(voucher.igst_rate_amount),
+      gst_amount: toNumber(voucher.gst_amount),
+      invoice_total: toNumber(voucher.invoice_total),
+    })),
+  };
+}
+
 function castGSTR1(r: GSTR1ReportResponse): GSTR1ReportResponse {
   return {
     ...r,
@@ -179,6 +202,19 @@ function castGSTR1(r: GSTR1ReportResponse): GSTR1ReportResponse {
       totalGST: toNumber(r.summary?.totalGST),
       totalInvoiceValue: toNumber(r.summary?.totalInvoiceValue),
     },
+    b2bSummary: (r.b2bSummary || []).map(castGSTR1Line),
+    creditDebitNoteSummary: (r.creditDebitNoteSummary || []).map(castGSTR1Line),
+    sections: (r.sections || []).map((section) => ({
+      ...section,
+      voucher_count: toNumber(section.voucher_count),
+      taxable_value: toNumber(section.taxable_value),
+      igst_rate_amount: toNumber(section.igst_rate_amount),
+      cgst_rate_amount: toNumber(section.cgst_rate_amount),
+      sgst_rate_amount: toNumber(section.sgst_rate_amount),
+      gst_amount: toNumber(section.gst_amount),
+      invoice_total: toNumber(section.invoice_total),
+      parties: (section.parties || []).map(castGSTR1Line),
+    })),
     rows: (r.rows || []).map((row) => ({
       ...row,
       taxable_value: toNumber(row.taxable_value),
