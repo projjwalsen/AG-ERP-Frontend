@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, FilePlus2, Plus, Receipt, Trash2 } from "lucide-react";
+import { ArrowLeft, FilePlus2, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ import {
 } from "@/app/store/debitCreditNotesSlice";
 import { agencyApi } from "@/app/services/agency.service";
 import { branchApi } from "@/app/services/branch.service";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
 import type { Agency } from "@/app/types/agency";
 import type { Branch } from "@/app/types/branch";
 import type {
@@ -25,11 +25,7 @@ import type {
   DebitCreditNoteType,
 } from "@/app/types/debitCreditNote";
 
-interface ParticularRow {
-  id: string;
-  description: string;
-  amount: number;
-}
+type GstMode = "CGST_SGST" | "IGST";
 
 function validSourceType(value: string | null): DebitCreditNoteSourceType {
   return value === "SALE" ? "SALE" : "PURCHASE";
@@ -45,6 +41,23 @@ function todayInputValue() {
 
 function dateInputToIso(value: string) {
   return value ? `${value}T00:00:00.000Z` : undefined;
+}
+
+function roundMoney(value: number) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function computeGstAmounts(taxableAmount: number, gstPercent: number, gstMode: GstMode) {
+  const tax = roundMoney((Number(taxableAmount) || 0) * (Number(gstPercent) || 0) / 100);
+  if (gstMode === "IGST") {
+    return { cgstAmount: 0, sgstAmount: 0, igstAmount: tax };
+  }
+  const half = roundMoney(tax / 2);
+  return {
+    cgstAmount: half,
+    sgstAmount: roundMoney(tax - half),
+    igstAmount: 0,
+  };
 }
 
 export default function NewDebitCreditNotePage() {
@@ -72,15 +85,26 @@ function NewDebitCreditNoteContent() {
   const [invoiceSearch, setInvoiceSearch] = React.useState("");
   const [noteDate, setNoteDate] = React.useState(todayInputValue());
   const [narration, setNarration] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [taxableAmount, setTaxableAmount] = React.useState(0);
+  const [gstPercent, setGstPercent] = React.useState(18);
+  const [gstMode, setGstMode] = React.useState<GstMode>("CGST_SGST");
   const [agencies, setAgencies] = React.useState<Agency[]>([]);
   const [branches, setBranches] = React.useState<Branch[]>([]);
-  const [particulars, setParticulars] = React.useState<ParticularRow[]>([
-    { id: "1", description: "", amount: 0 },
-  ]);
 
   const selectedInvoice = React.useMemo(
     () => invoices.find((invoice) => invoice.id === invoiceId) || null,
     [invoices, invoiceId]
+  );
+
+  const gstAmounts = React.useMemo(
+    () => computeGstAmounts(taxableAmount, gstPercent, gstMode),
+    [taxableAmount, gstPercent, gstMode]
+  );
+
+  const totalAmount = React.useMemo(
+    () => roundMoney(taxableAmount + gstAmounts.cgstAmount + gstAmounts.sgstAmount + gstAmounts.igstAmount),
+    [taxableAmount, gstAmounts]
   );
 
   async function fetchFilterOptions() {
@@ -128,30 +152,6 @@ function NewDebitCreditNoteContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceType, agencyId, branchId, invoiceSearch]);
 
-  const handleAddParticular = () => {
-    const nextId = String(Math.max(...particulars.map((item) => Number(item.id) || 0)) + 1);
-    setParticulars([...particulars, { id: nextId, description: "", amount: 0 }]);
-  };
-
-  const handleRemoveParticular = (id: string) => {
-    if (particulars.length === 1) {
-      addToast("At least one particular is required", "error");
-      return;
-    }
-    setParticulars(particulars.filter((item) => item.id !== id));
-  };
-
-  const handleParticularChange = (id: string, field: keyof ParticularRow, value: string | number) => {
-    setParticulars(
-      particulars.map((item) => (item.id === id ? { ...item, [field]: value } : item))
-    );
-  };
-
-  const totalAmount = React.useMemo(
-    () => particulars.reduce((sum, item) => sum + (Number(item.amount) || 0), 0),
-    [particulars]
-  );
-
   const invoiceOptions = invoices.map<DataSelectOption>((invoice) => ({
     value: invoice.id,
     label: invoice.invoiceNo,
@@ -174,15 +174,19 @@ function NewDebitCreditNoteContent() {
       return;
     }
 
-    const validParticulars = particulars
-      .map((item) => ({
-        description: item.description.trim(),
-        amount: Number(item.amount),
-      }))
-      .filter((item) => item.description && item.amount > 0);
+    const trimmedDescription = description.trim();
+    if (!trimmedDescription) {
+      addToast("Please enter a description", "error");
+      return;
+    }
 
-    if (validParticulars.length === 0) {
-      addToast("Please add at least one valid particular", "error");
+    if (taxableAmount <= 0) {
+      addToast("Taxable amount must be greater than zero", "error");
+      return;
+    }
+
+    if (gstPercent < 0) {
+      addToast("GST percent cannot be negative", "error");
       return;
     }
 
@@ -197,7 +201,12 @@ function NewDebitCreditNoteContent() {
           purchaseId: sourceType === "PURCHASE" ? selectedInvoice.id : undefined,
           noteDate: dateInputToIso(noteDate),
           narration: narration.trim() || undefined,
-          particulars: validParticulars,
+          gstPercent: Number(gstPercent) || 0,
+          taxableAmount: roundMoney(taxableAmount),
+          cgstAmount: gstAmounts.cgstAmount,
+          sgstAmount: gstAmounts.sgstAmount,
+          igstAmount: gstAmounts.igstAmount,
+          particulars: [{ description: trimmedDescription }],
         })
       ).unwrap();
 
@@ -335,70 +344,89 @@ function NewDebitCreditNoteContent() {
                 <Label htmlFor="noteDate">Note Date</Label>
                 <Input id="noteDate" type="date" value={noteDate} onChange={(event) => setNoteDate(event.target.value)} />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="narration">Narration</Label>
+                <Input
+                  id="narration"
+                  value={narration}
+                  onChange={(event) => setNarration(event.target.value)}
+                  placeholder="Damaged goods adjustment"
+                />
+              </div>
             </div>
 
             {selectedInvoice && <SelectedInvoicePanel invoice={selectedInvoice} />}
-                   
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Particulars</h3>
-                <Button type="button" variant="outline" size="sm" onClick={handleAddParticular} className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Add Particular
-                </Button>
-              </div>
 
-              <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <table className="w-full text-sm">
-                  <thead className="border-b bg-gray-100">
-                    <tr>
-                      <th className="min-w-[420px] px-4 py-3 text-left font-semibold">Description</th>
-                      <th className="w-48 px-4 py-3 text-right font-semibold">Amount</th>
-                      <th className="w-24 px-4 py-3 text-center font-semibold">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {particulars.map((item) => (
-                      <tr key={item.id} className="border-b hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          <Input
-                            value={item.description}
-                            onChange={(event) => handleParticularChange(item.id, "description", event.target.value)}
-                            placeholder="Adjustment description"
-                            required
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <Input
-                            type="number"
-                            min="0.01"
-                            step="0.01"
-                            value={item.amount || ""}
-                            onChange={(event) => handleParticularChange(item.id, "amount", Number(event.target.value) || 0)}
-                            className="text-right"
-                            required
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveParticular(item.id)}
-                            className="text-red-600 hover:bg-red-50 hover:text-red-800"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">Particular</h3>
+              <div className="space-y-2">
+                <Label htmlFor="description">Description *</Label>
+                <Input
+                  id="description"
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="Damaged Goods"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">Tax Details</h3>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="taxableAmount">Taxable Amount *</Label>
+                  <Input
+                    id="taxableAmount"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={taxableAmount || ""}
+                    onChange={(event) => setTaxableAmount(Number(event.target.value) || 0)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="gstPercent">GST %</Label>
+                  <Input
+                    id="gstPercent"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={gstPercent}
+                    onChange={(event) => setGstPercent(Number(event.target.value) || 0)}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>GST Type *</Label>
+                  <div className="inline-flex h-10 items-center rounded-md bg-gray-100 p-0.5 text-gray-600">
+                    <button
+                      type="button"
+                      onClick={() => setGstMode("CGST_SGST")}
+                      className={cn(
+                        "h-9 rounded px-4 text-sm font-medium",
+                        gstMode === "CGST_SGST" ? "bg-white text-gray-900 shadow-sm" : "hover:text-gray-900"
+                      )}
+                    >
+                      CGST + SGST
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGstMode("IGST")}
+                      className={cn(
+                        "h-9 rounded px-4 text-sm font-medium",
+                        gstMode === "IGST" ? "bg-white text-gray-900 shadow-sm" : "hover:text-gray-900"
+                      )}
+                    >
+                      IGST
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-3">
+              <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3 lg:grid-cols-6">
                 <div>
                   <p className="text-gray-600">Source</p>
                   <p className="text-lg font-semibold text-gray-900">{sourceLabel}</p>
@@ -408,13 +436,23 @@ function NewDebitCreditNoteContent() {
                   <p className="text-lg font-semibold text-blue-600">{noteType === "DEBIT_NOTE" ? "Debit Note" : "Credit Note"}</p>
                 </div>
                 <div>
+                  <p className="text-gray-600">CGST</p>
+                  <p className="text-lg font-semibold text-gray-900">{formatCurrency(gstAmounts.cgstAmount)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600">SGST</p>
+                  <p className="text-lg font-semibold text-gray-900">{formatCurrency(gstAmounts.sgstAmount)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600">IGST</p>
+                  <p className="text-lg font-semibold text-gray-900">{formatCurrency(gstAmounts.igstAmount)}</p>
+                </div>
+                <div>
                   <p className="text-gray-600">Total Amount</p>
                   <p className="text-lg font-semibold text-green-700">{formatCurrency(totalAmount)}</p>
                 </div>
               </div>
             </div>
-
-           
 
             <div className="flex items-center gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => router.push(`/debit-credit-notes?sourceType=${sourceType}${sourceType === "SALE" ? "&tab=sale" : ""}`)}>

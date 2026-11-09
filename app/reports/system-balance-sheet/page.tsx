@@ -8,16 +8,16 @@ export default function SystemBalanceSheetPage() {
     <FinancialStatementReportPage
       kind="BALANCE_SHEET"
       collapsible
-      load={() =>
+      load={({ startDate, endDate }) =>
         reportApi.getBalanceSheetReport({
-          startDate: "2025-04-01",
-          endDate: "2026-03-31",
+          startDate,
+          endDate,
         })
       }
-      exportReport={() =>
+      exportReport={({ startDate, endDate }) =>
         reportApi.exportBalanceSheetExcel({
-          startDate: "2025-04-01",
-          endDate: "2026-03-31",
+          startDate,
+          endDate,
         })
       }
     />

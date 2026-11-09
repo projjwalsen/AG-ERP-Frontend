@@ -4,6 +4,7 @@ import * as React from "react";
 import { Building2, CalendarRange, CheckCircle2, ChevronDown, ChevronRight, FileSpreadsheet, RefreshCcw, Scale } from "lucide-react";
 import { ReportExportButton } from "./report-export-button";
 import { ReportLayout } from "./report-layout";
+import { ReportFilters, type ReportFilterValues } from "./report-filters";
 import { useToast } from "@/components/ui/toast";
 import { FinancialStatementReport } from "@/app/types/report";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -12,10 +13,18 @@ import { ReportBranchSelect, useReportBranchSelection } from "./report-branch-se
 type StatementKind = "BALANCE_SHEET" | "PROFIT_AND_LOSS";
 type StatementSide = "left" | "right";
 
+export const FY_START_DATE = "2025-04-01";
+export const FY_END_DATE = "2026-03-31";
+
+interface StatementDateParams {
+  startDate: string;
+  endDate: string;
+}
+
 interface FinancialStatementReportProps {
   kind: StatementKind;
-  load: () => Promise<{ success: boolean; message: string; data?: FinancialStatementReport }>;
-  exportReport: () => Promise<{ blob: Blob; filename: string }>;
+  load: (params: StatementDateParams) => Promise<{ success: boolean; message: string; data?: FinancialStatementReport }>;
+  exportReport: (params: StatementDateParams) => Promise<{ blob: Blob; filename: string }>;
   /** Collapse main heads by default; click a head to show/hide its child rows. */
   collapsible?: boolean;
 }
@@ -43,12 +52,27 @@ export function FinancialStatementReportPage({ kind, load, exportReport, collaps
   const [data, setData] = React.useState<FinancialStatementReport | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [filters, setFilters] = React.useState<ReportFilterValues>({
+    startDate: FY_START_DATE,
+    endDate: FY_END_DATE,
+  });
+  const [appliedDates, setAppliedDates] = React.useState<StatementDateParams>({
+    startDate: FY_START_DATE,
+    endDate: FY_END_DATE,
+  });
 
-  const fetchReport = React.useCallback(async () => {
+  const clampDate = React.useCallback((value: string, fallback: string) => {
+    if (!value) return fallback;
+    if (value < FY_START_DATE) return FY_START_DATE;
+    if (value > FY_END_DATE) return FY_END_DATE;
+    return value;
+  }, []);
+
+  const fetchReport = React.useCallback(async (dates: StatementDateParams) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await load();
+      const response = await load(dates);
       if (!response.success || !response.data) throw new Error(response.message || "Failed to load financial statement");
       setData(response.data);
     } catch (err) {
@@ -60,7 +84,22 @@ export function FinancialStatementReportPage({ kind, load, exportReport, collaps
     }
   }, [addToast, load]);
 
-  React.useEffect(() => { void fetchReport(); }, [fetchReport]);
+  React.useEffect(() => { void fetchReport(appliedDates); }, [fetchReport, appliedDates]);
+
+  const applyDates = () => {
+    const startDate = clampDate(filters.startDate || FY_START_DATE, FY_START_DATE);
+    let endDate = clampDate(filters.endDate || FY_END_DATE, FY_END_DATE);
+    if (endDate < startDate) endDate = startDate;
+    const next = { startDate, endDate };
+    setFilters(next);
+    setAppliedDates(next);
+  };
+
+  const resetDates = () => {
+    const next = { startDate: FY_START_DATE, endDate: FY_END_DATE };
+    setFilters(next);
+    setAppliedDates(next);
+  };
 
   const rows = data?.rows ?? [];
   const bodyRows = rows.slice(9);
@@ -74,20 +113,31 @@ export function FinancialStatementReportPage({ kind, load, exportReport, collaps
     <ReportLayout
       title={data?.reportName || title}
       description={data?.period || "Financial statement"}
-      actions={<ReportExportButton disabled={!data || bodyRows.length === 0} onExport={exportReport} />}
+      actions={<ReportExportButton disabled={!data || bodyRows.length === 0} onExport={() => exportReport(appliedDates)} />}
       summary={[
-        { title: "Left-side total", value: leftTotal === null ? "—" : formatCurrency(leftTotal), hint: kind === "BALANCE_SHEET" ? "Liabilities" : "Expenses", icon: Scale, iconBg: "bg-sky-50", iconColor: "text-sky-700" },
-        { title: "Right-side total", value: rightTotal === null ? "—" : formatCurrency(rightTotal), hint: kind === "BALANCE_SHEET" ? "Assets" : "Income", icon: FileSpreadsheet, iconBg: "bg-emerald-50", iconColor: "text-emerald-700" },
+        { title: "Left-side total", value: leftTotal === null ? "" : formatCurrency(leftTotal), hint: kind === "BALANCE_SHEET" ? "Liabilities" : "Expenses", icon: Scale, iconBg: "bg-sky-50", iconColor: "text-sky-700" },
+        { title: "Right-side total", value: rightTotal === null ? "" : formatCurrency(rightTotal), hint: kind === "BALANCE_SHEET" ? "Assets" : "Income", icon: FileSpreadsheet, iconBg: "bg-emerald-50", iconColor: "text-emerald-700" },
         { title: "Statement rows", value: bodyRows.length, hint: "Rows from source workbook", icon: FileSpreadsheet, iconBg: "bg-amber-50", iconColor: "text-amber-700" },
         { title: "Control check", value: leftTotal !== null && rightTotal !== null ? (isBalanced ? "Balanced" : "Difference") : "Source view", hint: leftTotal !== null && rightTotal !== null ? formatCurrency(Math.abs(leftTotal - rightTotal)) : "Preserved source layout", icon: CheckCircle2, iconBg: isBalanced ? "bg-green-50" : "bg-slate-100", iconColor: isBalanced ? "text-green-700" : "text-slate-600" },
       ]}
-      toolbar={<StatementContext data={data} kind={kind} branches={branches} selectedBranch={selectedBranch} onBranchChange={setSelectedBranch} />}
+      toolbar={
+        <div className="space-y-3">
+          <StatementContext data={data} kind={kind} branches={branches} selectedBranch={selectedBranch} onBranchChange={setSelectedBranch} />
+          <ReportFilters
+            config={[{ type: "dateRange", minDate: FY_START_DATE, maxDate: FY_END_DATE }]}
+            values={filters}
+            onChange={setFilters}
+            onApply={applyDates}
+            onReset={resetDates}
+          />
+        </div>
+      }
       isLoading={loading}
       isEmpty={!loading && !error && bodyRows.length === 0}
       emptyMessage={`No ${title.toLowerCase()} data`}
       emptyDescription="The financial-statements service returned no workbook rows."
     >
-      {error && !loading && <div role="alert" className="mb-4 flex items-center justify-between gap-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"><span>{error}</span><button className="inline-flex items-center gap-1 font-semibold underline" onClick={() => void fetchReport()}><RefreshCcw size={14} /> Retry</button></div>}
+      {error && !loading && <div role="alert" className="mb-4 flex items-center justify-between gap-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"><span>{error}</span><button className="inline-flex items-center gap-1 font-semibold underline" onClick={() => void fetchReport(appliedDates)}><RefreshCcw size={14} /> Retry</button></div>}
       <StatementTable rows={bodyRows} kind={kind} collapsible={collapsible} />
     </ReportLayout>
   </div>;
@@ -181,7 +231,7 @@ function StatementTable({ rows, kind, collapsible = false }: { rows: unknown[][]
     side: StatementSide,
     label: string
   ) => {
-    if (!collapsible || !label) return label || "—";
+    if (!collapsible || !label) return label || "";
 
     const childCount = side === "left" ? groups.leftChildCount.get(index) : groups.rightChildCount.get(index);
     const isHead = isSideSectionHead(row, side) && (childCount ?? 0) > 0;
@@ -257,13 +307,13 @@ function StatementTable({ rows, kind, collapsible = false }: { rows: unknown[][]
                     total ? "bg-amber-50 font-semibold" : section ? "bg-slate-50/80 font-semibold" : "hover:bg-amber-50/40"
                   )}
                 >
-                  <td className="px-5 py-3.5 text-slate-900">{showLeft ? renderLabel(row, index, "left", leftLabel) : "—"}</td>
+                  <td className="px-5 py-3.5 text-slate-900">{showLeft ? renderLabel(row, index, "left", leftLabel) : ""}</td>
                   <td className="px-5 py-3.5 text-right tabular-nums text-slate-700">
-                    {leftAmount === null ? "—" : formatCurrency(leftAmount)}
+                    {leftAmount === null ? "" : formatCurrency(leftAmount)}
                   </td>
-                  <td className="px-5 py-3.5 text-slate-900">{showRight ? renderLabel(row, index, "right", rightLabel) : "—"}</td>
+                  <td className="px-5 py-3.5 text-slate-900">{showRight ? renderLabel(row, index, "right", rightLabel) : ""}</td>
                   <td className="px-5 py-3.5 text-right tabular-nums text-slate-700">
-                    {rightAmount === null ? "—" : formatCurrency(rightAmount)}
+                    {rightAmount === null ? "" : formatCurrency(rightAmount)}
                   </td>
                 </tr>
               );

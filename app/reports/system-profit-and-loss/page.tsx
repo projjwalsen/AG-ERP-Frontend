@@ -8,16 +8,16 @@ export default function SystemProfitAndLossPage() {
     <FinancialStatementReportPage
       kind="PROFIT_AND_LOSS"
       collapsible
-      load={() =>
+      load={({ startDate, endDate }) =>
         reportApi.getProfitAndLossReport({
-          startDate: "2025-04-01",
-          endDate: "2026-03-31",
+          startDate,
+          endDate,
         })
       }
-      exportReport={() =>
+      exportReport={({ startDate, endDate }) =>
         reportApi.exportProfitAndLossExcel({
-          startDate: "2025-04-01",
-          endDate: "2026-03-31",
+          startDate,
+          endDate,
         })
       }
     />
