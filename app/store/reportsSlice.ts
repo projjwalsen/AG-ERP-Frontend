@@ -3,6 +3,7 @@ import { reportApi } from "@/app/services/report.service";
 import {
   OutstandingReportResponse,
   OutstandingRow,
+  OutstandingLedgerRow,
   OutstandingDetailRow,
   OutstandingBucket,
   GetOutstandingReportParams,
@@ -98,9 +99,25 @@ function castBucket(
   };
 }
 
+function isOutstandingAgencyRow(
+  row: OutstandingRow | OutstandingLedgerRow
+): row is OutstandingRow {
+  return "agencyId" in row;
+}
+
 function castRow(
-  row: OutstandingRow
-): OutstandingRow {
+  row: OutstandingRow | OutstandingLedgerRow
+): OutstandingRow | OutstandingLedgerRow {
+  if (!isOutstandingAgencyRow(row)) {
+    return {
+      ...row,
+      openingBalance: row.openingBalance == null ? null : toNumber(row.openingBalance),
+      transactionDebit: row.transactionDebit == null ? null : toNumber(row.transactionDebit),
+      transactionCredit: row.transactionCredit == null ? null : toNumber(row.transactionCredit),
+      closingBalance: row.closingBalance == null ? null : toNumber(row.closingBalance),
+      agingDays: row.agingDays == null ? null : toNumber(row.agingDays),
+    };
+  }
   return {
     ...row,
     totalOutstanding: toNumber(row.totalOutstanding),
