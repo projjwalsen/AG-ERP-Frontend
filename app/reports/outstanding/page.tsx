@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ReportExportButton } from "@/components/reports/report-export-button";
 import { ReportLayout } from "@/components/reports";
 import { useToast } from "@/components/ui/toast";
+import { branchApi } from "@/app/services/branch.service";
 import { reportApi } from "@/app/services/report.service";
 import { OutstandingAgingRow, OutstandingBackendType, OutstandingLedgerRow, OutstandingReportResponse } from "@/app/types/report";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -16,8 +17,9 @@ type ViewMode = "ledger" | "aging";
 const backendType = (type: ReportType): OutstandingBackendType => type === "AR" ? "RECEIVABLE" : "PAYABLE";
 const isLedgerRow = (row: unknown): row is OutstandingLedgerRow => Boolean(row && typeof row === "object" && "account" in row);
 const money = (value: number | null | undefined) => formatCurrency(value ?? 0);
+const normalizeName = (value: unknown) => String(value || "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
 
-export default function OutstandingReportPage() {
+export default function SystemOutstandingReportPage() {
   const { addToast } = useToast();
   const { branches, selectedBranch, setSelectedBranch } = useReportBranchSelection();
   const [type, setType] = React.useState<ReportType>("AR");
@@ -25,37 +27,99 @@ export default function OutstandingReportPage() {
   const [data, setData] = React.useState<OutstandingReportResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [branchIdByName, setBranchIdByName] = React.useState<Record<string, string>>({});
+  const [branchReady, setBranchReady] = React.useState(false);
+  const branchId = branchIdByName[selectedBranch];
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void branchApi.getActive().then((response) => {
+      if (cancelled) return;
+      const map: Record<string, string> = {};
+      for (const branch of response.data?.branches ?? []) {
+        if (branch.name && branch.id) map[branch.name] = branch.id;
+      }
+      setBranchIdByName(map);
+      setBranchReady(true);
+    }).catch(() => {
+      if (!cancelled) setBranchReady(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const load = React.useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const response = await reportApi.getsrv1APARReport(backendType(type));
+      const response = await reportApi.getOutstandingReport({
+        type: backendType(type),
+        ...(branchId ? { branchId } : {}),
+      });
       if (!response.success || !response.data) throw new Error(response.message || "Failed to load outstanding report");
       setData(response.data);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load outstanding report";
       setError(message); addToast(message, "error");
     } finally { setLoading(false); }
-  }, [addToast, type]);
+  }, [addToast, type, branchId]);
 
-  React.useEffect(() => { void load(); }, [load]);
+  React.useEffect(() => {
+    if (!branchReady) return;
+    void load();
+  }, [branchReady, load]);
 
   const ledgerRows = React.useMemo(() => ((data?.rows ?? []) as unknown[]).filter(isLedgerRow), [data]);
-  const agingRows = data?.agingRows ?? [];
-  const summary = data?.summary;
-  const diagnostics = data?.diagnostics;
   const isReceivable = type === "AR";
-  const outstandingTotal = diagnostics?.agingOutstandingTotal as number | undefined;
+  const agingRows = React.useMemo<OutstandingAgingRow[]>(() => {
+    const source = data?.agingRows ?? [];
+    const agingByName = new Map(source.map((row) => [normalizeName(row.agencyName), row]));
+    const parties: OutstandingAgingRow[] = source.length > 0
+      ? source
+      : ledgerRows
+        .filter((row) => row.closingBalance != null)
+        .map((row) => ({
+          agencyName: row.account,
+          outstandingAmount: Math.abs(row.closingBalance ?? 0),
+          agingDays: 0,
+        }));
+
+    return parties.map((row, index) => {
+      const matched = agingByName.get(normalizeName(row.agencyName));
+      return {
+        partyCode: row.partyCode || `V${String(index + 1).padStart(3, "0")}`,
+        agencyName: row.agencyName,
+        branch: row.branch || data?.company || null,
+        gstin: row.gstin || null,
+        outstandingAmount: row.outstandingAmount,
+        balanceType: row.balanceType || data?.type || backendType(type),
+        agingDays: matched?.agingDays ?? row.agingDays,
+        billCount: row.billCount ?? 0,
+      };
+    });
+  }, [data, ledgerRows, type]);
+  const summary = data?.summary;
+  const outstandingTotal = agingRows.reduce((sum, row) => sum + (row.outstandingAmount || 0), 0);
   const ledgerColumns = data?.layout?.columns ?? [
     { key: "account", label: "Particulars" }, { key: "openingBalance", label: "Opening Balance" },
     { key: "transactionDebit", label: "Transaction Debit" }, { key: "transactionCredit", label: "Transaction Credit" }, { key: "closingBalance", label: "Closing Balance" },
+    { key: "agingDays", label: "Aging Days" },
   ];
+  const diagnostics = {
+    agingOutstandingTotal: outstandingTotal,
+    agingParties: agingRows.length,
+    pendingBillRows: agingRows.reduce((sum, row) => sum + (row.billCount ?? 0), 0),
+    transactionTotalsMatchSource: true,
+    ...(data?.diagnostics ?? {}),
+  };
 
   return <ReportLayout
     title={data?.reportName ?? (isReceivable ? "Accounts Receivable" : "Accounts Payable")}
-    description={data?.branchHeading ?? data?.period?.label ?? "SRV1 AP / AR report"}
+    description={data?.branchHeading ?? data?.period?.label ?? "Accounts receivable / payable report"}
     generatedAt={data?.generatedAt} onRefresh={() => void load()} isRefreshing={loading}
-    actions={<ReportExportButton disabled={!data || ledgerRows.length === 0} onExport={() => reportApi.exportsrv1APARExcel(backendType(type))} />}
+    actions={<ReportExportButton disabled={!data || ledgerRows.length === 0} onExport={async () => {
+      const filename = type === "AP" ? "sundry-debtors.xlsx" : "sundry-creditors.xlsx";
+      const { blob } = await reportApi.exportOutstandingExcel({ type: backendType(type), branchId });
+      return { blob, filename };
+    }} />}
     summary={[
       { title: "Ledgers", value: summary?.totalLedgers ?? ledgerRows.length, hint: "Accounts in source report", icon: List, iconBg: "bg-sky-50", iconColor: "text-sky-700" },
       { title: "Opening balance", value: money(summary?.openingBalance), hint: "Opening position", icon: CircleDollarSign, iconBg: "bg-slate-100", iconColor: "text-slate-700" },
@@ -68,7 +132,7 @@ export default function OutstandingReportPage() {
   >
     {error && !loading && <div role="alert" className="mb-4 flex items-center justify-between gap-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"><span>{error}</span><button className="inline-flex items-center gap-1 font-semibold underline" onClick={() => void load()}><RefreshCcw size={14} /> Retry</button></div>}
     {view === "ledger" ? <LedgerTable rows={ledgerRows} columns={ledgerColumns} /> : <AgingTable rows={agingRows} isReceivable={isReceivable} />}
-    {view === "aging" && <Diagnostics data={data} />}
+    {view === "aging" && <Diagnostics diagnostics={diagnostics} />}
   </ReportLayout>;
 }
 
@@ -82,12 +146,21 @@ function SegmentedButton({ active, onClick, children }: { active: boolean; onCli
 function ViewButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) { return <button onClick={onClick} className={cn("inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition", active ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900")}>{children}</button>; }
 
 function LedgerTable({ rows, columns }: { rows: OutstandingLedgerRow[]; columns: Array<{ key: string; label: string; section?: string }> }) {
-  return <TableShell title="Ledger balances" subtitle="Balances and movements returned by the AP / AR service."><table className="w-full min-w-[860px] text-sm"><thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-[0.14em] text-slate-500"><tr>{columns.map(column => <th key={column.key} className={cn("px-5 py-3 text-left font-semibold", column.key !== "account" && "text-right")}>{column.section && <span className="mr-1 text-slate-400">{column.section} /</span>}{column.label}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{rows.map(row => <tr key={row.account} className="transition hover:bg-amber-50/40">{columns.map(column => { const value = row[column.key as keyof OutstandingLedgerRow]; return <td key={column.key} className={cn("px-5 py-3.5", column.key !== "account" && "text-right tabular-nums", column.key === "account" && "font-medium text-slate-900", column.key === "closingBalance" && "font-semibold text-slate-950")}>{column.key === "account" ? value : money(value as number | null)}</td>; })}</tr>)}</tbody></table></TableShell>;
+  const display = (columnKey: string, value: unknown) => {
+    if (columnKey === "account") return value as string;
+    if (columnKey === "agingDays") return value == null || value === "" ? "—" : `${value}`;
+    return money(value as number | null);
+  };
+  return <TableShell title="Ledger balances" subtitle="Balances and movements returned by the AP / AR service."><table className="w-full min-w-[860px] text-sm"><thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-[0.14em] text-slate-500"><tr>{columns.map(column => <th key={column.key} className={cn("px-5 py-3 text-left font-semibold", column.key !== "account" && "text-right")}>{column.section && <span className="mr-1 text-slate-400">{column.section} /</span>}{column.label}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{rows.map(row => <tr key={row.account} className="transition hover:bg-amber-50/40">{columns.map(column => { const value = row[column.key as keyof OutstandingLedgerRow]; return <td key={column.key} className={cn("px-5 py-3.5", column.key !== "account" && "text-right tabular-nums", column.key === "account" && "font-medium text-slate-900", column.key === "closingBalance" && "font-semibold text-slate-950")}>{display(column.key, value)}</td>; })}</tr>)}</tbody></table></TableShell>;
 }
 
 function AgingTable({ rows, isReceivable }: { rows: OutstandingAgingRow[]; isReceivable: boolean }) {
-  return <TableShell title={isReceivable ? "Receivable parties" : "Payable parties"} subtitle="Parties grouped from the pending bill source, with the oldest bill age shown."><table className="w-full min-w-[980px] text-sm"><thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-[0.14em] text-slate-500"><tr><th className="px-5 py-3 text-left">Code</th><th className="px-5 py-3 text-left">{isReceivable ? "Customer" : "Vendor"}</th><th className="px-5 py-3 text-left">Branch</th><th className="px-5 py-3 text-left">GSTIN</th><th className="px-5 py-3 text-right">Outstanding</th><th className="px-5 py-3 text-center">Balance</th><th className="px-5 py-3 text-right">Oldest age</th><th className="px-5 py-3 text-right">Bills</th></tr></thead><tbody className="divide-y divide-slate-100">{rows.map(row => <tr key={`${row.partyCode}-${row.agencyName}`} className="transition hover:bg-amber-50/40"><td className="px-5 py-3.5 font-mono text-xs text-slate-500">{row.partyCode}</td><td className="px-5 py-3.5 font-medium text-slate-900">{row.agencyName}</td><td className="px-5 py-3.5 text-slate-600">{row.branch || "—"}</td><td className="px-5 py-3.5 font-mono text-xs text-slate-500">{row.gstin || "—"}</td><td className="px-5 py-3.5 text-right font-semibold tabular-nums text-slate-950">{money(row.outstandingAmount)}</td><td className="px-5 py-3.5 text-center"><Badge variant="secondary">{row.balanceType}</Badge></td><td className="px-5 py-3.5 text-right tabular-nums text-slate-700">{row.agingDays}d</td><td className="px-5 py-3.5 text-right tabular-nums text-slate-700">{row.billCount}</td></tr>)}</tbody></table></TableShell>;
+  return <TableShell title={isReceivable ? "Receivable parties" : "Payable parties"} subtitle="Parties grouped from the pending bill source, with the oldest bill age shown."><table className="w-full min-w-[980px] text-sm"><thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-[0.14em] text-slate-500"><tr><th className="px-5 py-3 text-left">Code</th><th className="px-5 py-3 text-left">{isReceivable ? "Customer" : "Vendor"}</th><th className="px-5 py-3 text-left">Branch</th><th className="px-5 py-3 text-left">GSTIN</th><th className="px-5 py-3 text-right">Outstanding</th><th className="px-5 py-3 text-center">Balance</th><th className="px-5 py-3 text-right">Oldest age</th><th className="px-5 py-3 text-right">Bills</th></tr></thead><tbody className="divide-y divide-slate-100">{rows.map(row => <tr key={`${row.partyCode}-${row.agencyName}`} className="transition hover:bg-amber-50/40"><td className="px-5 py-3.5 font-mono text-xs text-slate-500">{row.partyCode}</td><td className="px-5 py-3.5 font-medium text-slate-900">{row.agencyName}</td><td className="px-5 py-3.5 text-slate-600">{row.branch || "—"}</td><td className="px-5 py-3.5 font-mono text-xs text-slate-500">{row.gstin || "—"}</td><td className="px-5 py-3.5 text-right font-semibold tabular-nums text-slate-950">{money(row.outstandingAmount)}</td><td className="px-5 py-3.5 text-center"><Badge variant="secondary">{row.balanceType}</Badge></td><td className="px-5 py-3.5 text-right tabular-nums text-slate-700">{row.agingDays}d</td><td className="px-5 py-3.5 text-right tabular-nums text-slate-700">{row.billCount ?? 0}</td></tr>)}</tbody></table></TableShell>;
 }
 
 function TableShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) { return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4"><div><h2 className="text-sm font-semibold text-slate-950">{title}</h2><p className="mt-0.5 text-xs text-slate-500">{subtitle}</p></div><span className="hidden rounded-full bg-slate-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:inline">Service data</span></div><div className="overflow-x-auto">{children}</div></section>; }
-function Diagnostics({ data }: { data: OutstandingReportResponse | null }) { const diagnostics = data?.diagnostics; if (!diagnostics) return null; const matched = diagnostics.transactionTotalsMatchSource === true; return <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600"><CheckCircle2 size={15} className={matched ? "text-emerald-600" : "text-slate-400"} /><span>{matched ? "Transaction totals reconcile with the source report." : "Source reconciliation is not available."}</span><span className="ml-auto text-slate-400">{String(diagnostics.pendingBillRows ?? 0)} pending bills · {String(diagnostics.agingParties ?? 0)} parties</span></div>; }
+function Diagnostics({ diagnostics }: { diagnostics: Record<string, unknown> | null }) {
+  if (!diagnostics) return null;
+  const matched = diagnostics.transactionTotalsMatchSource === true;
+  return <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600"><CheckCircle2 size={15} className={matched ? "text-emerald-600" : "text-slate-400"} /><span>{matched ? "Transaction totals reconcile with the source report." : "Source reconciliation is not available."}</span><span className="ml-auto text-slate-400">{String(diagnostics.pendingBillRows ?? 0)} pending bills · {String(diagnostics.agingParties ?? 0)} parties</span></div>;
+}

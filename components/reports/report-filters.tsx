@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 export type ReportFilterConfig =
   | { type: "branch" }
   | { type: "product" }
-  | { type: "dateRange" }
+  | { type: "dateRange"; minDate?: string; maxDate?: string }
   | { type: "search"; placeholder?: string }
   | {
       type: "outstandingType";
@@ -106,11 +106,15 @@ export function ReportFilters({
             }
 
             if (c.type === "dateRange") {
+              const startMax = [c.maxDate, values.endDate].filter(Boolean).sort()[0];
+              const endMin = [c.minDate, values.startDate].filter(Boolean).sort().at(-1);
               return (
                 <React.Fragment key={idx}>
                   <Input
                     type="date"
                     value={values.startDate ?? ""}
+                    min={c.minDate}
+                    max={startMax}
                     onChange={(e) =>
                       onChange({ ...values, startDate: e.target.value })
                     }
@@ -121,6 +125,8 @@ export function ReportFilters({
                   <Input
                     type="date"
                     value={values.endDate ?? ""}
+                    min={endMin}
+                    max={c.maxDate}
                     onChange={(e) =>
                       onChange({ ...values, endDate: e.target.value })
                     }

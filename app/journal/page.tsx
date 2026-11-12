@@ -124,12 +124,9 @@ function JournalContent() {
         </div>
       </div>
 
-      <Tabs defaultValue="journals" className="w-full">
+      <Tabs defaultValue="heads" className="w-full">
         <TabsList className="grid w-full grid-cols-3 max-w-xl mb-6 bg-gray-100">
-          <TabsTrigger value="journals" className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Journals
-          </TabsTrigger>
+          
           <TabsTrigger value="heads" className="flex items-center gap-2">
             <Tag className="h-4 w-4" />
             Journal Heads
@@ -137,6 +134,10 @@ function JournalContent() {
           <TabsTrigger value="categories" className="flex items-center gap-2">
             <FolderPlus className="h-4 w-4" />
             Categories
+          </TabsTrigger>
+          <TabsTrigger value="journals" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Journals
           </TabsTrigger>
         </TabsList>
 
@@ -939,7 +940,7 @@ function JournalHeadsTab() {
                           {h.type}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3 text-sm">
+                      <td className="px-4 py-3 text-sm max-w-xl">
                         {h.ledger ? (
                           <div className="flex flex-col">
                             <span className="font-mono text-xs">{h.ledger.code}</span>

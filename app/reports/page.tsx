@@ -54,15 +54,15 @@ const REPORT_CARDS: ReportCardData[] = [
     iconBg: "bg-orange-50",
     iconColor: "text-orange-600",
   },
-  {
-    title: "Branch Day Book",
-    description:
-      "Daily cash and bank movement for a branch — receipts, payments, references and allocations.",
-    href: "/reports/day-book",
-    icon: BookOpen,
-    iconBg: "bg-emerald-50",
-    iconColor: "text-emerald-600",
-  },
+  // {
+  //   title: "Branch Day Book",
+  //   description:
+  //     "Daily cash and bank movement for a branch — receipts, payments, references and allocations.",
+  //   href: "/reports/day-book",
+  //   icon: BookOpen,
+  //   iconBg: "bg-emerald-50",
+  //   iconColor: "text-emerald-600",
+  // },
   {
     title: "GSTR-1 Report",
     description:

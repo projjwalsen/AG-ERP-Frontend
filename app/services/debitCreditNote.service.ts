@@ -38,9 +38,13 @@ export interface CreateDebitCreditNotePayload {
   purchaseId?: string | null;
   noteDate?: string;
   narration?: string;
+  gstPercent: number;
+  taxableAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
   particulars: Array<{
     description: string;
-    amount: number;
   }>;
 }
 

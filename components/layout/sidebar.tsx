@@ -259,7 +259,7 @@ const buildSidebarItems = (): SidebarItem[] => [
       { title: "AP/AR report", href: "/reports/outstanding", icon: FileText },
       { title: "Balance Sheet", href: "/reports/balance-sheet", icon: Scale },
       { title: "Profit & Loss", href: "/reports/profit-and-loss", icon: BarChart3 },
-      { title: "Branch Day Book", href: "/reports/day-book", icon: BookOpen },
+      // { title: "Branch Day Book", href: "/reports/day-book", icon: BookOpen },
       { title: "GSTR-1 Report", href: "/reports/gstr1", icon: Receipt },
       { title: "GST Suspense Log", href: "/reports/gst-suspense", icon: AlertTriangle },
       { title: "GST Ledger", href: "/reports/gst-ledger", icon: Calculator },
