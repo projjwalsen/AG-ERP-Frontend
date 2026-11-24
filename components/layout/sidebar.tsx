@@ -9,7 +9,7 @@ import {
   ShoppingCart, FileText, History, Settings, ChevronLeft, Shield,
   Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu, CreditCard,
   ChevronRight, BookOpen, Wallet, BarChart3, AlertTriangle, Receipt,
-  Calculator, Factory, ClipboardList, ShieldCheck, ArrowLeftRight, Scale,
+  Calculator, Factory, ClipboardList, ShieldCheck, ArrowLeftRight, Scale, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -215,6 +215,7 @@ export function SidebarWrapper({ children }: { children: React.ReactNode }) {
 
 const buildSidebarItems = (): SidebarItem[] => [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard, module: null },
+  { title: "Data Import", href: "/import", icon: Upload, module: null },
   { title: "Branch Management", href: "/branches", icon: Building2, module: "BRANCH" },
   { title: "User Management", href: "/users", icon: Users, module: "USER" },
   { title: "Access Control", href: "/access-control", icon: Shield, module: "ROLE" },

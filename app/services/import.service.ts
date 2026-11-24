@@ -49,6 +49,8 @@ interface StreamCallbacks {
   onProgress?: (p: ImportProgress) => void;
   onComplete?: (final: ImportProgress) => void;
   onError?: (err: Error) => void;
+  /** Optional AbortSignal — caller can cancel mid-stream. */
+  signal?: AbortSignal;
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5100";
@@ -85,6 +87,7 @@ export async function importRegister(
       method: "POST",
       body: form,
       credentials: "include",
+      signal: callbacks.signal,
     });
   } catch (err: any) {
     const error = new Error(err?.message || "Network error during import");
@@ -643,8 +646,23 @@ export async function importJournalMaster(
   // Always send `BOTH` — the importer accepts every voucher row from
   // the workbook regardless of whether the calling page is the journal
   // page or the transactions page.
+  return importJournalRegister(file, "BOTH", callbacks);
+}
+
+/**
+ * Import a Tally Journal Register / Day Book with an explicit voucher
+ * filter. `TRANSACTION` imports only invoice / payment / receipt / note
+ * vouchers, `JOURNAL` imports only pure journal vouchers, `BOTH` takes
+ * every row. Used by the Data Import page to run Transactions and
+ * Journals as two separate steps over the same endpoint.
+ */
+export async function importJournalRegister(
+  file: File,
+  type: JournalImportType,
+  callbacks: JournalImportCallbacks = {}
+): Promise<void> {
   const url =
-    `${API_BASE_URL}/api/migration/import/journal?type=${encodeURIComponent("BOTH")}`;
+    `${API_BASE_URL}/api/migration/import/journal?type=${encodeURIComponent(type)}`;
   const form = new FormData();
   form.append("file", file);
 
@@ -771,4 +789,74 @@ export async function importOpeningBalanceJournals(
   if (buffer.trim()) {
     handleStandardImportSseChunk(buffer, p => callbacks.onProgress?.(p), r => callbacks.onComplete?.(r), callbacks.onError);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Debit / Credit Note import — POST /api/migration/import/inward-debit-credit-notes
+//
+// Unlike the other importers this endpoint does NOT stream: it processes the
+// whole workbook and answers with a single JSON body:
+//   { success, message, data: { total, processed, success, skipped, failed,
+//                               percentage, errors[] } }
+// Inward rows link to approved purchase invoices and outward rows to approved
+// sale invoices, so Purchases and Sales must be imported first.
+// ---------------------------------------------------------------------------
+
+export interface DebitCreditNoteImportResult {
+  total: number;
+  processed: number;
+  success: number;
+  skipped: number;
+  failed: number;
+  percentage: number;
+  errors: Array<{
+    sourceRow?: number;
+    voucherNo?: string;
+    particulars?: string;
+    voucherType?: string;
+    message: string;
+  }>;
+  message?: string;
+}
+
+export async function importDebitCreditNotes(
+  file: File,
+  options: { signal?: AbortSignal } = {}
+): Promise<DebitCreditNoteImportResult> {
+  const form = new FormData();
+  form.append("file", file);
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${API_BASE_URL}/api/migration/import/inward-debit-credit-notes`,
+      { method: "POST", body: form, credentials: "include", signal: options.signal }
+    );
+  } catch (err: any) {
+    throw new Error(err?.message || "Network error during import");
+  }
+
+  const text = await response.text();
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    /* non-JSON body */
+  }
+
+  if (!response.ok) {
+    throw new Error(json?.message || text || `Import failed (HTTP ${response.status})`);
+  }
+
+  const data = json?.data ?? {};
+  return {
+    total: Number(data.total ?? 0),
+    processed: Number(data.processed ?? 0),
+    success: Number(data.success ?? 0),
+    skipped: Number(data.skipped ?? 0),
+    failed: Number(data.failed ?? 0),
+    percentage: Number(data.percentage ?? 100),
+    errors: Array.isArray(data.errors) ? data.errors : [],
+    message: json?.message,
+  };
 }
