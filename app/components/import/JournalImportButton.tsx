@@ -171,6 +171,11 @@ export function JournalImportButton({
                 ? "Upload a Tally Trial Balance. Only leaf opening-balance rows are posted; parent totals are never posted again."
                 : "Upload an Excel workbook (.xlsx / .xls) of the journal register. The importer accepts both Journal and Transaction voucher rows in a single upload."}
             </p>
+            {!openingBalanceOnly && (
+              <p className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                From the Trial Balance report in Tally, for each head export all the vouchers in the sample journal format.
+              </p>
+            )}
 
             {openingBalanceOnly && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
