@@ -1,5 +1,6 @@
 // Access Log (Activity Log) API Service — read-only
-import { apiFetch } from "./api";
+import { API_BASE_URL, apiFetch } from "./api";
+import { downloadBlob } from "@/lib/download";
 
 export const ACCESS_LOG_OPERATIONS = [
   "CREATE",
@@ -67,6 +68,22 @@ export interface AccessLogsResponse {
   meta: AccessLogMeta;
 }
 
+export type AccessLogExportFormat = "xlsx" | "csv";
+
+/** Filters sent to the export endpoint. Page and limit are never included. */
+export interface ExportAccessLogsParams {
+  performedById?: string;
+  module?: string;
+  operation?: string;
+  status?: string;
+  branchId?: string;
+  search?: string;
+  /** YYYY-MM-DD */
+  startDate?: string;
+  /** YYYY-MM-DD */
+  endDate?: string;
+}
+
 export interface GetAccessLogsParams {
   page?: number;
   /** default 25, max 100 */
@@ -110,5 +127,40 @@ export const accessLogApi = {
       throw new Error(response.message || "Failed to fetch activity log");
     }
     return response;
+  },
+
+  /**
+   * GET /api/access-logs/export?format=xlsx|csv
+   * Binary response, so this uses fetch instead of apiFetch (which parses JSON).
+   * Downloads the file and reports whether the server truncated the export.
+   */
+  async export(
+    format: AccessLogExportFormat,
+    params: ExportAccessLogsParams = {}
+  ): Promise<{ truncated: boolean }> {
+    const queryParams = new URLSearchParams({ format });
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === null || value === "") continue;
+      queryParams.append(key, String(value));
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/access-logs/export?${queryParams.toString()}`, {
+      method: "GET",
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      const errorData = (await response.json().catch(() => null)) as { message?: string } | null;
+      throw new Error(errorData?.message || "Export failed");
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+    const filename = match ? decodeURIComponent(match[1]) : `activity-log.${format}`;
+
+    downloadBlob(blob, filename);
+
+    return { truncated: response.headers.get("X-Export-Truncated") === "true" };
   },
 };

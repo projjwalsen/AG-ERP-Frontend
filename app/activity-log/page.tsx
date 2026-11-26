@@ -20,12 +20,15 @@ import {
   Shield,
   BookOpen,
   CreditCard,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DataTable } from "@/components/tables";
+import { useToast } from "@/components/ui/toast";
 import { useAppSelector } from "@/app/store/hooks";
 import {
   accessLogApi,
@@ -33,6 +36,7 @@ import {
   ACCESS_LOG_OPERATIONS,
   ACCESS_LOG_STATUSES,
   AccessLog,
+  AccessLogExportFormat,
   AccessLogMeta,
 } from "@/app/services/accessLog.service";
 import { branchApi } from "@/app/services/branch.service";
@@ -302,6 +306,7 @@ const columns: ColumnDef<AccessLog>[] = [
 export default function ActivityLogPage() {
   const router = useRouter();
   const { user, permissions } = useAppSelector((state) => state.auth);
+  const { addToast } = useToast();
 
   const canView = hasModulePermission(permissions, "ACCESS_LOG", "VIEW");
   // Permissions arrive after the profile; an empty list means "not loaded yet",
@@ -333,6 +338,7 @@ export default function ActivityLogPage() {
 
   const [branches, setBranches] = React.useState<Array<{ id: string; name: string }>>([]);
   const [people, setPeople] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [exporting, setExporting] = React.useState(false);
 
   // Gate: send users without ACCESS_LOG:VIEW to /access-denied.
   React.useEffect(() => {
@@ -441,6 +447,34 @@ export default function ActivityLogPage() {
     setPage(1);
   };
 
+  const handleExport = async (format: AccessLogExportFormat) => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const { truncated } = await accessLogApi.export(format, {
+        search,
+        module: moduleFilter,
+        operation: operationFilter,
+        status: statusFilter,
+        startDate,
+        endDate,
+        // Same rule as the list: only when those filters are on screen.
+        branchId: isAllBranches ? branchId : "",
+        performedById: isAllBranches ? performedById : "",
+      });
+      if (truncated) {
+        addToast(
+          "Export limited to the latest 50,000 rows. Narrow the filters to get the rest.",
+          "warning"
+        );
+      }
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : "Export failed", "error");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // No ACCESS_LOG:VIEW — nothing to show (redirecting, or still loading permissions).
   if (!canView) {
     return permissionsLoaded ? null : (
@@ -465,9 +499,25 @@ export default function ActivityLogPage() {
   return (
     <div className="space-y-5 p-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Activity Log</h1>
-        <p className="text-gray-500 mt-1">Review who did what across the ERP</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Activity Log</h1>
+          <p className="text-gray-500 mt-1">Review who did what across the ERP</p>
+        </div>
+        {canView && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2" loading={exporting} disabled={exporting}>
+                {!exporting && <Download className="h-4 w-4" />}
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem onClick={() => handleExport("xlsx")}>Excel (.xlsx)</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("csv")}>CSV (.csv)</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {/* Filters */}
