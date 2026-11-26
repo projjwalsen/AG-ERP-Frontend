@@ -7,11 +7,20 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
+declare module "@tanstack/react-table" {
+  // Optional cell/header class. Only columns that set it are affected.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  interface ColumnMeta<TData, TValue> {
+    className?: string;
+  }
+}
+
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   searchKey?: string;
   onRowClick?: (row: TData) => void;
+  rowClassName?: (row: TData) => string;
   manualPagination?: {
     pageIndex: number;
     pageSize: number;
@@ -21,7 +30,7 @@ interface DataTableProps<TData, TValue> {
   };
 }
 
-export function DataTable<TData, TValue>({ columns, data, searchKey, onRowClick, manualPagination }: DataTableProps<TData, TValue>) {
+export function DataTable<TData, TValue>({ columns, data, searchKey, onRowClick, rowClassName, manualPagination }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 });
@@ -100,7 +109,7 @@ export function DataTable<TData, TValue>({ columns, data, searchKey, onRowClick,
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="border-b border-gray-200 bg-gray-50">
                 {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  <th key={header.id} className={cn("px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide", header.column.columnDef.meta?.className)}>
                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
                 ))}
@@ -109,9 +118,9 @@ export function DataTable<TData, TValue>({ columns, data, searchKey, onRowClick,
           </thead>
           <tbody>
             {table.getRowModel().rows?.length ? table.getRowModel().rows.map((row) => (
-              <tr key={row.id} onClick={() => onRowClick?.(row.original)} className={cn("border-b border-gray-100 hover:bg-gray-50", onRowClick && "cursor-pointer")}>
+              <tr key={row.id} onClick={() => onRowClick?.(row.original)} className={cn("border-b border-gray-100 hover:bg-gray-50", onRowClick && "cursor-pointer", rowClassName?.(row.original))}>
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-4 py-2.5 text-sm text-gray-700">{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
+                  <td key={cell.id} className={cn("px-4 py-2.5 text-sm text-gray-700", cell.column.columnDef.meta?.className)}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
                 ))}
               </tr>
             )) : (

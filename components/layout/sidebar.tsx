@@ -250,7 +250,7 @@ const buildSidebarItems = (): SidebarItem[] => [
     ],
   },
   { title: "Journal", href: "/journal", icon: FileText, module: "JOURNAL" },
-  // { title: "Audit Logs", href: "/audit-logs", icon: History, module: "AUDIT" },
+  { title: "Activity Log", href: "/activity-log", icon: History, module: "ACCESS_LOG" },
   {
     title: "Reports",
     href: "/reports",
