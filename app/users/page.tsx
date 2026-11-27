@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ColumnDef } from "@tanstack/react-table";
-import { MoreHorizontal, Plus, Eye, Edit, Trash2, Mail, Building2, Loader2, Key, Search } from "lucide-react";
+import { MoreHorizontal, Plus, Eye, Edit, Mail, Building2, Loader2, Key, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -41,9 +41,7 @@ export default function UsersListPage() {
   const [searchTerm, setSearchTerm] = React.useState("");
   const [selectedBranch, setSelectedBranch] = React.useState("");
   const [branches, setBranches] = React.useState<Branch[]>([]);
-  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [resetPasswordOpen, setResetPasswordOpen] = React.useState(false);
-  const [userToDelete, setUserToDelete] = React.useState<User | null>(null);
   const [userToReset, setUserToReset] = React.useState<User | null>(null);
   const [resetPassword, setResetPassword] = React.useState("");
   const [resetLoading, setResetLoading] = React.useState(false);
@@ -71,11 +69,6 @@ export default function UsersListPage() {
     } catch (err) {
       console.error("Failed to fetch branches", err);
     }
-  };
-
-  const handleDeleteConfirm = () => {
-    setDeleteDialogOpen(false);
-    setUserToDelete(null);
   };
 
   const handleResetPassword = async () => {
@@ -234,8 +227,6 @@ export default function UsersListPage() {
                   <DropdownMenuItem onClick={() => { setUserToReset(user); setResetPasswordOpen(true); }}>
                     <Key className="mr-2 h-4 w-4" />Reset Password
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => { setUserToDelete(user); setDeleteDialogOpen(true); }} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
                 </>
               )}
             </DropdownMenuContent>
@@ -331,20 +322,6 @@ export default function UsersListPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete User</DialogTitle>
-            <DialogDescription>Are you sure you want to delete <span className="font-semibold text-gray-900">{userToDelete?.name}</span>?</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDeleteConfirm}>Delete</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Reset Password Dialog */}
       <Dialog open={resetPasswordOpen} onOpenChange={setResetPasswordOpen}>

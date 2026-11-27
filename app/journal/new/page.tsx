@@ -147,7 +147,7 @@ export default function NewJournalPage() {
     }
 
     const linkedHead = journalHeads.find((h) => h.id === form.journalHeadId);
-    if (linkedHead && linkedHead.type !== form.type) {
+    if (linkedHead && linkedHead.type && linkedHead.type !== "BOTH" && linkedHead.type !== form.type) {
       addToast(
         `Selected head is ${linkedHead.type}; please pick a ${form.type} head`,
         "error"
@@ -198,14 +198,14 @@ export default function NewJournalPage() {
 
   const headOptions: DataSelectOption[] = form.type
     ? journalHeads
-        .filter((h) => h.type === form.type || h.type === "BOTH")
+        .filter((h) => !h.type || h.type === "BOTH" || h.type === form.type)
         .map((h) => ({
           value: h.id,
           label: getJournalHeadPath(h, journalHeads),
           description: h.ledger
             ? `${h.ledger.code ?? ""}${h.ledger.name ? " • " + h.ledger.name : ""}`
             : undefined,
-          badge: h.type,
+          badge: h.type || undefined,
         }))
     : [];
 

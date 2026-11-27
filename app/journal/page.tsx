@@ -483,12 +483,12 @@ function JournalsTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Journal Entries</h2>
           <p className="text-sm text-gray-500">Post, view, and approve manual journal entries</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link href="/journal/pending">
             <Button variant="outline" className="gap-2">
               <Clock className="h-4 w-4" />
@@ -1119,7 +1119,7 @@ function JournalFormModal({
     // Sanity-check: selected head must match the chosen type, otherwise the
     // backend will reject it with a type-mismatch error.
     const linkedHead = journalHeads.find((h) => h.id === form.journalHeadId);
-    if (linkedHead && linkedHead.type !== form.type) {
+    if (linkedHead && linkedHead.type && linkedHead.type !== "BOTH" && linkedHead.type !== form.type) {
       addToast(`Selected head is ${linkedHead.type}; please pick a ${form.type} head`, "error");
       return;
     }
@@ -1251,14 +1251,14 @@ function JournalFormModal({
               // booking a journal whose head side disagrees with the head.
               options={form.type
                 ? journalHeads
-                    .filter((h) => h.type === form.type)
+                    .filter((h) => !h.type || h.type === "BOTH" || h.type === form.type)
                     .map<DataSelectOption>((h) => ({
                       value: h.id,
                       label: getJournalHeadPath(h, journalHeads),
                       description: h.ledger
                         ? `${h.ledger.code ?? ""}${h.ledger.name ? " • " + h.ledger.name : ""}`
                         : undefined,
-                      badge: h.type,
+                      badge: h.type || undefined,
                     }))
                 : []}
               disabled={!form.type}

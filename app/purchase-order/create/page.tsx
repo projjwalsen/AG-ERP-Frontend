@@ -79,8 +79,10 @@ export default function CreatePurchaseOrderPage() {
   }, [addToast]);
 
   const handleAddItem = () => {
-    const nextId = String(Math.max(...items.map((item) => Number(item.id) || 0)) + 1);
-    setItems([...items, { id: nextId, productId: "", quantity: 0, unit: "KG", purchasePrice: 0 }]);
+    setItems((prev) => {
+      const nextId = String(Math.max(0, ...prev.map((item) => Number(item.id) || 0)) + 1);
+      return [...prev, { id: nextId, productId: "", quantity: 0, unit: "KG", purchasePrice: 0 }];
+    });
   };
 
   const handleRemoveItem = (id: string) => {
@@ -88,7 +90,7 @@ export default function CreatePurchaseOrderPage() {
       addToast("At least one item is required", "error");
       return;
     }
-    setItems(items.filter((item) => item.id !== id));
+    setItems((prev) => prev.filter((item) => item.id !== id));
   };
 
   const handleItemChange = <K extends keyof PurchaseOrderFormItem>(
@@ -96,7 +98,7 @@ export default function CreatePurchaseOrderPage() {
     field: K,
     value: PurchaseOrderFormItem[K]
   ) => {
-    setItems(items.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
+    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
   };
 
   const subtotal = React.useMemo(

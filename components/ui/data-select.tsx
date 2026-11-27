@@ -90,9 +90,11 @@ export const DataSelect = React.forwardRef<HTMLButtonElement, DataSelectProps>(
     const [query, setQuery] = React.useState("");
     const [activeIndex, setActiveIndex] = React.useState(0);
     const [panelPos, setPanelPos] = React.useState<{
-      top: number;
+      top?: number;
+      bottom?: number;
       left: number;
       width: number;
+      maxHeight: number;
     } | null>(null);
     const triggerRef = React.useRef<HTMLButtonElement | null>(null);
     const panelRef = React.useRef<HTMLDivElement | null>(null);
@@ -151,10 +153,25 @@ export const DataSelect = React.forwardRef<HTMLButtonElement, DataSelectProps>(
         const node = triggerRef.current;
         if (!node) return;
         const rect = node.getBoundingClientRect();
+        const gap = 4;
+        const margin = 12;
+        const spaceBelow = window.innerHeight - rect.bottom - margin;
+        const spaceAbove = rect.top - margin;
+        const openUpward = spaceBelow < 240 && spaceAbove > spaceBelow;
+        const maxHeight = Math.max(
+          160,
+          Math.min(320, openUpward ? spaceAbove - gap : spaceBelow - gap)
+        );
+        const preferredWidth = panelMinWidth
+          ? Math.max(rect.width, panelMinWidth)
+          : rect.width;
+        const maxLeft = Math.max(margin, window.innerWidth - preferredWidth - margin);
         setPanelPos({
-          top: rect.bottom + 4, // mt-1
-          left: rect.left,
+          top: openUpward ? undefined : rect.bottom + gap,
+          bottom: openUpward ? window.innerHeight - rect.top + gap : undefined,
+          left: Math.min(Math.max(margin, rect.left), maxLeft),
           width: rect.width,
+          maxHeight,
         });
       };
 
@@ -233,19 +250,22 @@ export const DataSelect = React.forwardRef<HTMLButtonElement, DataSelectProps>(
         onKeyDown={handleListKeyDown}
         style={{
           position: disablePortal ? "absolute" : "fixed",
-          top: disablePortal ? "calc(100% + 4px)" : (panelPos?.top ?? 0),
+          top: disablePortal ? "calc(100% + 4px)" : panelPos?.top,
+          bottom: disablePortal ? undefined : panelPos?.bottom,
           left: disablePortal ? 0 : (panelPos?.left ?? 0),
-          width: disablePortal
+          minWidth: disablePortal
             ? "100%"
             : panelMinWidth
               ? Math.max(panelPos?.width ?? 0, panelMinWidth)
               : panelPos?.width ?? 0,
+          maxWidth: disablePortal ? undefined : "calc(100vw - 24px)",
+          maxHeight: disablePortal ? 320 : (panelPos?.maxHeight ?? 320),
           // Inline panels use absolute positioning so they align with the
           // trigger inside dialogs. Portaled panels use fixed positioning.
           zIndex: disablePortal ? 60 : 9999,
         }}
         className={cn(
-          "max-h-80 overflow-auto border border-gray-200 bg-white shadow-lg",
+          "overflow-auto border border-gray-200 bg-white shadow-lg",
           panelClassName
         )}
       >
@@ -338,7 +358,7 @@ export const DataSelect = React.forwardRef<HTMLButtonElement, DataSelectProps>(
           onClick={() => !disabled && setOpen((o) => !o)}
           onKeyDown={handleKeyDown}
           className={cn(
-            "flex h-10 w-full items-center justify-between gap-2 border bg-white px-3 py-2 text-sm",
+            "flex min-h-10 w-full items-center justify-between gap-2 border bg-white px-3 py-1.5 text-sm",
             "focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500",
             "disabled:cursor-not-allowed disabled:bg-gray-50 disabled:opacity-50",
             invalid || error

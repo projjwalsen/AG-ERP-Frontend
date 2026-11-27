@@ -7,16 +7,14 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, Building2, Briefcase, Package,
   ShoppingCart, FileText, History, Settings, ChevronLeft, Shield,
-  Search, Bell, ChevronDown, LogOut, User, Moon, Sun, Menu, CreditCard,
+  ChevronDown, LogOut, User, Moon, Sun, CreditCard,
   ChevronRight, BookOpen, Wallet, BarChart3, AlertTriangle, Receipt,
-  Calculator, Factory, ClipboardList, ShieldCheck, ArrowLeftRight, Scale, Upload,
+  Calculator, Factory, ClipboardList, ArrowLeftRight, Scale, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,7 +23,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { mockNotifications } from "@/data/mockData";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { getProfile, logout, fetchUserAccess } from "@/app/store/authSlice";
 
@@ -100,17 +97,53 @@ export function SidebarWrapper({ children }: { children: React.ReactNode }) {
     });
   }, [dispatch, pathname, user]);
 
-  // Don't show sidebar on login and home pages
-  if (noSidebarPaths.includes(pathname)) {
-    return <>{children}</>;
-  }
-
-  const unreadCount = mockNotifications.filter((n) => !n.isRead).length;
+  // Restore saved theme preference (light theme is always the default).
+  React.useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("erp-theme");
+      const dark = saved === "dark";
+      setIsDark(dark);
+      document.documentElement.classList.toggle("dark", dark);
+    } catch {
+      document.documentElement.classList.remove("dark");
+    }
+  }, []);
 
   const toggleTheme = () => {
-    setIsDark(!isDark);
-    document.documentElement.classList.toggle("dark");
+    setIsDark((prev) => {
+      const next = !prev;
+      document.documentElement.classList.toggle("dark", next);
+      try {
+        window.localStorage.setItem("erp-theme", next ? "dark" : "light");
+      } catch {
+        // ignore storage errors
+      }
+      return next;
+    });
   };
+
+  // Don't show sidebar on login and home pages, but keep global theme toggle accessible
+  if (noSidebarPaths.includes(pathname)) {
+    return (
+      <>
+        <div className="fixed top-4 right-4 z-50">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={toggleTheme}
+            aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+            title={isDark ? "Switch to light theme" : "Switch to dark theme"}
+            className="gap-2 rounded-full bg-white shadow-sm border-gray-200 text-gray-700 hover:bg-gray-50"
+          >
+            {isDark ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-gray-600" />}
+            <span className="text-xs font-medium">{isDark ? "Light" : "Dark"}</span>
+          </Button>
+        </div>
+        {children}
+      </>
+    );
+  }
 
   const handleLogout = async () => {
     await dispatch(logout());
@@ -124,7 +157,7 @@ export function SidebarWrapper({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((s) => !s)} />
-      <div className={cn("flex-1 flex flex-col transition-all duration-200", collapsed ? "ml-16" : "ml-55")}>
+      <div className={cn("flex-1 min-w-0 flex flex-col transition-all duration-200", collapsed ? "ml-16" : "ml-55")}>
         {/* Navbar */}
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-6">
           {/* Left side */}
@@ -133,45 +166,21 @@ export function SidebarWrapper({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Right Actions */}
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" onClick={toggleTheme} className="text-gray-500">
-              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={toggleTheme}
+              aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+              title={isDark ? "Switch to light theme" : "Switch to dark theme"}
+              className="gap-2 rounded-full border-gray-200 text-gray-600 hover:text-gray-900"
+            >
+              {isDark ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4" />}
+              <span className="hidden sm:inline text-xs font-medium">
+                {isDark ? "Light" : "Dark"}
+              </span>
             </Button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative text-gray-500">
-                  <Bell className="h-4 w-4" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-green-600 text-[10px] font-medium text-white">
-                      {unreadCount}
-                    </span>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80">
-                <DropdownMenuLabel className="flex items-center justify-between">
-                  <span>Notifications</span>
-                  {unreadCount > 0 && <Badge variant="success">{unreadCount} new</Badge>}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <div className="max-h-64 overflow-y-auto">
-                  {mockNotifications.map((notification) => (
-                    <DropdownMenuItem key={notification.id} className="flex flex-col items-start gap-1 p-3 cursor-pointer">
-                      <div className="flex w-full items-start justify-between gap-2">
-                        <span className="text-sm font-medium text-gray-900">{notification.title}</span>
-                        {!notification.isRead && <span className="h-1.5 w-1.5 rounded-full bg-green-500 shrink-0 mt-1" />}
-                      </div>
-                      <span className="text-xs text-gray-500 line-clamp-2">{notification.message}</span>
-                    </DropdownMenuItem>
-                  ))}
-                </div>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-center text-green-600 justify-center font-medium text-sm py-2 cursor-pointer">
-                  View all
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -194,7 +203,9 @@ export function SidebarWrapper({ children }: { children: React.ReactNode }) {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem><User className="mr-2 h-4 w-4" />Profile</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push("/settings")} className="cursor-pointer">
+                  <User className="mr-2 h-4 w-4" />Profile
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-red-600 cursor-pointer">
                   <LogOut className="mr-2 h-4 w-4" />Log out
@@ -373,21 +384,11 @@ function NavItem({
       <div className="space-y-1">
         <Tooltip>
           <TooltipTrigger asChild>
-            <div
-              onClick={() => {
-                if (hasChildren) {
-                  setOpen((s) => !s);
-                } else {
-                  window.location.href = item.href;
-                }
-              }}
-            >
-              {hasChildren ? (
-                linkContent
-              ) : (
-                <Link href={item.href}>{linkContent}</Link>
-              )}
-            </div>
+            {hasChildren ? (
+              <div onClick={() => setOpen((s) => !s)}>{linkContent}</div>
+            ) : (
+              <Link href={item.href}>{linkContent}</Link>
+            )}
           </TooltipTrigger>
           <TooltipContent side="right">{item.title}</TooltipContent>
         </Tooltip>
@@ -398,21 +399,11 @@ function NavItem({
 
   return (
     <div>
-      <div
-        onClick={() => {
-          if (hasChildren) {
-            setOpen((s) => !s);
-          } else {
-            window.location.href = item.href;
-          }
-        }}
-      >
-        {hasChildren ? (
-          linkContent
-        ) : (
-          <Link href={item.href}>{linkContent}</Link>
-        )}
-      </div>
+      {hasChildren ? (
+        <div onClick={() => setOpen((s) => !s)}>{linkContent}</div>
+      ) : (
+        <Link href={item.href}>{linkContent}</Link>
+      )}
 
       {childMenu}
     </div>

@@ -337,10 +337,7 @@ export default function TransactionDetailsPage() {
             )} */}
             {isPending && canApprove && (
               <Link href="/transactions/pending">
-                <Button
-                  className="gap-2"
-                  onClick={() => {}}
-                >
+                <Button className="gap-2">
                   <ShieldCheck className="h-4 w-4" />
                   Authenticate
                 </Button>
