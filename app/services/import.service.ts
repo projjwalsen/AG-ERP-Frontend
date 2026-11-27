@@ -662,7 +662,7 @@ export async function importJournalRegister(
   callbacks: JournalImportCallbacks = {}
 ): Promise<void> {
   const url =
-    `${API_BASE_URL}/api/migration/import/journal?type=${encodeURIComponent(type)}`;
+    `${API_BASE_URL}/api/migration/import/journal?type=JOURNAL`;
   const form = new FormData();
   form.append("file", file);
 

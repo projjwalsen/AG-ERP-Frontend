@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Edit, Trash2, Mail, Building2, Shield, Clock, CheckCircle, Loader2, ArrowLeft, Phone, LogIn } from "lucide-react";
+import { Edit, Mail, Building2, Shield, Clock, CheckCircle, Loader2, ArrowLeft, Phone, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +27,6 @@ export default function UserDetailsPage({ params }: { params: Promise<{ id: stri
   const { currentUser: user, isLoading, error } = useAppSelector((state) => state.users);
 
   const [userId, setUserId] = React.useState<string | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [statusDialogOpen, setStatusDialogOpen] = React.useState(false);
   const [newStatus, setNewStatus] = React.useState<string>("");
 
@@ -100,9 +99,6 @@ export default function UserDetailsPage({ params }: { params: Promise<{ id: stri
               className={user.status === "ACTIVE" ? "text-red-600 border-red-200 hover:bg-red-50" : "text-green-600 border-green-200 hover:bg-green-50"}
             >
               {user.status === "ACTIVE" ? "Suspend" : "Activate"}
-            </Button>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(true)} className="text-red-600 border-red-200 hover:bg-red-50">
-              <Trash2 className="h-4 w-4 mr-1.5" />Delete
             </Button>
             <Link href={`/users/${user.id}/edit`}>
               <Button><Edit className="h-4 w-4 mr-1.5" />Edit</Button>
@@ -300,19 +296,6 @@ export default function UserDetailsPage({ params }: { params: Promise<{ id: stri
         </DialogContent>
       </Dialog>
 
-      {/* Delete Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete User</DialogTitle>
-            <DialogDescription>Delete <span className="font-semibold">{user.name}</span>? This action cannot be undone.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => { setDeleteDialogOpen(false); router.push("/users"); }}>Delete</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       <ToastContainer />
     </div>
   );

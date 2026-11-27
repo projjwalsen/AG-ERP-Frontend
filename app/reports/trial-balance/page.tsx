@@ -4,7 +4,15 @@ import * as React from "react";
 import { ChevronDown, ChevronRight, Download, Loader2 } from "lucide-react";
 import { ReportLayout, ReportFilters, type ReportFilterValues } from "@/components/reports";
 import { ReportExportButton } from "@/components/reports/report-export-button";
-import { FY_END_DATE, FY_START_DATE } from "@/components/reports/financial-statement-report";
+// The Trial Balance is cumulative: it starts at the first financial year that
+// has data (FY 2025-26) and runs through the end of the current financial year
+// (FY 2026-27). The shared FY_* constants only cover FY 2025-26, so vouchers
+// dated from 1 Apr 2026 onward (e.g. imported Direct Expenses) were excluded.
+const TB_START_DATE = "2025-04-01";
+const TB_END_DATE = "2027-03-31";
+// Date the report opens with (and resets to). Users can still pick any date up
+// to TB_END_DATE to include FY 2026-27 vouchers.
+const TB_DEFAULT_END_DATE = "2026-03-31";
 import { reportApi } from "@/app/services/report.service";
 import { ledgerApi } from "@/app/services/ledger.service";
 import { TrialBalanceNode, TrialBalanceResponse, TrialBalanceTransaction } from "@/app/types/report";
@@ -52,18 +60,18 @@ function TrialBalanceContent() {
   const [transactionPage, setTransactionPage] = React.useState(1);
   const [transactionPagination, setTransactionPagination] = React.useState<{ page: number; totalPages: number; totalEntries: number; limit: number } | null>(null);
   const [filters, setFilters] = React.useState<ReportFilterValues>({
-    startDate: FY_START_DATE,
-    endDate: FY_END_DATE,
+    startDate: TB_START_DATE,
+    endDate: TB_DEFAULT_END_DATE,
   });
   const [appliedDates, setAppliedDates] = React.useState({
-    startDate: FY_START_DATE,
-    endDate: FY_END_DATE,
+    startDate: TB_START_DATE,
+    endDate: TB_DEFAULT_END_DATE,
   });
 
   const clampDate = React.useCallback((value: string, fallback: string) => {
     if (!value) return fallback;
-    if (value < FY_START_DATE) return FY_START_DATE;
-    if (value > FY_END_DATE) return FY_END_DATE;
+    if (value < TB_START_DATE) return TB_START_DATE;
+    if (value > TB_END_DATE) return TB_END_DATE;
     return value;
   }, []);
 
@@ -86,8 +94,8 @@ function TrialBalanceContent() {
   React.useEffect(() => { void fetchReport(appliedDates); }, [fetchReport, appliedDates]);
 
   const applyDates = () => {
-    const startDate = clampDate(filters.startDate || FY_START_DATE, FY_START_DATE);
-    let endDate = clampDate(filters.endDate || FY_END_DATE, FY_END_DATE);
+    const startDate = clampDate(filters.startDate || TB_START_DATE, TB_START_DATE);
+    let endDate = clampDate(filters.endDate || TB_DEFAULT_END_DATE, TB_DEFAULT_END_DATE);
     if (endDate < startDate) endDate = startDate;
     const next = { startDate, endDate };
     setFilters(next);
@@ -95,7 +103,7 @@ function TrialBalanceContent() {
   };
 
   const resetDates = () => {
-    const next = { startDate: FY_START_DATE, endDate: FY_END_DATE };
+    const next = { startDate: TB_START_DATE, endDate: TB_DEFAULT_END_DATE };
     setFilters(next);
     setAppliedDates(next);
   };
@@ -198,7 +206,7 @@ function TrialBalanceContent() {
   });
 
   const exportDisabled = !tree.some(hasValues);
-  return <div className="mx-auto w-full max-w-[1500px]"><ReportLayout title="Trial Balance" description="Database-backed period activity and closing balances by accounting group and ledger" generatedAt={data?.generatedAt} onRefresh={() => void fetchReport(appliedDates)} isRefreshing={loading} actions={<ReportExportButton disabled={exportDisabled} onExport={async () => reportApi.exportTrialBalanceExcel({ includeZero: false, startDate: appliedDates.startDate, endDate: appliedDates.endDate })} />} summary={data?.summary ? [{ title: "Opening debit", value: data.summary.totalOpeningDebit ?? 0, hint: "Opening position", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" }, { title: "Opening credit", value: data.summary.totalOpeningCredit ?? 0, hint: "Opening position", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" }, { title: "Closing debit", value: data.summary.totalClosingDebit, hint: "Closing position", icon: Download, iconBg: "bg-emerald-50", iconColor: "text-emerald-700" }, { title: "Closing credit", value: data.summary.totalClosingCredit, hint: "Closing position", icon: Download, iconBg: "bg-amber-50", iconColor: "text-amber-700" }] : []} toolbar={<ReportFilters config={[{ type: "dateRange", minDate: FY_START_DATE, maxDate: FY_END_DATE }]} values={filters} onChange={setFilters} onApply={applyDates} onReset={resetDates} />} isLoading={loading} isEmpty={!loading && !error && tree.length === 0} emptyMessage="No trial balance data" emptyDescription="The database-backed trial-balance endpoint returned no accounts.">
+  return <div className="mx-auto w-full max-w-[1500px]"><ReportLayout title="Trial Balance" description="Database-backed period activity and closing balances by accounting group and ledger" generatedAt={data?.generatedAt} onRefresh={() => void fetchReport(appliedDates)} isRefreshing={loading} actions={<ReportExportButton disabled={exportDisabled} onExport={async () => reportApi.exportTrialBalanceExcel({ includeZero: false, startDate: appliedDates.startDate, endDate: appliedDates.endDate })} />} summary={data?.summary ? [{ title: "Opening debit", value: data.summary.totalOpeningDebit ?? 0, hint: "Opening position", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" }, { title: "Opening credit", value: data.summary.totalOpeningCredit ?? 0, hint: "Opening position", icon: Download, iconBg: "bg-gray-100", iconColor: "text-gray-600" }, { title: "Closing debit", value: data.summary.totalClosingDebit, hint: "Closing position", icon: Download, iconBg: "bg-emerald-50", iconColor: "text-emerald-700" }, { title: "Closing credit", value: data.summary.totalClosingCredit, hint: "Closing position", icon: Download, iconBg: "bg-amber-50", iconColor: "text-amber-700" }] : []} toolbar={<ReportFilters config={[{ type: "dateRange", minDate: TB_START_DATE, maxDate: TB_END_DATE }]} values={filters} onChange={setFilters} onApply={applyDates} onReset={resetDates} />} isLoading={loading} isEmpty={!loading && !error && tree.length === 0} emptyMessage="No trial balance data" emptyDescription="The database-backed trial-balance endpoint returned no accounts.">
     {error && !loading ? <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error} <button className="ml-2 underline" onClick={() => void fetchReport(appliedDates)}>Retry</button></div> : null}
     <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white"><table className="w-full min-w-[820px] text-sm"><thead className="border-b bg-slate-950 text-xs uppercase tracking-wide text-slate-300"><tr><th className="px-4 py-3 text-left">Particulars</th><th className="px-4 py-3 text-right">Opening debit</th><th className="px-4 py-3 text-right">Opening credit</th>{/* Transaction columns hidden temporarily */}{/* <th className="px-4 py-3 text-right">Transaction debit</th><th className="px-4 py-3 text-right">Transaction credit</th> */}<th className="px-4 py-3 text-right">Closing debit</th><th className="px-4 py-3 text-right">Closing credit</th><th className="px-4 py-3 text-right">Closing balance</th><th className="px-4 py-3 text-center">Dr/Cr</th></tr></thead><tbody className="divide-y divide-gray-100">{loading ? <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-500"><Loader2 className="mr-2 inline animate-spin" size={16} />Loading trial balance…</td></tr> : renderNodes(tree)}</tbody></table></div>
     <Dialog open={!!selectedLedger} onOpenChange={(open) => { if (!open) { setSelectedLedger(null); setLedgerSummary(null); } }}>

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import "./dark-theme.css";
 import { Providers } from "./store/Providers";
 import { SidebarWrapper } from "@/components/layout/sidebar";
 

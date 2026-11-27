@@ -172,12 +172,12 @@ function PurchaseTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Purchase Orders</h2>
           <p className="text-sm text-gray-500">Manage vendor purchases and approvals</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             className="gap-2 border-amber-500 text-amber-600 hover:bg-amber-50"
@@ -211,7 +211,7 @@ function PurchaseTab() {
         </div>
       </div>
 
-      <div className="flex items-center gap-4 bg-white p-4 rounded-lg border border-gray-200">
+      <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-lg border border-gray-200">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
@@ -759,7 +759,7 @@ function SalesTab() {
         </div>
       </div>
 
-      <div className="flex items-center gap-4 bg-white p-4 rounded-lg border border-gray-200">
+      <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-lg border border-gray-200">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
